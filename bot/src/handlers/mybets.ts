@@ -61,9 +61,10 @@ export async function handleMyBets(ctx: Context) {
       if (Number(downBet) > 0) text += `DOWN: ${downBet} BNB\n`;
 
       if (market.state === MarketState.Resolved) {
-        const winningSide = market.state === MarketState.Resolved ? "Check market" : "";
-        text += `Result: ${winningSide}\n`;
-        kb.text(`Claim - ${feed}`, `claim:${addr}`).row();
+        text += `Status: Resolved\n`;
+        if (Number(upBet) > 0 || Number(downBet) > 0) {
+          kb.text(`Claim - ${feed}`, `claim:${addr}`).row();
+        }
       }
 
       text += "\n";

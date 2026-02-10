@@ -1,4 +1,4 @@
-import { Bot } from "grammy";
+import { Bot, type BotError, GrammyError, HttpError } from "grammy";
 import { config } from "./config.js";
 import { handleStart, mainMenuKeyboard } from "./handlers/start.js";
 import { handleMarkets, handleMarketDetail } from "./handlers/markets.js";
@@ -6,11 +6,13 @@ import { handleBetConfirm, handleBetExecute, handleCustomBetPrompt, handleCustom
 import { handleWallet, handleCopyAddress } from "./handlers/wallet.js";
 import { handleMyBets, handleClaim } from "./handlers/mybets.js";
 import { handleSettings } from "./handlers/settings.js";
+import { handleHelp } from "./handlers/help.js";
 
 const bot = new Bot(config.botToken);
 
 // ── Commands ──────────────────────────────────────────────────────────
 bot.command("start", handleStart);
+bot.command("help", handleHelp);
 
 // ── Text messages (for custom bet amounts) ────────────────────────────
 bot.on("message:text", async (ctx) => {
@@ -67,9 +69,10 @@ bot.on("callback_query:data", async (ctx) => {
       await handleWallet(ctx);
     }
 
-    // Copy address
+    // Copy address (handler answers callback query internally)
     else if (data === "copyaddr") {
       await handleCopyAddress(ctx);
+      return;
     }
 
     // My bets
@@ -91,13 +94,23 @@ bot.on("callback_query:data", async (ctx) => {
     await ctx.answerCallbackQuery();
   } catch (err: any) {
     console.error(`Callback error [${data}]:`, err);
-    await ctx.answerCallbackQuery({ text: "Something went wrong." });
+    await ctx.answerCallbackQuery({ text: "Something went wrong." }).catch(() => {});
   }
 });
 
 // ── Error handler ─────────────────────────────────────────────────────
-bot.catch((err) => {
-  console.error("Bot error:", err);
+bot.catch((err: BotError) => {
+  const { ctx, error } = err;
+  const chatId = ctx.chat?.id ?? "unknown";
+  const update = ctx.update.update_id;
+
+  if (error instanceof GrammyError) {
+    console.error(`Grammy error [chat=${chatId} update=${update}]:`, error.description);
+  } else if (error instanceof HttpError) {
+    console.error(`HTTP error [chat=${chatId} update=${update}]:`, error.message);
+  } else {
+    console.error(`Unexpected error [chat=${chatId} update=${update}]:`, error);
+  }
 });
 
 // ── Start ─────────────────────────────────────────────────────────────

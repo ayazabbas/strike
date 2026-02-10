@@ -151,7 +151,8 @@ export async function handleCustomBetAmount(ctx: Context) {
   pendingCustomBets.delete(telegramId);
 
   const { marketAddress, side } = pending;
-  const amountStr = amount.toString();
+  // Limit decimal places to avoid exceeding Telegram's 64-byte callback_data limit
+  const amountStr = parseFloat(amount.toFixed(6)).toString();
 
   const kb = new InlineKeyboard()
     .text("Confirm", `execbet:${marketAddress}:${side}:${amountStr}`)
