@@ -1,0 +1,105 @@
+import { Bot } from "grammy";
+import { config } from "./config.js";
+import { handleStart, mainMenuKeyboard } from "./handlers/start.js";
+import { handleMarkets, handleMarketDetail } from "./handlers/markets.js";
+import { handleBetConfirm, handleBetExecute, handleCustomBetPrompt, handleCustomBetAmount } from "./handlers/betting.js";
+import { handleWallet, handleCopyAddress } from "./handlers/wallet.js";
+import { handleMyBets, handleClaim } from "./handlers/mybets.js";
+import { handleSettings } from "./handlers/settings.js";
+
+const bot = new Bot(config.botToken);
+
+// ── Commands ──────────────────────────────────────────────────────────
+bot.command("start", handleStart);
+
+// ── Text messages (for custom bet amounts) ────────────────────────────
+bot.on("message:text", async (ctx) => {
+  const handled = await handleCustomBetAmount(ctx);
+  if (!handled) {
+    await ctx.reply("Use /start to begin, or tap a button below.", {
+      reply_markup: mainMenuKeyboard(),
+    });
+  }
+});
+
+// ── Callback queries (button presses) ─────────────────────────────────
+bot.on("callback_query:data", async (ctx) => {
+  const data = ctx.callbackQuery.data;
+
+  try {
+    // Main menu
+    if (data === "main") {
+      const text = "What would you like to do?";
+      await ctx.editMessageText(text, { reply_markup: mainMenuKeyboard() });
+    }
+
+    // Markets list
+    else if (data === "markets") {
+      await handleMarkets(ctx);
+    }
+
+    // Market detail: market:0x...
+    else if (data.startsWith("market:")) {
+      const addr = data.split(":")[1];
+      await handleMarketDetail(ctx, addr);
+    }
+
+    // Bet with preset amount: bet:0x...:up:0.1
+    else if (data.startsWith("bet:")) {
+      const [, addr, side, amount] = data.split(":");
+      await handleBetConfirm(ctx, addr, side, amount);
+    }
+
+    // Custom bet prompt: betcustom:0x...:up
+    else if (data.startsWith("betcustom:")) {
+      const [, addr, side] = data.split(":");
+      await handleCustomBetPrompt(ctx, addr, side);
+    }
+
+    // Execute bet: execbet:0x...:up:0.1
+    else if (data.startsWith("execbet:")) {
+      const [, addr, side, amount] = data.split(":");
+      await handleBetExecute(ctx, addr, side, amount);
+    }
+
+    // Wallet
+    else if (data === "wallet") {
+      await handleWallet(ctx);
+    }
+
+    // Copy address
+    else if (data === "copyaddr") {
+      await handleCopyAddress(ctx);
+    }
+
+    // My bets
+    else if (data === "mybets") {
+      await handleMyBets(ctx);
+    }
+
+    // Claim winnings: claim:0x...
+    else if (data.startsWith("claim:")) {
+      const addr = data.split(":")[1];
+      await handleClaim(ctx, addr);
+    }
+
+    // Settings
+    else if (data === "settings") {
+      await handleSettings(ctx);
+    }
+
+    await ctx.answerCallbackQuery();
+  } catch (err: any) {
+    console.error(`Callback error [${data}]:`, err);
+    await ctx.answerCallbackQuery({ text: "Something went wrong." });
+  }
+});
+
+// ── Error handler ─────────────────────────────────────────────────────
+bot.catch((err) => {
+  console.error("Bot error:", err);
+});
+
+// ── Start ─────────────────────────────────────────────────────────────
+console.log("Starting Strike bot...");
+bot.start();
