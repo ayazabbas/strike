@@ -222,6 +222,15 @@ export async function estimatePayout(marketAddress: Address, side: Side, amount:
   });
 }
 
+export async function getWinningSide(marketAddress: Address): Promise<Side> {
+  const side = await publicClient.readContract({
+    address: marketAddress,
+    abi: MARKET_ABI,
+    functionName: "winningSide",
+  });
+  return Number(side) as Side;
+}
+
 export function encodeBetCall(side: Side): string {
   return encodeFunctionData({
     abi: MARKET_ABI,

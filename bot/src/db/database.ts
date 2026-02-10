@@ -85,6 +85,12 @@ export function insertBet(telegramId: number, marketAddress: string, side: "up" 
   return Number(result.lastInsertRowid);
 }
 
+export function getBettorsByMarket(marketAddress: string): DbBet[] {
+  return getDb().prepare(
+    "SELECT * FROM bets WHERE market_address = ? AND status = 'confirmed' GROUP BY telegram_id"
+  ).all(marketAddress) as DbBet[];
+}
+
 export function updateBetTx(betId: number, txHash: string, status: "confirmed" | "failed") {
   getDb().prepare("UPDATE bets SET tx_hash = ?, status = ? WHERE id = ?").run(txHash, status, betId);
 }
