@@ -97,39 +97,47 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| MKT-01 | — | Pending |
-| MKT-02 | — | Pending |
-| MKT-03 | — | Pending |
-| MKT-04 | — | Pending |
-| MKT-05 | — | Pending |
-| MKT-06 | — | Pending |
-| BET-01 | — | Pending |
-| BET-02 | — | Pending |
-| BET-03 | — | Pending |
-| BET-04 | — | Pending |
-| RES-01 | — | Pending |
-| RES-02 | — | Pending |
-| RES-03 | — | Pending |
-| RES-04 | — | Pending |
-| POS-01 | — | Pending |
-| POS-02 | — | Pending |
-| POS-03 | — | Pending |
-| POS-04 | — | Pending |
-| APP-01 | — | Pending |
-| APP-02 | — | Pending |
-| APP-03 | — | Pending |
-| APP-04 | — | Pending |
-| APP-05 | — | Pending |
-| APP-06 | — | Pending |
-| APP-07 | — | Pending |
-| AUTO-01 | — | Pending |
-| AUTO-02 | — | Pending |
+| MKT-01 | Phase 1 | Pending |
+| MKT-02 | Phase 1 | Pending |
+| MKT-03 | Phase 1 | Pending |
+| MKT-04 | Phase 1 | Pending |
+| MKT-05 | Phase 1 | Pending |
+| MKT-06 | Phase 1 | Pending |
+| BET-01 | Phase 3 | Pending |
+| BET-02 | Phase 3 | Pending |
+| BET-03 | Phase 3 | Pending |
+| BET-04 | Phase 3 | Pending |
+| RES-01 | Phase 1 | Pending |
+| RES-02 | Phase 1 | Pending |
+| RES-03 | Phase 1 | Pending |
+| RES-04 | Phase 1 | Pending |
+| POS-01 | Phase 4 | Pending |
+| POS-02 | Phase 4 | Pending |
+| POS-03 | Phase 4 | Pending |
+| POS-04 | Phase 4 | Pending |
+| APP-01 | Phase 2 | Pending |
+| APP-02 | Phase 2 | Pending |
+| APP-03 | Phase 3 | Pending |
+| APP-04 | Phase 3 | Pending |
+| APP-05 | Phase 3 | Pending |
+| APP-06 | Phase 3 | Pending |
+| APP-07 | Phase 3 | Pending |
+| AUTO-01 | Phase 5 | Pending |
+| AUTO-02 | Phase 5 | Pending |
 
 **Coverage:**
-- v1 requirements: 22 total
-- Mapped to phases: 0
-- Unmapped: 22 (pending roadmap creation)
+- v1 requirements: 27 total
+- Mapped to phases: 27
+- Unmapped: 0
+
+**Verification:**
+- Phase 1: 10 requirements (MKT-01 to MKT-06, RES-01 to RES-04)
+- Phase 2: 2 requirements (APP-01, APP-02)
+- Phase 3: 9 requirements (BET-01 to BET-04, APP-03 to APP-07)
+- Phase 4: 4 requirements (POS-01 to POS-04)
+- Phase 5: 2 requirements (AUTO-01, AUTO-02)
+- Total: 27 requirements mapped, 100% coverage
 
 ---
 *Requirements defined: 2026-02-10*
-*Last updated: 2026-02-10 after initial definition*
+*Last updated: 2026-02-10 after roadmap creation*
