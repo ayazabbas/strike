@@ -91,6 +91,24 @@ export function getBettorsByMarket(marketAddress: string): DbBet[] {
   ).all(marketAddress) as DbBet[];
 }
 
+export function getUserCount(): number {
+  const row = getDb().prepare("SELECT COUNT(*) as count FROM users").get() as { count: number };
+  return row.count;
+}
+
+export function getBetCount(): { total: number; confirmed: number; failed: number } {
+  const rows = getDb().prepare(
+    "SELECT status, COUNT(*) as count FROM bets GROUP BY status"
+  ).all() as Array<{ status: string; count: number }>;
+  const result = { total: 0, confirmed: 0, failed: 0 };
+  for (const r of rows) {
+    result.total += r.count;
+    if (r.status === "confirmed") result.confirmed = r.count;
+    if (r.status === "failed") result.failed = r.count;
+  }
+  return result;
+}
+
 export function updateBetTx(betId: number, txHash: string, status: "confirmed" | "failed") {
   getDb().prepare("UPDATE bets SET tx_hash = ?, status = ? WHERE id = ?").run(txHash, status, betId);
 }

@@ -7,12 +7,14 @@ import { handleWallet, handleCopyAddress } from "./handlers/wallet.js";
 import { handleMyBets, handleClaim } from "./handlers/mybets.js";
 import { handleSettings } from "./handlers/settings.js";
 import { handleHelp } from "./handlers/help.js";
+import { handleAdmin } from "./handlers/admin.js";
 
 const bot = new Bot(config.botToken);
 
 // ── Commands ──────────────────────────────────────────────────────────
 bot.command("start", handleStart);
 bot.command("help", handleHelp);
+bot.command("admin", handleAdmin);
 
 // ── Text messages (for custom bet amounts) ────────────────────────────
 bot.on("message:text", async (ctx) => {

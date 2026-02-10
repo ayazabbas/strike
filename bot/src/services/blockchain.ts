@@ -117,6 +117,17 @@ export const FACTORY_ABI = [
     inputs: [{ name: "", type: "uint256" }],
     outputs: [{ name: "", type: "address" }],
   },
+  {
+    name: "createMarket",
+    type: "function",
+    stateMutability: "payable",
+    inputs: [
+      { name: "priceId", type: "bytes32" },
+      { name: "duration", type: "uint256" },
+      { name: "pythUpdateData", type: "bytes[]" },
+    ],
+    outputs: [{ name: "market", type: "address" }],
+  },
 ] as const;
 
 const chain = config.chainId === 56 ? bsc : bscTestnet;
@@ -243,6 +254,14 @@ export function encodeClaimCall(): string {
   return encodeFunctionData({
     abi: MARKET_ABI,
     functionName: "claim",
+  });
+}
+
+export function encodeCreateMarketCall(priceId: `0x${string}`, duration: bigint, pythUpdateData: `0x${string}`[]): string {
+  return encodeFunctionData({
+    abi: FACTORY_ABI,
+    functionName: "createMarket",
+    args: [priceId, duration, pythUpdateData],
   });
 }
 

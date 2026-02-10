@@ -13,6 +13,7 @@ export const config = {
   bscRpcUrl: env("BSC_RPC_URL", "https://bsc-testnet-rpc.publicnode.com"),
   marketFactoryAddress: env("MARKET_FACTORY_ADDRESS", "0x0000000000000000000000000000000000000000") as `0x${string}`,
   chainId: Number(env("CHAIN_ID", "97")),
+  adminTelegramId: Number(env("ADMIN_TELEGRAM_ID", "0")),
 } as const;
 
 export const PYTH = {
