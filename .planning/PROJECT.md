@@ -8,6 +8,15 @@ Strike is a fully onchain prediction market on BNB Smart Chain (BSC) where users
 
 Users can place a binary UP/DOWN prediction on an asset's price and get paid out fairly when the market resolves — all onchain, all trustless.
 
+## Current Milestone: v1.0 MVP
+
+**Goal:** Ship a working onchain prediction market with Telegram mini-app frontend for the hackathon deadline (Feb 19, 2026).
+
+**Target features:**
+- Smart contracts: parimutuel binary markets, auto-creation, Pyth oracle, permissionless resolution
+- Telegram mini-app: view markets, connect wallet, place predictions, track positions
+- Protocol fee and payout distribution
+
 ## Requirements
 
 ### Validated
