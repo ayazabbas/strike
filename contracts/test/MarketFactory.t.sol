@@ -85,7 +85,7 @@ contract MarketFactoryTest is Test {
         uint256 fee = mockPyth.getUpdateFee(updateData);
 
         vm.expectRevert("Duration too short");
-        factory.createMarket{value: fee}(BTC_PRICE_ID, 100, updateData);
+        factory.createMarket{value: fee}(BTC_PRICE_ID, 30, updateData);
     }
 
     function test_revertDurationTooLong() public {

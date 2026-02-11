@@ -76,8 +76,8 @@ contract MarketTest is Test {
         bytes[] memory updateData = _createPriceUpdate(resolutionPrice, uint64(block.timestamp));
         uint256 fee = mockPyth.getUpdateFee(updateData);
 
-        vm.prank(resolver);
-        market.resolve{value: fee}(updateData);
+        // Resolve through factory (keeper-only)
+        factory.resolveMarket{value: fee}(address(market), updateData);
     }
 
     // ─── Initialization Tests ────────────────────────────────────────────
@@ -145,9 +145,9 @@ contract MarketTest is Test {
         market.bet{value: 0.0005 ether}(Market.Side.Up);
     }
 
-    function test_revertBetAfterLockPeriod() public {
-        // Warp to lock period (60s before expiry)
-        vm.warp(market.expiryTime() - 60);
+    function test_revertBetAfterTradingEnd() public {
+        // Warp past trading end (halfway through duration)
+        vm.warp(market.tradingEnd());
 
         vm.prank(alice);
         vm.expectRevert("Invalid state");
@@ -220,21 +220,20 @@ contract MarketTest is Test {
         _placeBet(bob, Market.Side.Down, 1 ether);
 
         // Warp to closed state but not past expiry
-        vm.warp(market.expiryTime() - 30);
+        vm.warp(market.expiryTime() - 10);
 
         bytes[] memory updateData = _createPriceUpdate(STRIKE + 1e8, uint64(block.timestamp));
         uint256 fee = mockPyth.getUpdateFee(updateData);
 
-        vm.prank(resolver);
         vm.expectRevert("Market not yet expired");
-        market.resolve{value: fee}(updateData);
+        factory.resolveMarket{value: fee}(address(market), updateData);
     }
 
-    function test_resolvePermissionless() public {
+    function test_resolveOnlyKeeper() public {
         _placeBet(alice, Market.Side.Up, 1 ether);
         _placeBet(bob, Market.Side.Down, 1 ether);
 
-        // Random address can resolve
+        // Random address cannot resolve through factory
         address randomResolver = makeAddr("random");
         vm.deal(randomResolver, 1 ether);
         vm.warp(market.expiryTime() + 1);
@@ -243,8 +242,11 @@ contract MarketTest is Test {
         uint256 fee = mockPyth.getUpdateFee(updateData);
 
         vm.prank(randomResolver);
-        market.resolve{value: fee}(updateData);
+        vm.expectRevert("Only keeper");
+        factory.resolveMarket{value: fee}(address(market), updateData);
 
+        // Owner (default keeper) can resolve
+        factory.resolveMarket{value: fee}(address(market), updateData);
         assertEq(uint256(market.state()), uint256(Market.State.Resolved));
     }
 
@@ -264,10 +266,10 @@ contract MarketTest is Test {
         uint256 balanceAfter = alice.balance;
         uint256 payout = balanceAfter - balanceBefore;
 
-        // Total pool = 4 ether, fee = 4 * 300 / 10000 = 0.12 ether
-        // Net pool = 3.88 ether
-        // Alice payout = (3 / 3) * 3.88 = 3.88 ether
-        assertEq(payout, 3.88 ether);
+        // Losing pool = 1 ether, fee = 1 * 300 / 10000 = 0.03 ether
+        // Net winnings = 0.97 ether
+        // Alice payout = 3 + (3/3) * 0.97 = 3.97 ether
+        assertEq(payout, 3.97 ether);
     }
 
     function test_claimProportionalPayouts() public {
@@ -277,19 +279,19 @@ contract MarketTest is Test {
 
         _resolveMarket(STRIKE + 1000 * 1e8); // UP wins
 
-        // Total pool = 8 ether, fee = 0.24 ether, net = 7.76 ether
-        // Alice: (3/4) * 7.76 = 5.82 ether
-        // Bob: (1/4) * 7.76 = 1.94 ether
+        // Losing pool = 4 ether, fee = 0.12 ether, net winnings = 3.88 ether
+        // Alice: 3 + (3/4) * 3.88 = 5.91 ether
+        // Bob: 1 + (1/4) * 3.88 = 1.97 ether
 
         uint256 aliceBefore = alice.balance;
         vm.prank(alice);
         market.claim();
-        assertEq(alice.balance - aliceBefore, 5.82 ether);
+        assertEq(alice.balance - aliceBefore, 5.91 ether);
 
         uint256 bobBefore = bob.balance;
         vm.prank(bob);
         market.claim();
-        assertEq(bob.balance - bobBefore, 1.94 ether);
+        assertEq(bob.balance - bobBefore, 1.97 ether);
     }
 
     function test_revertDoubleClaim() public {
@@ -395,7 +397,7 @@ contract MarketTest is Test {
 
         _resolveMarket(STRIKE + 1e8);
 
-        uint256 expectedFee = (10 ether * 300) / 10_000; // 0.3 ether
+        uint256 expectedFee = (5 ether * 300) / 10_000; // 0.15 ether (3% of losing side)
         assertEq(market.protocolFeeAmount(), expectedFee);
 
         uint256 collectorBefore = feeCollector.balance;
@@ -417,15 +419,15 @@ contract MarketTest is Test {
 
     // ─── State Transition Tests ──────────────────────────────────────────
 
-    function test_autoTransitionToClosedAtLockPeriod() public {
+    function test_autoTransitionToClosedAtTradingEnd() public {
         _placeBet(alice, Market.Side.Up, 1 ether);
 
-        // Before lock period: betting works
-        vm.warp(market.expiryTime() - 61);
+        // Before trading end: betting works
+        vm.warp(market.tradingEnd() - 1);
         _placeBet(bob, Market.Side.Up, 0.5 ether);
 
-        // At lock period: betting fails
-        vm.warp(market.expiryTime() - 60);
+        // At trading end: betting fails
+        vm.warp(market.tradingEnd());
         vm.prank(charlie);
         vm.expectRevert("Invalid state");
         market.bet{value: 1 ether}(Market.Side.Down);
@@ -487,10 +489,10 @@ contract MarketTest is Test {
         _placeBet(bob, Market.Side.Down, 1 ether);
 
         // If charlie bets 1 ether on Down:
-        // newDownTotal = 2, newTotal = 5, fee = 0.15, net = 4.85
-        // payout = (1 * 4.85) / 2 = 2.425 ether
+        // newDownTotal = 2, otherSide (UP) pool = 3, fee = 3 * 0.03 = 0.09
+        // netWinnings = 2.91, payout = 1 + (1 * 2.91) / 2 = 2.455 ether
         uint256 estimated = market.estimatePayout(Market.Side.Down, 1 ether);
-        assertEq(estimated, 2.425 ether);
+        assertEq(estimated, 2.455 ether);
     }
 
     function test_getMarketInfo() public {
@@ -501,6 +503,7 @@ contract MarketTest is Test {
             Market.State currentState,
             bytes32 _priceId,
             int64 _strikePrice,
+            ,
             ,
             ,
             ,
@@ -529,16 +532,17 @@ contract MarketTest is Test {
 
         _resolveMarket(STRIKE + 1e8); // UP wins
 
-        uint256 totalPool = aliceBet + bobBet;
-        uint256 expectedFee = (totalPool * 300) / 10_000;
-        uint256 netPool = totalPool - expectedFee;
+        // Fee is 3% of losing side (bobBet) only
+        uint256 expectedFee = (bobBet * 300) / 10_000;
+        uint256 netWinnings = bobBet - expectedFee;
+        uint256 expectedPayout = aliceBet + netWinnings;
 
         uint256 aliceBefore = alice.balance;
         vm.prank(alice);
         market.claim();
 
-        // Alice is sole UP bettor, gets entire net pool
-        assertEq(alice.balance - aliceBefore, netPool);
+        // Alice is sole UP bettor, gets her bet + loser pool minus fee
+        assertEq(alice.balance - aliceBefore, expectedPayout);
     }
 
     function testFuzz_refundOnTie(uint96 aliceAmount, uint96 bobAmount) public {

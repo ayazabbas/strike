@@ -34,9 +34,8 @@ contract Market is ReentrancyGuard, Pausable {
 
     // ─── Constants ───────────────────────────────────────────────────────
     uint256 public constant MIN_BET = 0.001 ether;          // 0.001 BNB
-    uint256 public constant PROTOCOL_FEE_BPS = 300;         // 3% in basis points
+    uint256 public constant PROTOCOL_FEE_BPS = 300;         // 3% of winnings (not total pool)
     uint256 public constant BPS_DENOMINATOR = 10_000;
-    uint256 public constant LOCK_PERIOD = 60;               // Stop betting 60s before expiry
     uint256 public constant RESOLUTION_DEADLINE = 24 hours; // Auto-cancel if not resolved
     uint256 public constant PRICE_MAX_AGE = 60;             // Max staleness for Pyth price
 
@@ -49,6 +48,7 @@ contract Market is ReentrancyGuard, Pausable {
     address public feeCollector;
 
     uint256 public startTime;
+    uint256 public tradingEnd;       // When betting stops (halfway through duration)
     uint256 public expiryTime;
 
     int64 public strikePrice;
@@ -102,6 +102,7 @@ contract Market is ReentrancyGuard, Pausable {
         factory = msg.sender;
         feeCollector = _feeCollector;
         startTime = block.timestamp;
+        tradingEnd = block.timestamp + (_duration / 2); // Trading stops halfway
         expiryTime = block.timestamp + _duration;
         state = State.Open;
 
@@ -125,7 +126,7 @@ contract Market is ReentrancyGuard, Pausable {
 
     /// @dev Automatically transitions state based on time
     function _checkAndTransitionState() internal {
-        if (state == State.Open && block.timestamp >= expiryTime - LOCK_PERIOD) {
+        if (state == State.Open && block.timestamp >= tradingEnd) {
             state = State.Closed;
         }
         if (state == State.Closed && block.timestamp >= expiryTime + RESOLUTION_DEADLINE) {
@@ -150,9 +151,9 @@ contract Market is ReentrancyGuard, Pausable {
 
     // ─── Resolution ──────────────────────────────────────────────────────
 
-    /// @notice Resolve the market using Pyth price data. Permissionless - anyone can call.
+    /// @notice Resolve the market using Pyth price data. Only callable by factory (keeper).
     /// @param pythUpdateData Pyth price update data from Hermes API
-    function resolve(bytes[] calldata pythUpdateData) external payable nonReentrant whenNotPaused inState(State.Closed) {
+    function resolve(bytes[] calldata pythUpdateData) external payable onlyFactory nonReentrant whenNotPaused inState(State.Closed) {
         require(block.timestamp >= expiryTime, "Market not yet expired");
 
         // Update Pyth price
@@ -180,8 +181,10 @@ contract Market is ReentrancyGuard, Pausable {
                 winningSide = Side.Down;
             }
 
-            // Calculate protocol fee from total pool
-            protocolFeeAmount = (totalPool * PROTOCOL_FEE_BPS) / BPS_DENOMINATOR;
+            // Fee is % of the LOSING side only (the winnings), not total pool
+            // Winners get their own bets back + loser pool minus fee
+            Side losingSide = winningSide == Side.Up ? Side.Down : Side.Up;
+            protocolFeeAmount = (totalBets[losingSide] * PROTOCOL_FEE_BPS) / BPS_DENOMINATOR;
 
             state = State.Resolved;
             emit MarketResolved(winningSide, resolutionPrice, msg.sender);
@@ -204,9 +207,10 @@ contract Market is ReentrancyGuard, Pausable {
         // Zero out before transfer (checks-effects-interactions)
         bets[winningSide][msg.sender] = 0;
 
-        // Payout = (userBet / totalWinningBets) * (totalPool - protocolFee)
-        uint256 netPool = totalPool - protocolFeeAmount;
-        uint256 payout = (userBet * netPool) / totalBets[winningSide];
+        // Payout = user's bet back + their share of (loser pool - fee)
+        Side losingSide = winningSide == Side.Up ? Side.Down : Side.Up;
+        uint256 netWinnings = totalBets[losingSide] - protocolFeeAmount;
+        uint256 payout = userBet + (userBet * netWinnings) / totalBets[winningSide];
 
         (bool sent, ) = msg.sender.call{value: payout}("");
         require(sent, "Transfer failed");
@@ -276,6 +280,7 @@ contract Market is ReentrancyGuard, Pausable {
             int64 _strikePrice,
             int32 _strikePriceExpo,
             uint256 _startTime,
+            uint256 _tradingEnd,
             uint256 _expiryTime,
             uint256 upPool,
             uint256 downPool,
@@ -288,6 +293,7 @@ contract Market is ReentrancyGuard, Pausable {
             strikePrice,
             strikePriceExpo,
             startTime,
+            tradingEnd,
             expiryTime,
             totalBets[Side.Up],
             totalBets[Side.Down],
@@ -300,11 +306,13 @@ contract Market is ReentrancyGuard, Pausable {
     /// @param amount The bet amount
     /// @return estimatedPayout The estimated payout if this side wins
     function estimatePayout(Side side, uint256 amount) external view returns (uint256 estimatedPayout) {
+        Side otherSide = side == Side.Up ? Side.Down : Side.Up;
         uint256 newSideTotal = totalBets[side] + amount;
-        uint256 newTotalPool = totalPool + amount;
-        uint256 fee = (newTotalPool * PROTOCOL_FEE_BPS) / BPS_DENOMINATOR;
-        uint256 netPool = newTotalPool - fee;
-        estimatedPayout = (amount * netPool) / newSideTotal;
+        uint256 loserPool = totalBets[otherSide]; // Other side's total is the "winnings"
+        uint256 fee = (loserPool * PROTOCOL_FEE_BPS) / BPS_DENOMINATOR;
+        uint256 netWinnings = loserPool - fee;
+        // Payout = your bet back + your share of loser pool minus fee
+        estimatedPayout = amount + (amount * netWinnings) / newSideTotal;
     }
 
     /// @notice Get a user's bets
@@ -315,7 +323,7 @@ contract Market is ReentrancyGuard, Pausable {
     /// @notice Check effective market state (accounts for time-based transitions)
     function getCurrentState() external view returns (State) {
         State s = state;
-        if (s == State.Open && block.timestamp >= expiryTime - LOCK_PERIOD) {
+        if (s == State.Open && block.timestamp >= tradingEnd) {
             s = State.Closed;
         }
         if (s == State.Closed && block.timestamp >= expiryTime + RESOLUTION_DEADLINE) {

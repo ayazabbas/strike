@@ -278,12 +278,12 @@ async function main() {
     args: [[resolveUpdateData]],
   });
 
-  // Anyone can resolve — use bettor1 to prove it's permissionless
-  const resolveHash = await bettor1Client.writeContract({
-    address: market,
-    abi: MarketArtifact.abi,
-    functionName: "resolve",
-    args: [[resolveUpdateData]],
+  // Only keeper (deployer) can resolve through factory
+  const resolveHash = await deployerClient.writeContract({
+    address: factory,
+    abi: MarketFactoryArtifact.abi,
+    functionName: "resolveMarket",
+    args: [market, [resolveUpdateData]],
     value: resolveFee as bigint,
   });
   const resolveReceipt = await publicClient.waitForTransactionReceipt({ hash: resolveHash });
@@ -327,11 +327,11 @@ async function main() {
   const balanceAfter = await publicClient.getBalance({ address: bettor1.address });
   const gained = balanceAfter - balanceBefore;
 
-  // Winner gets total pool minus 3% fee, minus gas
-  // Pool = 1.5 BNB, fee = 0.045 BNB, payout = 1.455 BNB (minus gas)
-  const expectedPayout = parseEther("1.455"); // 1.5 * 0.97
-  console.log(`  💰 Bettor1 gained: ${formatEther(gained)} BNB (expected ~1.455 BNB minus gas)`);
-  assert(gained > parseEther("1.4"), "Winner received significant payout (> 1.4 BNB after gas)");
+  // Winner gets bet back + loser pool minus 3% fee on losers, minus gas
+  // Loser pool = 0.5 BNB, fee = 0.015 BNB, net winnings = 0.485 BNB
+  // Payout = 1 + 0.485 = 1.485 BNB (minus gas)
+  console.log(`  💰 Bettor1 gained: ${formatEther(gained)} BNB (expected ~1.485 BNB minus gas)`);
+  assert(gained > parseEther("1.45"), "Winner received significant payout (> 1.45 BNB after gas)");
 
   // ── Step 8: Verify loser can't claim ─────────────────────────────────────
   console.log("\n📋 Step 8: Verify loser cannot claim");
@@ -362,8 +362,8 @@ async function main() {
 
   const feeCollectorAfter = await publicClient.getBalance({ address: deployer.address });
   const feesCollected = feeCollectorAfter - feeCollectorBefore;
-  console.log(`  💸 Fees collected: ${formatEther(feesCollected)} BNB (expected ~0.045 BNB minus gas)`);
-  assert(feesCollected > parseEther("0.04"), "Protocol fees collected (> 0.04 BNB after gas)");
+  console.log(`  💸 Fees collected: ${formatEther(feesCollected)} BNB (expected ~0.015 BNB minus gas)`);
+  assert(feesCollected > parseEther("0.01"), "Protocol fees collected (> 0.01 BNB after gas)");
 
   // ── Summary ──────────────────────────────────────────────────────────────
   console.log("\n═══════════════════════════════════════════════════════");

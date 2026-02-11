@@ -16,14 +16,22 @@ contract MarketFactory is Ownable {
         int64 strikePrice
     );
     event FeeCollectorUpdated(address indexed oldCollector, address indexed newCollector);
+    event KeeperUpdated(address indexed oldKeeper, address indexed newKeeper);
 
     // ─── Storage ─────────────────────────────────────────────────────────
     address public immutable marketImplementation;
     address public immutable pyth;
     address public feeCollector;
+    address public keeper;
 
     address[] public allMarkets;
     mapping(address => bool) public isMarket;
+
+    // ─── Modifiers ───────────────────────────────────────────────────────
+    modifier onlyKeeper() {
+        require(msg.sender == keeper || msg.sender == owner(), "Only keeper");
+        _;
+    }
 
     // ─── Constructor ─────────────────────────────────────────────────────
     constructor(address _pyth, address _feeCollector) Ownable(msg.sender) {
@@ -32,6 +40,7 @@ contract MarketFactory is Ownable {
 
         pyth = _pyth;
         feeCollector = _feeCollector;
+        keeper = msg.sender; // Owner is default keeper
 
         // Deploy the implementation contract (used as clone template)
         marketImplementation = address(new Market());
@@ -39,7 +48,7 @@ contract MarketFactory is Ownable {
 
     // ─── Market Creation ─────────────────────────────────────────────────
 
-    /// @notice Create a new prediction market
+    /// @notice Create a new prediction market. Only keeper can call.
     /// @param priceId Pyth price feed ID (e.g. BTC/USD)
     /// @param duration Market duration in seconds
     /// @param pythUpdateData Pyth price update data to capture strike price
@@ -48,8 +57,8 @@ contract MarketFactory is Ownable {
         bytes32 priceId,
         uint256 duration,
         bytes[] calldata pythUpdateData
-    ) external payable returns (address market) {
-        require(duration >= 300, "Duration too short"); // Min 5 minutes
+    ) external payable onlyKeeper returns (address market) {
+        require(duration >= 60, "Duration too short"); // Min 1 minute
         require(duration <= 7 days, "Duration too long");
 
         market = Clones.clone(marketImplementation);
@@ -72,7 +81,28 @@ contract MarketFactory is Ownable {
         emit MarketCreated(market, priceId, expiryTime, strikePrice);
     }
 
+    // ─── Keeper ──────────────────────────────────────────────────────────
+
+    /// @notice Resolve a market. Only keeper can call.
+    /// @param market Address of the market to resolve
+    /// @param pythUpdateData Pyth price update data for resolution
+    function resolveMarket(
+        address market,
+        bytes[] calldata pythUpdateData
+    ) external payable onlyKeeper {
+        require(isMarket[market], "Not a market");
+        Market(payable(market)).resolve{value: msg.value}(pythUpdateData);
+    }
+
     // ─── Admin ───────────────────────────────────────────────────────────
+
+    /// @notice Update the keeper address
+    function setKeeper(address _keeper) external onlyOwner {
+        require(_keeper != address(0), "Invalid address");
+        address old = keeper;
+        keeper = _keeper;
+        emit KeeperUpdated(old, _keeper);
+    }
 
     /// @notice Update the fee collector address
     function setFeeCollector(address _feeCollector) external onlyOwner {
