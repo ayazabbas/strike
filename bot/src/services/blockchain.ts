@@ -132,6 +132,16 @@ export const FACTORY_ABI = [
     ],
     outputs: [{ name: "market", type: "address" }],
   },
+  {
+    name: "resolveMarket",
+    type: "function",
+    stateMutability: "payable",
+    inputs: [
+      { name: "market", type: "address" },
+      { name: "pythUpdateData", type: "bytes[]" },
+    ],
+    outputs: [],
+  },
 ] as const;
 
 const chain = config.chainId === 56 ? bsc : bscTestnet;
@@ -286,6 +296,25 @@ export async function createMarketOnChain(priceId: `0x${string}`, duration: bigi
     functionName: "createMarket",
     args: [priceId, duration, pythUpdateData],
     value: 1n, // Pyth update fee
+  });
+  return hash;
+}
+
+/**
+ * Resolve a market via the factory's resolveMarket (onlyKeeper).
+ * Returns the tx hash.
+ */
+export async function resolveMarketOnChain(marketAddress: Address, pythUpdateData: `0x${string}`[]): Promise<string> {
+  if (!config.deployerPrivateKey) throw new Error("DEPLOYER_PRIVATE_KEY not set");
+  const account = privateKeyToAccount(config.deployerPrivateKey);
+  const walletClient = createWalletClient({ account, chain, transport: http(config.bscRpcUrl) });
+
+  const hash = await walletClient.writeContract({
+    address: config.marketFactoryAddress,
+    abi: FACTORY_ABI,
+    functionName: "resolveMarket",
+    args: [marketAddress, pythUpdateData],
+    value: parseEther("0.001"),
   });
   return hash;
 }
