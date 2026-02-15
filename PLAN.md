@@ -43,7 +43,7 @@ The MVP must be **demo-able** and **show the vision**. Ship the core loop, prove
   - Fetch price at expiry (for resolution)
 
 #### 2. Telegram Mini-App
-- View active markets (BTC, BNB)
+- View active markets (BTC/USD)
 - Place a prediction (connect wallet, pick UP/DOWN, stake amount)
 - View your positions
 - See resolved markets + results
@@ -61,10 +61,10 @@ The MVP must be **demo-able** and **show the vision**. Ship the core loop, prove
 | Full Vision | MVP Simplification |
 |-------------|-------------------|
 | Batch auction orderbook | Fixed-odds pool (simpler math) |
-| Multiple assets | BTC + BNB only |
+| Multiple assets | BTC/USD only |
 | AI market maker | Deferred to v1.1 |
 | NL strategy input | Deferred to v1.1 |
-| Complex time windows | Fixed durations (1hr, 4hr, 24hr) |
+| Complex time windows | Fixed 5-minute rounds |
 
 ---
 

@@ -24,7 +24,7 @@ contract Market is ReentrancyGuard, Pausable {
     }
 
     // ─── Events ──────────────────────────────────────────────────────────
-    event BetPlaced(address indexed user, Side side, uint256 amount);
+    event BetPlaced(address indexed user, Side side, uint256 amount, uint256 shares);
     event MarketResolved(Side winningSide, int64 resolutionPrice, address indexed resolver);
     event MarketCancelled(string reason);
     event Claimed(address indexed user, uint256 payout);
@@ -38,6 +38,8 @@ contract Market is ReentrancyGuard, Pausable {
     uint256 public constant BPS_DENOMINATOR = 10_000;
     uint256 public constant RESOLUTION_DEADLINE = 24 hours; // Auto-cancel if not resolved
     uint256 public constant PRICE_MAX_AGE = 60;             // Max staleness for Pyth price
+    uint256 public constant MAX_MULTIPLIER = 2e18;           // 2x shares at market open
+    uint256 public constant BASE_MULTIPLIER = 1e18;          // 1x shares at trading end
 
     // ─── Storage ─────────────────────────────────────────────────────────
     bool private _initialized;
@@ -58,10 +60,13 @@ contract Market is ReentrancyGuard, Pausable {
     State public state;
     Side public winningSide;
 
-    // Side => User => Amount
+    // Side => User => Amount (raw BNB deposited)
     mapping(Side => mapping(address => uint256)) public bets;
+    // Side => User => Shares (time-weighted)
+    mapping(Side => mapping(address => uint256)) public shares;
     // Side => Total
     mapping(Side => uint256) public totalBets;
+    mapping(Side => uint256) public totalShares;
     uint256 public totalPool;
 
     uint256 public protocolFeeAmount;
@@ -142,11 +147,19 @@ contract Market is ReentrancyGuard, Pausable {
     function bet(Side side) external payable nonReentrant whenNotPaused inState(State.Open) {
         require(msg.value >= MIN_BET, "Below minimum bet");
 
+        // Time-weighted shares: early bets get up to 2x shares, linear decay to 1x at tradingEnd
+        uint256 elapsed = block.timestamp - startTime;
+        uint256 window = tradingEnd - startTime;
+        uint256 multiplier = MAX_MULTIPLIER - ((MAX_MULTIPLIER - BASE_MULTIPLIER) * elapsed) / window;
+        uint256 betShares = (msg.value * multiplier) / BASE_MULTIPLIER;
+
         bets[side][msg.sender] += msg.value;
+        shares[side][msg.sender] += betShares;
         totalBets[side] += msg.value;
+        totalShares[side] += betShares;
         totalPool += msg.value;
 
-        emit BetPlaced(msg.sender, side, msg.value);
+        emit BetPlaced(msg.sender, side, msg.value, betShares);
     }
 
     // ─── Resolution ──────────────────────────────────────────────────────
@@ -201,16 +214,19 @@ contract Market is ReentrancyGuard, Pausable {
 
     /// @notice Claim winnings from a resolved market
     function claim() external nonReentrant inState(State.Resolved) {
+        uint256 userShares = shares[winningSide][msg.sender];
         uint256 userBet = bets[winningSide][msg.sender];
-        require(userBet > 0, "No winning bet");
+        require(userShares > 0, "No winning bet");
 
         // Zero out before transfer (checks-effects-interactions)
+        shares[winningSide][msg.sender] = 0;
         bets[winningSide][msg.sender] = 0;
 
-        // Payout = user's bet back + their share of (loser pool - fee)
+        // Payout proportional to SHARES (not raw bet amount)
+        // Total payout pool = winning side bets + losing side bets - fee
         Side losingSide = winningSide == Side.Up ? Side.Down : Side.Up;
-        uint256 netWinnings = totalBets[losingSide] - protocolFeeAmount;
-        uint256 payout = userBet + (userBet * netWinnings) / totalBets[winningSide];
+        uint256 payoutPool = totalBets[winningSide] + totalBets[losingSide] - protocolFeeAmount;
+        uint256 payout = (userShares * payoutPool) / totalShares[winningSide];
 
         (bool sent, ) = msg.sender.call{value: payout}("");
         require(sent, "Transfer failed");
@@ -306,18 +322,18 @@ contract Market is ReentrancyGuard, Pausable {
     /// @param amount The bet amount
     /// @return estimatedPayout The estimated payout if this side wins
     function estimatePayout(Side side, uint256 amount) external view returns (uint256 estimatedPayout) {
-        Side otherSide = side == Side.Up ? Side.Down : Side.Up;
-        uint256 newSideTotal = totalBets[side] + amount;
-        uint256 loserPool = totalBets[otherSide]; // Other side's total is the "winnings"
-        uint256 fee = (loserPool * PROTOCOL_FEE_BPS) / BPS_DENOMINATOR;
-        uint256 netWinnings = loserPool - fee;
-        // Payout = your bet back + your share of loser pool minus fee
-        estimatedPayout = amount + (amount * netWinnings) / newSideTotal;
+        uint256 otherPool = totalBets[side == Side.Up ? Side.Down : Side.Up];
+        uint256 elapsed = block.timestamp >= tradingEnd ? tradingEnd - startTime : block.timestamp - startTime;
+        uint256 mult = MAX_MULTIPLIER - ((MAX_MULTIPLIER - BASE_MULTIPLIER) * elapsed) / (tradingEnd - startTime);
+        uint256 betShares = (amount * mult) / BASE_MULTIPLIER;
+        uint256 newShares = totalShares[side] + betShares;
+        uint256 fee = (otherPool * PROTOCOL_FEE_BPS) / BPS_DENOMINATOR;
+        estimatedPayout = (betShares * (totalBets[side] + amount + otherPool - fee)) / newShares;
     }
 
     /// @notice Get a user's bets
-    function getUserBets(address user) external view returns (uint256 upBet, uint256 downBet) {
-        return (bets[Side.Up][user], bets[Side.Down][user]);
+    function getUserBets(address user) external view returns (uint256 upBet, uint256 downBet, uint256 upShares, uint256 downShares) {
+        return (bets[Side.Up][user], bets[Side.Down][user], shares[Side.Up][user], shares[Side.Down][user]);
     }
 
     /// @notice Check effective market state (accounts for time-based transitions)

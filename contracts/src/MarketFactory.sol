@@ -130,6 +130,9 @@ contract MarketFactory is Ownable {
         Market(payable(market)).emergencyCancel();
     }
 
+    // Allow factory to receive BNB refunds from Market.initialize and Market.resolve
+    receive() external payable {}
+
     // ─── View Functions ──────────────────────────────────────────────────
 
     /// @notice Get total number of markets created

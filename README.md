@@ -15,8 +15,8 @@ No website needed. No wallet extensions. Just open the bot, fund your wallet, an
 
 - **🤖 Telegram Bot Interface** — Trade with inline buttons, no web app needed (like BananaGun/BonkBot)
 - **💰 Embedded Wallets** — Auto-created Privy wallets, fund with BNB and start betting instantly
-- **📊 Live Prices** — Real-time BTC/USD and BNB/USD prices from Pyth Network oracle
-- **⏱️ Multiple Timeframes** — 1-hour, 4-hour, and 24-hour prediction markets
+- **📊 Live Prices** — Real-time BTC/USD prices from Pyth Network oracle
+- **⏱️ Fast Rounds** — 5-minute prediction markets for quick-fire action
 - **🏊 Parimutuel Pools** — Fair odds determined by the market, not a house edge
 - **🔒 Fully On-Chain** — All bets, resolutions, and payouts happen on BNB Chain smart contracts
 - **⚡ Gas Efficient** — EIP-1167 minimal proxy clones (~$0.01-0.03 per transaction on BSC)
@@ -53,7 +53,7 @@ No website needed. No wallet extensions. Just open the bot, fund your wallet, an
 │  └─────────────────┘  └──────────────────────────┘  │
 │  ┌─────────────────────────────────────────────────┐│
 │  │          Pyth Oracle (on-chain)                  ││
-│  │  BTC/USD + BNB/USD price feeds                  ││
+│  │  BTC/USD price feed                              ││
 │  └─────────────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────┘
 ```
@@ -62,9 +62,9 @@ No website needed. No wallet extensions. Just open the bot, fund your wallet, an
 
 1. **`/start`** → Bot creates a Privy embedded wallet for you
 2. **Fund wallet** → Send BNB to your wallet address
-3. **Browse markets** → See active BTC/USD and BNB/USD markets with live prices
+3. **Browse markets** → See active BTC/USD markets with live prices
 4. **Place a bet** → Tap a market → Choose UP ⬆️ or DOWN ⬇️ → Select amount → Confirm
-5. **Wait for resolution** → Market resolves automatically when the timeframe expires
+5. **Wait for resolution** → Market resolves automatically after 5 minutes
 6. **Claim winnings** → If you predicted correctly, claim your share of the pool!
 
 ## 🛠️ Tech Stack

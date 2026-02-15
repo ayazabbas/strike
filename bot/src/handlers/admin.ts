@@ -1,9 +1,8 @@
 import { type Context } from "grammy";
 import { config, PYTH, type FeedName } from "../config.js";
-import { getMarketCount, getMarketAddresses, getMarketInfo, encodeCreateMarketCall, formatEther, STATE_LABELS } from "../services/blockchain.js";
+import { getMarketCount, getMarketAddresses, getMarketInfo, createMarketOnChain, formatEther, STATE_LABELS } from "../services/blockchain.js";
 import { getPriceUpdateData, formatPrice } from "../services/pyth.js";
-import { sendTransaction } from "../services/privy.js";
-import { getUser, getUserCount, getBetCount } from "../db/database.js";
+import { getUserCount, getBetCount } from "../db/database.js";
 import type { Address } from "viem";
 
 function isAdmin(telegramId: number): boolean {
@@ -26,9 +25,7 @@ export async function handleAdmin(ctx: Context) {
       "Admin Commands:\n",
       "/admin stats - Bot statistics",
       "/admin markets - List all markets with state",
-      "/admin create <feed> <minutes> - Create market",
-      `  Feeds: ${Object.keys(PYTH.feeds).join(", ")}`,
-      "  Example: /admin create BTC/USD 60",
+      "/admin create - Create a 5-minute BTC/USD market",
     ].join("\n"));
     return;
   }
@@ -96,41 +93,17 @@ async function handleAdminMarkets(ctx: Context) {
   await ctx.reply(lines.join("\n"));
 }
 
-async function handleCreateMarket(ctx: Context, args: string[]) {
-  const feedName = args[0] as FeedName | undefined;
-  const minutes = Number(args[1]);
+async function handleCreateMarket(ctx: Context, _args: string[]) {
+  const feedName: FeedName = "BTC/USD";
+  const duration = BigInt(PYTH.defaultDurationSeconds);
 
-  if (!feedName || !PYTH.feeds[feedName]) {
-    await ctx.reply(`Invalid feed. Available: ${Object.keys(PYTH.feeds).join(", ")}`);
-    return;
-  }
-
-  if (!minutes || minutes < 5 || minutes > 10080) {
-    await ctx.reply("Duration must be 5-10080 minutes (5 min to 7 days).");
-    return;
-  }
-
-  const telegramId = ctx.from!.id;
-  const user = getUser(telegramId);
-  if (!user) {
-    await ctx.reply("Run /start first to create an admin wallet.");
-    return;
-  }
-
-  await ctx.reply(`Creating ${feedName} market (${minutes}m)...`);
+  await ctx.reply(`Creating ${feedName} market (5m) using keeper wallet...`);
 
   try {
     const priceId = PYTH.feeds[feedName] as `0x${string}`;
-    const duration = BigInt(minutes * 60);
     const pythUpdateData = await getPriceUpdateData([priceId]) as `0x${string}`[];
-    const data = encodeCreateMarketCall(priceId, duration, pythUpdateData);
 
-    const txHash = await sendTransaction(user.wallet_id, {
-      to: config.marketFactoryAddress,
-      value: "1",
-      data,
-      chainId: config.chainId,
-    });
+    const txHash = await createMarketOnChain(priceId, duration, pythUpdateData);
 
     const explorer = config.chainId === 56
       ? `https://bscscan.com/tx/${txHash}`

@@ -105,7 +105,7 @@ contract MarketTest is Test {
     function test_betUp() public {
         _placeBet(alice, Market.Side.Up, 1 ether);
 
-        (uint256 upBet, uint256 downBet) = market.getUserBets(alice);
+        (uint256 upBet, uint256 downBet,,) = market.getUserBets(alice);
         assertEq(upBet, 1 ether);
         assertEq(downBet, 0);
         assertEq(market.totalBets(Market.Side.Up), 1 ether);
@@ -115,7 +115,7 @@ contract MarketTest is Test {
     function test_betDown() public {
         _placeBet(bob, Market.Side.Down, 2 ether);
 
-        (uint256 upBet, uint256 downBet) = market.getUserBets(bob);
+        (uint256 upBet, uint256 downBet,,) = market.getUserBets(bob);
         assertEq(upBet, 0);
         assertEq(downBet, 2 ether);
         assertEq(market.totalBets(Market.Side.Down), 2 ether);
@@ -125,7 +125,7 @@ contract MarketTest is Test {
         _placeBet(alice, Market.Side.Up, 1 ether);
         _placeBet(alice, Market.Side.Up, 0.5 ether);
 
-        (uint256 upBet, ) = market.getUserBets(alice);
+        (uint256 upBet,,,) = market.getUserBets(alice);
         assertEq(upBet, 1.5 ether);
     }
 
@@ -133,7 +133,7 @@ contract MarketTest is Test {
         _placeBet(alice, Market.Side.Up, 1 ether);
         _placeBet(alice, Market.Side.Down, 0.5 ether);
 
-        (uint256 upBet, uint256 downBet) = market.getUserBets(alice);
+        (uint256 upBet, uint256 downBet,,) = market.getUserBets(alice);
         assertEq(upBet, 1 ether);
         assertEq(downBet, 0.5 ether);
         assertEq(market.totalPool(), 1.5 ether);
@@ -156,7 +156,7 @@ contract MarketTest is Test {
 
     function test_betEmitsEvent() public {
         vm.expectEmit(true, false, false, true);
-        emit Market.BetPlaced(alice, Market.Side.Up, 1 ether);
+        emit Market.BetPlaced(alice, Market.Side.Up, 1 ether, 2 ether); // 2x shares at t=0
 
         _placeBet(alice, Market.Side.Up, 1 ether);
     }

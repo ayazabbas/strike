@@ -1,4 +1,9 @@
-import "dotenv/config";
+import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(__dirname, "../.env.local") });
 import {
   createPublicClient,
   createWalletClient,
@@ -14,14 +19,9 @@ import { bscTestnet, bsc } from "viem/chains";
 
 const PYTH_FEEDS: Record<string, Hex> = {
   "BTC/USD": "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
-  "BNB/USD": "0x2f95862b045670cd22bee3114c39763a4a08beeb663b145d283c31d7d1101c4f",
 };
 
-const DURATIONS: Record<string, number> = {
-  "1h": 3600,
-  "4h": 14400,
-  "24h": 86400,
-};
+const DEFAULT_DURATION = 300; // 5 minutes
 
 const FACTORY_ABI = [
   {
@@ -50,31 +50,9 @@ async function fetchPythUpdateData(feedId: string): Promise<Hex[]> {
 // ─── Main ────────────────────────────────────────────────────────────────
 
 async function main() {
-  const args = process.argv.slice(2);
-  const pairIdx = args.indexOf("--pair");
-  const durationIdx = args.indexOf("--duration");
-
-  if (pairIdx === -1 || durationIdx === -1) {
-    console.log("Usage: npx tsx scripts/create-market.ts --pair BTC/USD --duration 1h");
-    console.log("Pairs: BTC/USD, BNB/USD");
-    console.log("Durations: 1h, 4h, 24h");
-    process.exit(1);
-  }
-
-  const pair = args[pairIdx + 1];
-  const duration = args[durationIdx + 1];
-
-  const feedId = PYTH_FEEDS[pair];
-  if (!feedId) {
-    console.error(`Unknown pair: ${pair}. Supported: ${Object.keys(PYTH_FEEDS).join(", ")}`);
-    process.exit(1);
-  }
-
-  const durationSecs = DURATIONS[duration];
-  if (!durationSecs) {
-    console.error(`Unknown duration: ${duration}. Supported: ${Object.keys(DURATIONS).join(", ")}`);
-    process.exit(1);
-  }
+  const pair = "BTC/USD";
+  const feedId = PYTH_FEEDS[pair]!;
+  const durationSecs = DEFAULT_DURATION;
 
   const factoryAddress = process.env.MARKET_FACTORY_ADDRESS as Address;
   const privateKey = process.env.DEPLOYER_PRIVATE_KEY as Hex;
@@ -101,8 +79,8 @@ async function main() {
   console.log("📡 Fetching Pyth price data...");
   const pythUpdateData = await fetchPythUpdateData(feedId.slice(2)); // remove 0x prefix for API
 
-  // Estimate Pyth fee (typically 1 wei on BSC)
-  const pythFee = parseEther("0.001"); // Send 0.001 BNB to cover Pyth fee + refund excess
+  // Pyth fee is exactly 1 wei on BSC testnet - send exact amount to avoid refund issue
+  const pythFee = 1n;
 
   console.log("📝 Sending createMarket transaction...");
   const hash = await walletClient.writeContract({

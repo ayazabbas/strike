@@ -1,4 +1,5 @@
-import { createPublicClient, http, formatEther, parseEther, encodeFunctionData, type Address } from "viem";
+import { createPublicClient, createWalletClient, http, formatEther, parseEther, encodeFunctionData, type Address } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 import { bsc, bscTestnet } from "viem/chains";
 import { config } from "../config.js";
 
@@ -36,6 +37,7 @@ export const MARKET_ABI = [
       { name: "_strikePrice", type: "int64" },
       { name: "_strikePriceExpo", type: "int32" },
       { name: "_startTime", type: "uint256" },
+      { name: "_tradingEnd", type: "uint256" },
       { name: "_expiryTime", type: "uint256" },
       { name: "upPool", type: "uint256" },
       { name: "downPool", type: "uint256" },
@@ -50,6 +52,8 @@ export const MARKET_ABI = [
     outputs: [
       { name: "upBet", type: "uint256" },
       { name: "downBet", type: "uint256" },
+      { name: "upShares", type: "uint256" },
+      { name: "downShares", type: "uint256" },
     ],
   },
   {
@@ -163,6 +167,7 @@ export interface MarketInfo {
   priceId: string;
   strikePrice: number;
   startTime: number;
+  tradingEnd: number;
   expiryTime: number;
   upPool: bigint;
   downPool: bigint;
@@ -199,7 +204,7 @@ export async function getMarketInfo(marketAddress: Address): Promise<MarketInfo>
     functionName: "getMarketInfo",
   });
 
-  const [state, priceId, strikePrice, strikePriceExpo, startTime, expiryTime, upPool, downPool, totalPool] = info;
+  const [state, priceId, strikePrice, strikePriceExpo, startTime, tradingEnd, expiryTime, upPool, downPool, totalPool] = info;
 
   return {
     address: marketAddress,
@@ -207,6 +212,7 @@ export async function getMarketInfo(marketAddress: Address): Promise<MarketInfo>
     priceId: priceId as string,
     strikePrice: Number(strikePrice) * 10 ** Number(strikePriceExpo),
     startTime: Number(startTime),
+    tradingEnd: Number(tradingEnd),
     expiryTime: Number(expiryTime),
     upPool,
     downPool,
@@ -215,13 +221,13 @@ export async function getMarketInfo(marketAddress: Address): Promise<MarketInfo>
 }
 
 export async function getUserBets(marketAddress: Address, userAddress: Address) {
-  const [upBet, downBet] = await publicClient.readContract({
+  const [upBet, downBet, upShares, downShares] = await publicClient.readContract({
     address: marketAddress,
     abi: MARKET_ABI,
     functionName: "getUserBets",
     args: [userAddress],
   });
-  return { upBet, downBet };
+  return { upBet, downBet, upShares, downShares };
 }
 
 export async function estimatePayout(marketAddress: Address, side: Side, amount: bigint): Promise<bigint> {
@@ -263,6 +269,25 @@ export function encodeCreateMarketCall(priceId: `0x${string}`, duration: bigint,
     functionName: "createMarket",
     args: [priceId, duration, pythUpdateData],
   });
+}
+
+/**
+ * Send a createMarket tx using the deployer/keeper private key directly.
+ * Returns the tx hash.
+ */
+export async function createMarketOnChain(priceId: `0x${string}`, duration: bigint, pythUpdateData: `0x${string}`[]): Promise<string> {
+  if (!config.deployerPrivateKey) throw new Error("DEPLOYER_PRIVATE_KEY not set");
+  const account = privateKeyToAccount(config.deployerPrivateKey);
+  const walletClient = createWalletClient({ account, chain, transport: http(config.bscRpcUrl) });
+
+  const hash = await walletClient.writeContract({
+    address: config.marketFactoryAddress,
+    abi: FACTORY_ABI,
+    functionName: "createMarket",
+    args: [priceId, duration, pythUpdateData],
+    value: 1n, // Pyth update fee
+  });
+  return hash;
 }
 
 export { formatEther, parseEther };

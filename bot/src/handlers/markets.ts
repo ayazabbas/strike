@@ -81,7 +81,10 @@ export async function handleMarkets(ctx: Context) {
       const livePrice = prices[feed];
       const upPool = Number(formatEther(market.upPool)).toFixed(3);
       const downPool = Number(formatEther(market.downPool)).toFixed(3);
-      const timeLeft = timeRemaining(market.expiryTime);
+      // Show trading deadline for open markets, expiry for closed
+      const timeLeft = market.state === MarketState.Open
+        ? timeRemaining(market.tradingEnd)
+        : timeRemaining(market.expiryTime);
       const stateLabel = STATE_LABELS[market.state];
       const shortAddr = `${market.address.slice(0, 6)}...${market.address.slice(-4)}`;
 
@@ -123,7 +126,8 @@ export async function handleMarketDetail(ctx: Context, marketAddress: string) {
     const upPool = Number(formatEther(market.upPool)).toFixed(4);
     const downPool = Number(formatEther(market.downPool)).toFixed(4);
     const totalPool = Number(formatEther(market.totalPool)).toFixed(4);
-    const timeLeft = timeRemaining(market.expiryTime);
+    const bettingTimeLeft = timeRemaining(market.tradingEnd);
+    const expiryTimeLeft = timeRemaining(market.expiryTime);
 
     let text = `${feed} Market\n\n`;
     text += `State: ${STATE_LABELS[market.state]}\n`;
@@ -137,7 +141,10 @@ export async function handleMarketDetail(ctx: Context, marketAddress: string) {
     text += `UP Pool: ${upPool} BNB\n`;
     text += `DOWN Pool: ${downPool} BNB\n`;
     text += `Total Pool: ${totalPool} BNB\n`;
-    text += `Time Remaining: ${timeLeft}\n`;
+    if (market.state === MarketState.Open) {
+      text += `Betting Closes: ${bettingTimeLeft}\n`;
+    }
+    text += `Expiry: ${expiryTimeLeft}\n`;
 
     const kb = new InlineKeyboard();
 
