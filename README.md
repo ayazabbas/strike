@@ -2,7 +2,7 @@
   <img src="assets/strike-logo-with-text.svg" alt="Strike Logo" width="200" />
 </p>
 
-<h1 align="center">Strike — Prediction Markets on Telegram</h1>
+<h1 align="center">Strike - Price Prediction Markets</h1>
 
 <p align="center">
   Binary UP/DOWN prediction markets powered by Pyth oracle on BNB Chain, accessible through a Telegram bot.
