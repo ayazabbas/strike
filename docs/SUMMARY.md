@@ -5,6 +5,7 @@
 
 ## Getting Started
 
+* [Market Lifecycle](market-lifecycle.md)
 * [How It Works](getting-started/how-it-works.md)
 * [Quick Start](getting-started/quick-start.md)
 
