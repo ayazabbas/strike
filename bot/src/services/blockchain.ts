@@ -129,6 +129,13 @@ export const FACTORY_ABI = [
     outputs: [{ name: "", type: "address" }],
   },
   {
+    name: "isMarket",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "", type: "address" }],
+    outputs: [{ name: "", type: "bool" }],
+  },
+  {
     name: "createMarket",
     type: "function",
     stateMutability: "payable",
@@ -189,11 +196,26 @@ export interface MarketInfo {
   upPool: bigint;
   downPool: bigint;
   totalPool: bigint;
+  winningSide?: Side;
+  resolutionPrice?: number;
 }
 
 export async function getBalance(address: Address): Promise<string> {
   const balance = await publicClient.getBalance({ address });
   return formatEther(balance);
+}
+
+export async function isMarketFromFactory(marketAddress: Address): Promise<boolean> {
+  try {
+    return await publicClient.readContract({
+      address: config.marketFactoryAddress,
+      abi: FACTORY_ABI,
+      functionName: "isMarket",
+      args: [marketAddress],
+    }) as boolean;
+  } catch {
+    return false;
+  }
 }
 
 export async function getMarketCount(): Promise<number> {
@@ -223,7 +245,7 @@ export async function getMarketInfo(marketAddress: Address): Promise<MarketInfo>
 
   const [state, priceId, strikePrice, strikePriceExpo, startTime, tradingEnd, expiryTime, upPool, downPool, totalPool] = info;
 
-  return {
+  const result: MarketInfo = {
     address: marketAddress,
     state: Number(state) as MarketState,
     priceId: priceId as string,
@@ -235,6 +257,19 @@ export async function getMarketInfo(marketAddress: Address): Promise<MarketInfo>
     downPool,
     totalPool,
   };
+
+  if (result.state === MarketState.Resolved) {
+    try {
+      const [winningSide, resPrice] = await Promise.all([
+        publicClient.readContract({ address: marketAddress, abi: MARKET_ABI, functionName: "winningSide" }),
+        publicClient.readContract({ address: marketAddress, abi: MARKET_ABI, functionName: "resolutionPrice" }),
+      ]);
+      result.winningSide = Number(winningSide) as Side;
+      result.resolutionPrice = Number(resPrice) * 10 ** Number(strikePriceExpo);
+    } catch {}
+  }
+
+  return result;
 }
 
 export async function getUserBets(marketAddress: Address, userAddress: Address) {

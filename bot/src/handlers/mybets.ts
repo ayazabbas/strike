@@ -4,7 +4,7 @@ import {
   getMarketInfo,
   getUserBets as getOnChainBets,
   MarketState,
-  STATE_LABELS,
+  Side,
   formatEther,
 } from "../services/blockchain.js";
 import { PYTH, type FeedName } from "../config.js";
@@ -57,6 +57,9 @@ export async function handleMyBets(ctx: Context) {
   for (const addr of marketAddresses.slice(0, 5)) {
     try {
       const market = await getMarketInfo(addr as Address);
+      // Skip markets not from current factory
+      const { isMarketFromFactory } = await import("../services/blockchain.js");
+      if (!(await isMarketFromFactory(addr as Address))) continue;
       const feed = feedNameFromId(market.priceId);
       const onChain = await getOnChainBets(addr as Address, user.wallet_address as Address);
 
@@ -64,15 +67,29 @@ export async function handleMyBets(ctx: Context) {
       const downBet = Number(formatEther(onChain.downBet)).toFixed(4);
 
       text += `${feed} | ${formatTimeWindow(market.startTime, market.expiryTime)}\n`;
-      text += `${STATE_LABELS[market.state]} | Strike: $${formatPrice(market.strikePrice)}\n`;
-      if (Number(upBet) > 0) text += `UP: ${upBet} BNB\n`;
-      if (Number(downBet) > 0) text += `DOWN: ${downBet} BNB\n`;
 
       if (market.state === MarketState.Resolved) {
-        text += `Status: Resolved\n`;
-        if (Number(upBet) > 0 || Number(downBet) > 0) {
+        const sideLabel = market.winningSide === Side.Up ? "⬆️ UP" : "⬇️ DOWN";
+        text += `Resolved ${sideLabel} | Strike: $${formatPrice(market.strikePrice)}\n`;
+      } else if (market.state === MarketState.Cancelled) {
+        text += `CANCELLED | Strike: $${formatPrice(market.strikePrice)}\n`;
+      } else {
+        text += `OPEN | Strike: $${formatPrice(market.strikePrice)}\n`;
+      }
+
+      if (Number(upBet) > 0) text += `Your bet: ⬆️ UP ${upBet} BNB\n`;
+      if (Number(downBet) > 0) text += `Your bet: ⬇️ DOWN ${downBet} BNB\n`;
+
+      if (market.state === MarketState.Resolved) {
+        const userSide = Number(upBet) > 0 ? Side.Up : Side.Down;
+        if (userSide === market.winningSide) {
+          text += `🏆 You won!\n`;
           kb.text(`Claim - ${feed}`, `claim:${addr}`).row();
+        } else {
+          text += `❌ You lost\n`;
         }
+      } else if (market.state === MarketState.Cancelled) {
+        text += `🔄 Refund available\n`;
       }
 
       text += "\n";
