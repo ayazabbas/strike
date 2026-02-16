@@ -113,6 +113,8 @@ Typical workflow:
 - Made the call to use parimutuel pools (product intuition)
 - Decided Telegram bot > Mini App (UX judgment based on knowing the target user)
 - Chose 5-minute BTC-only markets (scope discipline)
-- Provided API keys and deployment credentials
+- Created the Telegram bot via BotFather and set up Privy account + server wallets
+- Funded deployer wallet with BSC testnet BNB via faucet
+- Created `.env` files with API keys and secrets
 - Tested the live bot on Telegram
 - Final review and approval of everything shipped
