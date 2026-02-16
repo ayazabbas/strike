@@ -5,8 +5,8 @@
 
 ## Getting Started
 
-* [Market Lifecycle](market-lifecycle.md)
 * [How It Works](getting-started/how-it-works.md)
+* [Market Lifecycle](market-lifecycle.md)
 * [Quick Start](getting-started/quick-start.md)
 
 ## Smart Contracts
