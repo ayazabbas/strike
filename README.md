@@ -25,8 +25,8 @@ No website needed. No wallet extensions. Just open the bot, fund your wallet, an
 - **⏱️ Fast Rounds** — 5-minute prediction markets for quick-fire action
 - **🏊 Parimutuel Pools** — Fair odds determined by the market, not a house edge
 - **🔒 Fully On-Chain** — All bets, resolutions, and payouts happen on BNB Chain smart contracts
+- **🐣 Early Bird Bonus** — Place your bet earlier in the round to get a larger share of the rewards
 - **⚡ Gas Efficient** — EIP-1167 minimal proxy clones (~$0.01-0.03 per transaction on BSC)
-- **🐣 Early Bird Pricing** — Reduced fees for early adopters
 
 ## 🏗️ Architecture
 
