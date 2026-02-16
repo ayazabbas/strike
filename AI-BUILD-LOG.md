@@ -57,8 +57,8 @@ Typical workflow:
 
 **AI tasks:**
 - Deployed contracts to BSC testnet via Foundry
-  - MarketFactory: `0xDf8C8598392D664002CF8c5619e6161E65D91358`
-  - Market Implementation: `0x6935A3BcC853640477646080646766136383D324`
+  - MarketFactory: `0xC04761a62156894028f8107d1A27E5C714d55B01` ([verified](https://testnet.bscscan.com/address/0xC04761a62156894028f8107d1A27E5C714d55B01#code))
+  - Market Implementation: `0x55FebD192fa22f3eA05259776aBeC0686147DfEC` ([verified](https://testnet.bscscan.com/address/0x55FebD192fa22f3eA05259776aBeC0686147DfEC#code))
 - Wired bot to deployed contracts (config, RPC, ABIs, addresses)
 - Fixed MarketFactory to accept BNB refunds from Pyth (added `receive()`)
 - Created first test market on BSC testnet (BTC/USD)
