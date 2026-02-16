@@ -144,8 +144,8 @@ export async function handleHistory(ctx: Context, page = 0) {
   kb.text("Back", "main");
 
   if (ctx.callbackQuery) {
-    await ctx.editMessageText(text, { parse_mode: "Markdown", reply_markup: kb });
+    await ctx.editMessageText(text, { parse_mode: "Markdown", link_preview: { is_disabled: true }, reply_markup: kb });
   } else {
-    await ctx.reply(text, { parse_mode: "Markdown", reply_markup: kb });
+    await ctx.reply(text, { parse_mode: "Markdown", link_preview: { is_disabled: true }, reply_markup: kb });
   }
 }

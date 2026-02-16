@@ -114,6 +114,7 @@ export async function handleClaim(ctx: Context, marketAddress: string) {
       `Winnings claimed!\n\n[View TX](${explorer})`,
       {
         parse_mode: "Markdown",
+        link_preview: { is_disabled: true },
         reply_markup: new InlineKeyboard().text("Back to Bets", "mybets").row().text("Main Menu", "main"),
       }
     );

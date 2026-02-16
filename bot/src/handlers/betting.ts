@@ -98,6 +98,7 @@ export async function handleBetExecute(ctx: Context, marketAddress: string, side
       `TX: [View on BSCScan](${explorer})`,
       {
         parse_mode: "Markdown",
+        link_preview: { is_disabled: true },
         reply_markup: new InlineKeyboard()
           .text("Back to Market", `market:${marketAddress}`)
           .row()

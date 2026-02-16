@@ -109,7 +109,7 @@ async function handleCreateMarket(ctx: Context, _args: string[]) {
       ? `https://bscscan.com/tx/${txHash}`
       : `https://testnet.bscscan.com/tx/${txHash}`;
 
-    await ctx.reply(`Market created!\n\n[View TX on BSCScan](${explorer})`, { parse_mode: "Markdown" });
+    await ctx.reply(`Market created!\n\n[View TX on BSCScan](${explorer})`, { parse_mode: "Markdown", link_preview: { is_disabled: true } });
   } catch (err: any) {
     console.error("Admin create market error:", err);
     await ctx.reply(`Failed to create market: ${err.message ?? "Unknown error"}`);
