@@ -6,11 +6,13 @@ import type { Address } from "viem";
 
 export function mainMenuKeyboard() {
   return new InlineKeyboard()
-    .text("Markets", "markets")
-    .text("My Bets", "mybets")
+    .text("⚡ Live", "live")
+    .text("🎲 My Bets", "mybets")
     .row()
-    .text("Wallet", "wallet")
-    .text("Settings", "settings");
+    .text("👛 Wallet", "wallet")
+    .text("❓ How it Works", "howitworks")
+    .row()
+    .text("⚙️ Settings", "settings");
 }
 
 export async function handleStart(ctx: Context) {

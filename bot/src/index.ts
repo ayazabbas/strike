@@ -7,6 +7,7 @@ import { handleWallet, handleCopyAddress } from "./handlers/wallet.js";
 import { handleMyBets, handleClaim } from "./handlers/mybets.js";
 import { handleSettings } from "./handlers/settings.js";
 import { handleHelp } from "./handlers/help.js";
+import { handleHowItWorks } from "./handlers/howitworks.js";
 import { handleAdmin } from "./handlers/admin.js";
 
 const bot = new Bot(config.botToken);
@@ -37,8 +38,14 @@ bot.on("callback_query:data", async (ctx) => {
       await ctx.editMessageText(text, { reply_markup: mainMenuKeyboard() });
     }
 
-    // Markets list
-    else if (data === "markets") {
+    // How it works
+    else if (data === "howitworks" || data.startsWith("howitworks:")) {
+      const page = data.includes(":") ? parseInt(data.split(":")[1]) : 0;
+      await handleHowItWorks(ctx, page);
+    }
+
+    // Live market
+    else if (data === "live" || data === "markets") {
       await handleMarkets(ctx);
     }
 

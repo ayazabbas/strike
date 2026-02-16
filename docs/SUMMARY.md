@@ -1,6 +1,7 @@
 # Table of contents
 
 * [What is Strike?](README.md)
+* [🎮 Play Now](play-now.md)
 
 ## Getting Started
 
