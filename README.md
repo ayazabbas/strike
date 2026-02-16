@@ -203,10 +203,6 @@ npm run dev  # Start bot in development mode
 
 <!-- Add team info here -->
 
-## 📄 License
-
-MIT
-
 ---
 
 **Built for the Good Vibes Only: OpenClaw Edition Hackathon** 🏆
