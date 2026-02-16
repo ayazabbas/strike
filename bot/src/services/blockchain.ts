@@ -319,4 +319,23 @@ export async function resolveMarketOnChain(marketAddress: Address, pythUpdateDat
   return hash;
 }
 
+/**
+ * Place a bet on a market using the deployer/keeper private key directly.
+ * Returns the tx hash.
+ */
+export async function betOnMarketOnChain(marketAddress: Address, side: Side, value: bigint): Promise<string> {
+  if (!config.deployerPrivateKey) throw new Error("DEPLOYER_PRIVATE_KEY not set");
+  const account = privateKeyToAccount(config.deployerPrivateKey);
+  const walletClient = createWalletClient({ account, chain, transport: http(config.bscRpcUrl) });
+
+  const hash = await walletClient.writeContract({
+    address: marketAddress,
+    abi: MARKET_ABI,
+    functionName: "bet",
+    args: [side],
+    value,
+  });
+  return hash;
+}
+
 export { formatEther, parseEther };

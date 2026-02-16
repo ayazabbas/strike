@@ -14,10 +14,15 @@ import {
   getMarketInfo,
   createMarketOnChain,
   resolveMarketOnChain,
+  betOnMarketOnChain,
   MarketState,
+  Side,
   publicClient,
+  parseEther,
 } from "./services/blockchain.js";
 import { getPriceUpdateData } from "./services/pyth.js";
+
+const SEED_BET_AMOUNT = parseEther("0.001"); // 0.001 BNB seed bet on UP
 
 const DURATION = BigInt(PYTH.defaultDurationSeconds); // 300s = 5 minutes
 const INTERVAL_MS = PYTH.defaultDurationSeconds * 1000; // 5 minutes in ms
@@ -86,6 +91,35 @@ async function createMarket() {
     const receipt = await publicClient.waitForTransactionReceipt({ hash: hash as `0x${string}` });
     if (receipt.status === "success") {
       log(`Market created — tx: ${hash}`);
+
+      // Extract new market address from MarketCreated event log
+      // The factory emits MarketCreated(address indexed market, ...) — topics[1] is the market address
+      const createdLog = receipt.logs.find(
+        (l) => l.address.toLowerCase() === config.marketFactoryAddress.toLowerCase() && l.topics[1]
+      );
+
+      let newMarketAddress: Address | undefined;
+      if (createdLog?.topics[1]) {
+        newMarketAddress = ("0x" + createdLog.topics[1].slice(26)) as Address;
+      }
+
+      // Place seed bet on UP
+      if (newMarketAddress) {
+        try {
+          log(`Placing seed bet of 0.001 BNB on UP for ${newMarketAddress}...`);
+          const betHash = await betOnMarketOnChain(newMarketAddress, Side.Up, SEED_BET_AMOUNT);
+          const betReceipt = await publicClient.waitForTransactionReceipt({ hash: betHash as `0x${string}` });
+          if (betReceipt.status === "success") {
+            log(`Seed bet placed — tx: ${betHash}`);
+          } else {
+            log(`Seed bet reverted — tx: ${betHash}`);
+          }
+        } catch (betErr) {
+          logError("Failed to place seed bet:", betErr);
+        }
+      } else {
+        log("Could not extract new market address from receipt, skipping seed bet");
+      }
     } else {
       log(`Market creation reverted — tx: ${hash}`);
     }
