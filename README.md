@@ -1,6 +1,12 @@
-# ⚡ Strike — Prediction Markets on Telegram
+<p align="center">
+  <img src="assets/strike-logo-with-text.svg" alt="Strike Logo" width="400" />
+</p>
 
-> Binary UP/DOWN prediction markets powered by Pyth oracle on BNB Chain, accessible through a Telegram bot.
+<h1 align="center">Strike — Prediction Markets on Telegram</h1>
+
+<p align="center">
+  Binary UP/DOWN prediction markets powered by Pyth oracle on BNB Chain, accessible through a Telegram bot.
+</p>
 
 [![Built for BNB Chain](https://img.shields.io/badge/Built%20for-BNB%20Chain-F0B90B?style=flat-square)](https://www.bnbchain.org/)
 [![Powered by Pyth](https://img.shields.io/badge/Powered%20by-Pyth%20Network-6B48FF?style=flat-square)](https://pyth.network/)
