@@ -14,7 +14,7 @@ import {
 } from "../services/blockchain.js";
 import { getLatestPrices, formatPrice } from "../services/pyth.js";
 import { PYTH, type FeedName } from "../config.js";
-import { getUser } from "../db/database.js";
+import { getUser, getQuickBetAmounts } from "../db/database.js";
 import type { Address } from "viem";
 
 // ABI for getCurrentState view function
@@ -188,16 +188,17 @@ export async function handleMarkets(ctx: Context) {
     const kb = new InlineKeyboard();
 
     if (isBettingOpen) {
-      kb.text("🟢 UP 0.01", `bet:${market.address}:up:0.01`)
-        .text("🟢 UP 0.05", `bet:${market.address}:up:0.05`)
-        .text("🟢 UP 0.1", `bet:${market.address}:up:0.1`)
+      const amounts = telegramId ? getQuickBetAmounts(telegramId) : ["0.01", "0.05", "0.1"] as [string, string, string];
+      kb.text(`🟢 UP ${amounts[0]}`, `bet:${market.address}:up:${amounts[0]}`)
+        .text(`🟢 UP ${amounts[1]}`, `bet:${market.address}:up:${amounts[1]}`)
+        .text(`🟢 UP ${amounts[2]}`, `bet:${market.address}:up:${amounts[2]}`)
         .row()
-        .text("🔴 DOWN 0.01", `bet:${market.address}:down:0.01`)
-        .text("🔴 DOWN 0.05", `bet:${market.address}:down:0.05`)
-        .text("🔴 DOWN 0.1", `bet:${market.address}:down:0.1`)
+        .text(`🔴 DN ${amounts[0]}`, `bet:${market.address}:down:${amounts[0]}`)
+        .text(`🔴 DN ${amounts[1]}`, `bet:${market.address}:down:${amounts[1]}`)
+        .text(`🔴 DN ${amounts[2]}`, `bet:${market.address}:down:${amounts[2]}`)
         .row()
         .text("🟢 UP Custom", `betcustom:${market.address}:up`)
-        .text("🔴 DOWN Custom", `betcustom:${market.address}:down`)
+        .text("🔴 DN Custom", `betcustom:${market.address}:down`)
         .row();
     }
 
@@ -286,16 +287,17 @@ export async function handleMarketDetail(ctx: Context, marketAddress: string) {
     const kb = new InlineKeyboard();
 
     if (market.state === MarketState.Open) {
-      kb.text("🟢 UP 0.01", `bet:${marketAddress}:up:0.01`)
-        .text("🟢 UP 0.05", `bet:${marketAddress}:up:0.05`)
-        .text("🟢 UP 0.1", `bet:${marketAddress}:up:0.1`)
+      const detailAmounts = detailTelegramId ? getQuickBetAmounts(detailTelegramId) : ["0.01", "0.05", "0.1"] as [string, string, string];
+      kb.text(`🟢 UP ${detailAmounts[0]}`, `bet:${marketAddress}:up:${detailAmounts[0]}`)
+        .text(`🟢 UP ${detailAmounts[1]}`, `bet:${marketAddress}:up:${detailAmounts[1]}`)
+        .text(`🟢 UP ${detailAmounts[2]}`, `bet:${marketAddress}:up:${detailAmounts[2]}`)
         .row()
-        .text("🔴 DOWN 0.01", `bet:${marketAddress}:down:0.01`)
-        .text("🔴 DOWN 0.05", `bet:${marketAddress}:down:0.05`)
-        .text("🔴 DOWN 0.1", `bet:${marketAddress}:down:0.1`)
+        .text(`🔴 DN ${detailAmounts[0]}`, `bet:${marketAddress}:down:${detailAmounts[0]}`)
+        .text(`🔴 DN ${detailAmounts[1]}`, `bet:${marketAddress}:down:${detailAmounts[1]}`)
+        .text(`🔴 DN ${detailAmounts[2]}`, `bet:${marketAddress}:down:${detailAmounts[2]}`)
         .row()
         .text("🟢 UP Custom", `betcustom:${marketAddress}:up`)
-        .text("🔴 DOWN Custom", `betcustom:${marketAddress}:down`)
+        .text("🔴 DN Custom", `betcustom:${marketAddress}:down`)
         .row();
     }
 

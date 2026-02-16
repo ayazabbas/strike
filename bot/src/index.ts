@@ -5,7 +5,7 @@ import { handleMarkets, handleMarketDetail } from "./handlers/markets.js";
 import { handleBetConfirm, handleBetExecute, handleCustomBetPrompt, handleCustomBetAmount } from "./handlers/betting.js";
 import { handleWallet, handleCopyAddress } from "./handlers/wallet.js";
 import { handleMyBets, handleClaimAll } from "./handlers/mybets.js";
-import { handleSettings } from "./handlers/settings.js";
+import { handleSettings, handleSetBetPrompt, handleSetBetReset, handleSettingsAmountInput, pendingSettingsInput } from "./handlers/settings.js";
 import { handleHelp } from "./handlers/help.js";
 import { handleHowItWorks } from "./handlers/howitworks.js";
 import { handleAdmin } from "./handlers/admin.js";
@@ -17,11 +17,12 @@ const bot = new Bot(config.botToken);
 bot.command("start", handleStart);
 bot.command("help", handleHelp);
 bot.command("history", (ctx) => handleHistory(ctx));
+bot.command("settings", handleSettings);
 bot.command("admin", handleAdmin);
 
 // ── Text messages (for custom bet amounts) ────────────────────────────
 bot.on("message:text", async (ctx) => {
-  const handled = await handleCustomBetAmount(ctx);
+  const handled = await handleSettingsAmountInput(ctx) || await handleCustomBetAmount(ctx);
   if (!handled) {
     await ctx.reply("Use /start to begin, or tap a button below.", {
       reply_markup: mainMenuKeyboard(),
@@ -105,6 +106,18 @@ bot.on("callback_query:data", async (ctx) => {
     // Settings
     else if (data === "settings") {
       await handleSettings(ctx);
+    }
+
+    // Quick-bet settings
+    else if (data === "setbet:reset") {
+      await handleSetBetReset(ctx);
+    }
+    else if (data.startsWith("setbet:")) {
+      const slot = parseInt(data.split(":")[1]);
+      if (slot >= 1 && slot <= 3) {
+        pendingSettingsInput.set(ctx.from!.id, slot);
+        await handleSetBetPrompt(ctx, slot);
+      }
     }
 
     await ctx.answerCallbackQuery();

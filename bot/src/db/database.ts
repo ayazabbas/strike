@@ -41,6 +41,14 @@ function initTables(db: Database.Database) {
 
     CREATE INDEX IF NOT EXISTS idx_bets_user ON bets(telegram_id);
     CREATE INDEX IF NOT EXISTS idx_bets_market ON bets(market_address);
+
+    CREATE TABLE IF NOT EXISTS user_settings (
+      telegram_id INTEGER PRIMARY KEY,
+      quick_bet_1 TEXT NOT NULL DEFAULT '0.01',
+      quick_bet_2 TEXT NOT NULL DEFAULT '0.05',
+      quick_bet_3 TEXT NOT NULL DEFAULT '0.1',
+      FOREIGN KEY (telegram_id) REFERENCES users(telegram_id)
+    );
   `);
 }
 
@@ -131,4 +139,24 @@ export function getUserBetsForMarket(telegramId: number, marketAddress: string):
   return getDb().prepare(
     "SELECT * FROM bets WHERE telegram_id = ? AND market_address = ? AND status = 'confirmed' ORDER BY created_at DESC"
   ).all(telegramId, marketAddress) as DbBet[];
+}
+
+// ── Quick-bet settings ─────────────────────────────────────────────────
+
+const DEFAULT_QUICK_BETS: [string, string, string] = ["0.01", "0.05", "0.1"];
+
+export function getQuickBetAmounts(telegramId: number): [string, string, string] {
+  const row = getDb().prepare(
+    "SELECT quick_bet_1, quick_bet_2, quick_bet_3 FROM user_settings WHERE telegram_id = ?"
+  ).get(telegramId) as { quick_bet_1: string; quick_bet_2: string; quick_bet_3: string } | undefined;
+  if (!row) return [...DEFAULT_QUICK_BETS];
+  return [row.quick_bet_1, row.quick_bet_2, row.quick_bet_3];
+}
+
+export function setQuickBetAmount(telegramId: number, slot: 1 | 2 | 3, amount: string): void {
+  const col = `quick_bet_${slot}`;
+  getDb().prepare(
+    `INSERT INTO user_settings (telegram_id, ${col}) VALUES (?, ?)
+     ON CONFLICT(telegram_id) DO UPDATE SET ${col} = excluded.${col}`
+  ).run(telegramId, amount);
 }
