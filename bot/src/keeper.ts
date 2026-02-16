@@ -197,10 +197,8 @@ async function main() {
   log(`Chain ID: ${config.chainId}`);
   log(`Duration: ${PYTH.defaultDurationSeconds}s`);
 
-  // Create a market immediately if none are open
-  await createMarket();
-
-  // Schedule aligned creation
+  // Schedule creation at aligned 5-minute boundaries only
+  // Don't create immediately — wait for next :00/:05/:10/etc boundary
   scheduleCreation();
 
   // Poll for resolution every 30s
