@@ -4,7 +4,7 @@ import { handleStart, mainMenuKeyboard } from "./handlers/start.js";
 import { handleMarkets, handleMarketDetail } from "./handlers/markets.js";
 import { handleBetConfirm, handleBetExecute, handleCustomBetPrompt, handleCustomBetAmount } from "./handlers/betting.js";
 import { handleWallet, handleCopyAddress } from "./handlers/wallet.js";
-import { handleMyBets, handleClaim } from "./handlers/mybets.js";
+import { handleMyBets, handleClaimAll } from "./handlers/mybets.js";
 import { handleSettings } from "./handlers/settings.js";
 import { handleHelp } from "./handlers/help.js";
 import { handleHowItWorks } from "./handlers/howitworks.js";
@@ -91,10 +91,9 @@ bot.on("callback_query:data", async (ctx) => {
       await handleMyBets(ctx);
     }
 
-    // Claim winnings: claim:0x...
-    else if (data.startsWith("claim:")) {
-      const addr = data.split(":")[1];
-      await handleClaim(ctx, addr);
+    // Claim all winnings
+    else if (data === "claimall") {
+      await handleClaimAll(ctx);
     }
 
     // History

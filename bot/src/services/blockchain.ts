@@ -331,6 +331,13 @@ export function encodeClaimCall(): string {
   });
 }
 
+export function encodeRefundCall(): string {
+  return encodeFunctionData({
+    abi: MARKET_ABI,
+    functionName: "refund",
+  });
+}
+
 export function encodeCreateMarketCall(priceId: `0x${string}`, duration: bigint, pythUpdateData: `0x${string}`[]): string {
   return encodeFunctionData({
     abi: FACTORY_ABI,
