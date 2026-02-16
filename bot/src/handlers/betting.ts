@@ -81,7 +81,7 @@ export async function handleBetExecute(ctx: Context, marketAddress: string, side
     const data = encodeBetCall(betSide);
     const txHash = await sendTransaction(user.wallet_id, {
       to: marketAddress,
-      value: amountWei.toString(),
+      value: "0x" + amountWei.toString(16),
       data,
       chainId: config.chainId,
     });
