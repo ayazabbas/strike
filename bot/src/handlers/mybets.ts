@@ -226,7 +226,7 @@ export async function handleMyBets(ctx: Context, page = 0) {
 
     await ctx.editMessageText(text, {
       parse_mode: "Markdown",
-      link_preview: { is_disabled: true },
+      link_preview_options: { is_disabled: true },
       reply_markup: kb,
     });
   } else {
@@ -330,7 +330,7 @@ export async function handleClaimAll(ctx: Context) {
     `Claim Results:\n\n${summary}${statusLine}`,
     {
       parse_mode: "Markdown",
-      link_preview: { is_disabled: true },
+      link_preview_options: { is_disabled: true },
       reply_markup: new InlineKeyboard().text("Back to Bets", "mybets").row().text("Main Menu", "main"),
     }
   );

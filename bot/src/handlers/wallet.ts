@@ -43,7 +43,7 @@ export async function handleWallet(ctx: Context) {
 
   await ctx.editMessageText(text, {
     parse_mode: "Markdown",
-    link_preview: { is_disabled: true },
+    link_preview_options: { is_disabled: true },
     reply_markup: kb,
   });
 }
