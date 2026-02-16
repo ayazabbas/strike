@@ -74,6 +74,39 @@ No website needed. No wallet extensions. Just open the bot, fund your wallet, an
 5. **Wait for resolution** → Market resolves automatically after 5 minutes
 6. **Claim winnings** → If you predicted correctly, claim your share of the pool!
 
+## 🔄 Market Lifecycle
+
+```mermaid
+flowchart TD
+    A["🏗️ Keeper Creates Market\n(at :00/:05/:10 etc)"] --> B["📖 OPEN\nAccepting bets"]
+    
+    B -->|"Users bet UP ⬆️ or DOWN ⬇️\n(0.001+ BNB each)"| B
+    B -->|"Halfway point reached\n(2.5 min for 5-min market)"| C["🔒 LOCKED\nNo more bets"]
+    
+    C -->|"Market expires\n(5 min from creation)"| D{"🔮 Keeper Resolves\nwith Pyth price"}
+    
+    D -->|"Both sides have bets\n& no exact tie"| E["✅ RESOLVED"]
+    D -->|"One-sided pool\nOR exact price tie"| F["❌ CANCELLED"]
+    
+    E --> G{"Did you win?"}
+    G -->|"✅ Yes"| H["💰 Claim Winnings\n(your bet + share of losing pool\nminus 3% fee)"]
+    G -->|"❌ No"| I["😢 Better luck\nnext time"]
+    
+    F --> J["🔄 Refund\n(everyone gets their bet back)"]
+    
+    D -->|"24h passes\nwithout resolution"| K["⏰ Auto-Cancelled\n(deadline passed)"]
+    K --> J
+
+    style A fill:#4a9eff,color:#fff
+    style B fill:#22c55e,color:#fff
+    style C fill:#f59e0b,color:#fff
+    style E fill:#22c55e,color:#fff
+    style F fill:#ef4444,color:#fff
+    style H fill:#a855f7,color:#fff
+    style J fill:#6366f1,color:#fff
+    style K fill:#ef4444,color:#fff
+```
+
 ## 🛠️ Tech Stack
 
 | Component | Technology |
