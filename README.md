@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/strike-logo-with-text.svg" alt="Strike Logo" width="400" />
+  <img src="assets/strike-logo-with-text.svg" alt="Strike Logo" width="200" />
 </p>
 
 <h1 align="center">Strike — Prediction Markets on Telegram</h1>
