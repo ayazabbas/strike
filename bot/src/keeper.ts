@@ -103,19 +103,31 @@ async function createMarket() {
         newMarketAddress = ("0x" + createdLog.topics[1].slice(26)) as Address;
       }
 
-      // Place seed bet on UP
+      // Place seed bets on both sides for liquidity
       if (newMarketAddress) {
         try {
           log(`Placing seed bet of 0.001 BNB on UP for ${newMarketAddress}...`);
-          const betHash = await betOnMarketOnChain(newMarketAddress, Side.Up, SEED_BET_AMOUNT);
-          const betReceipt = await publicClient.waitForTransactionReceipt({ hash: betHash as `0x${string}` });
-          if (betReceipt.status === "success") {
-            log(`Seed bet placed — tx: ${betHash}`);
+          const betHashUp = await betOnMarketOnChain(newMarketAddress, Side.Up, SEED_BET_AMOUNT);
+          const betReceiptUp = await publicClient.waitForTransactionReceipt({ hash: betHashUp as `0x${string}` });
+          if (betReceiptUp.status === "success") {
+            log(`Seed bet UP placed — tx: ${betHashUp}`);
           } else {
-            log(`Seed bet reverted — tx: ${betHash}`);
+            log(`Seed bet UP reverted — tx: ${betHashUp}`);
           }
         } catch (betErr) {
-          logError("Failed to place seed bet:", betErr);
+          logError("Failed to place seed bet UP:", betErr);
+        }
+        try {
+          log(`Placing seed bet of 0.001 BNB on DOWN for ${newMarketAddress}...`);
+          const betHashDown = await betOnMarketOnChain(newMarketAddress, Side.Down, SEED_BET_AMOUNT);
+          const betReceiptDown = await publicClient.waitForTransactionReceipt({ hash: betHashDown as `0x${string}` });
+          if (betReceiptDown.status === "success") {
+            log(`Seed bet DOWN placed — tx: ${betHashDown}`);
+          } else {
+            log(`Seed bet DOWN reverted — tx: ${betHashDown}`);
+          }
+        } catch (betErr) {
+          logError("Failed to place seed bet DOWN:", betErr);
         }
       } else {
         log("Could not extract new market address from receipt, skipping seed bet");
