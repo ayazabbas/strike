@@ -211,7 +211,7 @@ npm run dev  # Start bot in development mode
 | Test count | 51 (37 Market + 14 Factory) |
 | Protocol fee | 3% |
 | Min bet | 0.001 BNB |
-| Anti-frontrun lock | 60s before expiry |
+
 
 ## 🔐 Security
 

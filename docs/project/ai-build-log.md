@@ -37,7 +37,7 @@ OpenClaw acts as a persistent AI assistant with access to the development machin
 - Chose parimutuel pool model over orderbook
 - Chose Telegram bot with embedded wallets over Mini App with WalletConnect (architectural pivot)
 - Chose Privy for server-side wallet management
-- Defined fee structure (3%), minimum bet (0.001 BNB), anti-frontrun lock (60s)
+- Defined fee structure (3%), minimum bet (0.001 BNB), trading deadline (halfway)
 
 ### Day 2-4 (Feb 11-14) — Iteration
 
@@ -108,7 +108,7 @@ OpenClaw acts as a persistent AI assistant with access to the development machin
 
 ## Key Moments Where AI Excelled
 
-1. **Contract test coverage** — Claude Code wrote 51 comprehensive tests including edge cases (one-sided markets, exact price ties, anti-frontrun, emergency cancellation) without being asked for specific scenarios
+1. **Contract test coverage** — Claude Code wrote 51 comprehensive tests including edge cases (one-sided markets, exact price ties, emergency cancellation) without being asked for specific scenarios
 2. **Architectural pivot** — When the human decided to switch from Telegram Mini App to a bot with embedded wallets, the AI restructured the entire frontend approach in a single session
 3. **Bug discovery** — During deployment wiring, Claude Code found that MarketFactory needed a `receive()` function to handle Pyth fee refunds — a bug that would have blocked the entire betting flow
 4. **State bug fix** — After deployment, the keeper wasn't creating new markets because `getMarketInfo()` returns stored state, not computed state. The AI identified the root cause (stored vs computed state) and fixed the keeper's logic to check timestamps directly

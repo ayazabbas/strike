@@ -7,7 +7,7 @@ Strike runs on a continuous 5-minute cycle:
 ```
 :00  Market opens → Strike price captured from Pyth
 :00 - :02:30  Betting window (first half of duration)
-:02:30  Betting closes (anti-frontrun lock)
+:02:30  Betting closes (trading deadline)
 :05  Market expires → Pyth price fetched → Winners determined
 :05  New market opens → Cycle repeats
 ```

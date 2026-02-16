@@ -67,7 +67,6 @@ The contract test suite includes 51 tests covering:
 | Basic betting | ✅ |
 | Minimum bet enforcement | ✅ |
 | Trading deadline | ✅ |
-| Anti-frontrun lock | ✅ |
 | Market resolution | ✅ |
 | One-sided market refunds | ✅ |
 | Exact price tie refunds | ✅ |

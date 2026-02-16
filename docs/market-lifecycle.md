@@ -16,7 +16,6 @@ Every Strike market follows this flow from creation to payout.
 |------|--------|
 | **Minimum bet** | 0.001 BNB |
 | **Trading stops** | Halfway through duration (2.5 min for 5-min markets) |
-| **Anti-frontrun** | Last 60s before expiry: no bets accepted |
 | **Protocol fee** | 3% of the losing pool (winners keep their own bets + winnings minus fee) |
 | **One-sided refund** | If all bets are on one side, everyone is refunded |
 | **Exact tie refund** | If resolution price = strike price exactly, everyone is refunded |
