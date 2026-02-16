@@ -4,8 +4,8 @@
 
 | Contract | Address |
 |----------|---------|
-| **MarketFactory** | [`0xDf8C8598392D664002CF8c5619e6161E65D91358`](https://testnet.bscscan.com/address/0xDf8C8598392D664002CF8c5619e6161E65D91358) |
-| **Market Implementation** | [`0x6935A3BcC853640477646080646766136383D324`](https://testnet.bscscan.com/address/0x6935A3BcC853640477646080646766136383D324) |
+| **MarketFactory** | [`0xC04761a62156894028f8107d1A27E5C714d55B01`](https://testnet.bscscan.com/address/0xC04761a62156894028f8107d1A27E5C714d55B01) |
+| **Market Implementation** | [`0x55FebD192fa22f3eA05259776aBeC0686147DfEC`](https://testnet.bscscan.com/address/0x55FebD192fa22f3eA05259776aBeC0686147DfEC) |
 | **Pyth Oracle** | [`0x5744Cbf430D99456a0A8771208b674F27f8EF0Fb`](https://testnet.bscscan.com/address/0x5744Cbf430D99456a0A8771208b674F27f8EF0Fb) |
 | **Fee Collector** | `0xC2AFf8375481b7fb36d964f96ff01Dd3Bb032262` |
 
