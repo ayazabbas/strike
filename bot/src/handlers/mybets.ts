@@ -93,7 +93,7 @@ export async function handleClaim(ctx: Context, marketAddress: string) {
     const data = encodeClaimCall();
     const txHash = await sendTransaction(user.wallet_id, {
       to: marketAddress,
-      value: "0",
+      value: "0x0",
       data,
       chainId: (await import("../config.js")).config.chainId,
     });
