@@ -1,8 +1,10 @@
 import { type Context, InlineKeyboard } from "grammy";
-import { getUser, getUserBets } from "../db/database.js";
+import { getUser, getUserBets, getUserBetCount, getUserBetMarkets, getUserBetsForMarket } from "../db/database.js";
 import {
   getMarketInfo,
   getUserBets as getOnChainBets,
+  getWinningSide,
+  getResolutionPrice,
   MarketState,
   Side,
   formatEther,
@@ -15,6 +17,8 @@ import { config } from "../config.js";
 import { PYTH, type FeedName } from "../config.js";
 import { formatPrice } from "../services/pyth.js";
 import type { Address } from "viem";
+
+const PAST_PAGE_SIZE = 5;
 
 function feedNameFromId(priceId: string): string {
   for (const [name, id] of Object.entries(PYTH.feeds)) {
@@ -37,7 +41,7 @@ interface ClaimableMarket {
   type: "claim" | "refund";
 }
 
-export async function handleMyBets(ctx: Context) {
+export async function handleMyBets(ctx: Context, page = 0) {
   const telegramId = ctx.from!.id;
   const user = getUser(telegramId);
 
@@ -60,79 +64,185 @@ export async function handleMyBets(ctx: Context) {
     return;
   }
 
-  // Group by market and get on-chain info
-  const marketAddresses = [...new Set(bets.map((b) => b.market_address))];
-  let text = "Your Bets:\n\n";
+  // ── Active bets (open/unresolved markets) ──────────────────────────
+  const allMarketAddresses = [...new Set(bets.map((b) => b.market_address))];
+  let text = "";
   const claimable: ClaimableMarket[] = [];
+  const activeAddrs: string[] = [];
+  const pastAddrs: string[] = [];
 
-  for (const addr of marketAddresses.slice(0, 5)) {
+  // Classify markets as active vs past
+  for (const addr of allMarketAddresses) {
     try {
       if (!(await isMarketFromFactory(addr as Address))) continue;
       const market = await getMarketInfo(addr as Address);
-      const feed = feedNameFromId(market.priceId);
-      const onChain = await getOnChainBets(addr as Address, user.wallet_address as Address);
-
-      const upBet = Number(formatEther(onChain.upBet)).toFixed(4);
-      const downBet = Number(formatEther(onChain.downBet)).toFixed(4);
-
-      text += `${feed} | ${formatTimeWindow(market.startTime, market.expiryTime)}\n`;
-
-      if (market.state === MarketState.Resolved) {
-        const sideLabel = market.winningSide === Side.Up ? "⬆️ UP" : "⬇️ DOWN";
-        text += `Resolved ${sideLabel} | Strike: $${formatPrice(market.strikePrice)}\n`;
-      } else if (market.state === MarketState.Cancelled) {
-        text += `CANCELLED | Strike: $${formatPrice(market.strikePrice)}\n`;
+      if (market.state === MarketState.Open || market.state === MarketState.Closed) {
+        activeAddrs.push(addr);
       } else {
-        text += `OPEN | Strike: $${formatPrice(market.strikePrice)}\n`;
+        pastAddrs.push(addr);
       }
-
-      if (Number(upBet) > 0) text += `Your bet: ⬆️ UP ${upBet} BNB\n`;
-      if (Number(downBet) > 0) text += `Your bet: ⬇️ DOWN ${downBet} BNB\n`;
-
-      if (market.state === MarketState.Resolved) {
-        const userSide = Number(upBet) > 0 ? Side.Up : Side.Down;
-        if (userSide === market.winningSide) {
-          // Check if already claimed: winning shares == 0 means already claimed
-          const sharesLeft = userSide === Side.Up ? onChain.upShares : onChain.downShares;
-          if (sharesLeft > 0n) {
-            text += `🏆 You won! (unclaimed)\n`;
-            claimable.push({ address: addr, feed, type: "claim" });
-          } else {
-            text += `🏆 You won! (claimed)\n`;
-          }
-        } else {
-          text += `❌ You lost\n`;
-        }
-      } else if (market.state === MarketState.Cancelled) {
-        // Check if already refunded: shares == 0 means already refunded
-        const hasShares = onChain.upShares > 0n || onChain.downShares > 0n;
-        if (hasShares) {
-          text += `🔄 Refund available\n`;
-          claimable.push({ address: addr, feed, type: "refund" });
-        } else {
-          text += `🔄 Refunded\n`;
-        }
-      }
-
-      text += "\n";
     } catch {
       // skip errored markets
     }
   }
 
-  const kb = new InlineKeyboard();
+  // Show active bets section
+  if (activeAddrs.length > 0) {
+    text += "ACTIVE BETS\n\n";
+    for (const addr of activeAddrs) {
+      try {
+        const market = await getMarketInfo(addr as Address);
+        const feed = feedNameFromId(market.priceId);
+        const onChain = await getOnChainBets(addr as Address, user.wallet_address as Address);
 
-  if (claimable.length > 0) {
-    const totalLabel = claimable.length === 1
-      ? "Claim Winnings"
-      : `Claim All Winnings (${claimable.length})`;
-    kb.text(totalLabel, "claimall").row();
+        const upBet = Number(formatEther(onChain.upBet)).toFixed(4);
+        const downBet = Number(formatEther(onChain.downBet)).toFixed(4);
+
+        text += `${feed} | ${formatTimeWindow(market.startTime, market.expiryTime)}\n`;
+        text += `OPEN | Strike: $${formatPrice(market.strikePrice)}\n`;
+        if (Number(upBet) > 0) text += `Your bet: ⬆️ UP ${upBet} BNB\n`;
+        if (Number(downBet) > 0) text += `Your bet: ⬇️ DOWN ${downBet} BNB\n`;
+        text += "\n";
+      } catch {
+        // skip
+      }
+    }
   }
 
-  kb.text("Refresh", "mybets").row();
-  kb.text("Back", "main");
+  // ── Past results (resolved/cancelled) paginated ────────────────────
+  // Use DB-level pagination for past markets
+  const totalPastMarkets = getUserBetCount(telegramId);
+  // Subtract active markets from total for pagination
+  const activeBetMarketCount = activeAddrs.length;
+  const totalPast = Math.max(0, totalPastMarkets - activeBetMarketCount);
 
-  await ctx.editMessageText(text, { reply_markup: kb });
+  if (totalPast > 0) {
+    const totalPages = Math.ceil(totalPast / PAST_PAGE_SIZE);
+    const currentPage = Math.min(page, Math.max(0, totalPages - 1));
+
+    // We need to get past markets only. Fetch enough from DB to skip active ones.
+    // Strategy: fetch all market addresses from DB, filter out active, then paginate.
+    const allDbMarkets = getUserBetMarkets(telegramId, 0, totalPastMarkets);
+    const activeSet = new Set(activeAddrs.map(a => a.toLowerCase()));
+    const pastDbMarkets = allDbMarkets.filter(a => !activeSet.has(a.toLowerCase()));
+
+    const offset = currentPage * PAST_PAGE_SIZE;
+    const pageMarkets = pastDbMarkets.slice(offset, offset + PAST_PAGE_SIZE);
+    const actualTotalPages = Math.ceil(pastDbMarkets.length / PAST_PAGE_SIZE);
+
+    const explorer = config.chainId === 56 ? "https://bscscan.com" : "https://testnet.bscscan.com";
+
+    text += `PAST RESULTS (${currentPage + 1}/${actualTotalPages})\n\n`;
+
+    for (const addr of pageMarkets) {
+      try {
+        if (!(await isMarketFromFactory(addr as Address))) continue;
+        const market = await getMarketInfo(addr as Address);
+        const feed = feedNameFromId(market.priceId);
+        const window = formatTimeWindow(market.startTime, market.expiryTime);
+        const dbBets = getUserBetsForMarket(telegramId, addr);
+        const onChain = await getOnChainBets(addr as Address, user.wallet_address as Address);
+
+        text += `${feed} | ${window}\n`;
+        text += `Strike: $${formatPrice(market.strikePrice)}`;
+
+        if (market.state === MarketState.Resolved) {
+          try {
+            const resPrice = await getResolutionPrice(addr as Address);
+            text += ` → $${formatPrice(resPrice)}`;
+          } catch {}
+
+          try {
+            const winningSide = await getWinningSide(addr as Address);
+            const sideLabel = winningSide === Side.Up ? "UP" : "DOWN";
+
+            for (const bet of dbBets) {
+              const won = bet.side === (winningSide === Side.Up ? "up" : "down");
+              const result = won ? "Won" : "Lost";
+              text += `\n  ${bet.side.toUpperCase()} ${bet.amount} BNB — ${result}`;
+              if (bet.tx_hash) {
+                text += ` [TX](${explorer}/tx/${bet.tx_hash})`;
+              }
+            }
+            text += `\n  Result: ${sideLabel} wins`;
+
+            // Check claimable
+            const upBet = Number(formatEther(onChain.upBet)).toFixed(4);
+            const downBet = Number(formatEther(onChain.downBet)).toFixed(4);
+            const userSide = Number(upBet) > 0 ? Side.Up : Side.Down;
+            if (userSide === winningSide) {
+              const sharesLeft = userSide === Side.Up ? onChain.upShares : onChain.downShares;
+              if (sharesLeft > 0n) {
+                text += ` (unclaimed)`;
+                claimable.push({ address: addr, feed, type: "claim" });
+              }
+            }
+            text += "\n";
+          } catch {
+            for (const bet of dbBets) {
+              text += `\n  ${bet.side.toUpperCase()} ${bet.amount} BNB`;
+              if (bet.tx_hash) text += ` [TX](${explorer}/tx/${bet.tx_hash})`;
+            }
+            text += "\n";
+          }
+        } else if (market.state === MarketState.Cancelled) {
+          const hasShares = onChain.upShares > 0n || onChain.downShares > 0n;
+          for (const bet of dbBets) {
+            text += `\n  ${bet.side.toUpperCase()} ${bet.amount} BNB — Refunded`;
+            if (bet.tx_hash) text += ` [TX](${explorer}/tx/${bet.tx_hash})`;
+          }
+          if (hasShares) {
+            text += `\n  🔄 Refund available`;
+            claimable.push({ address: addr, feed, type: "refund" });
+          }
+          text += "\n";
+        }
+
+        text += "\n";
+      } catch {
+        text += `Market ${addr.slice(0, 6)}...${addr.slice(-4)} — Error loading\n\n`;
+      }
+    }
+
+    // Pagination buttons
+    const kb = new InlineKeyboard();
+
+    if (claimable.length > 0) {
+      const totalLabel = claimable.length === 1
+        ? "Claim Winnings"
+        : `Claim All Winnings (${claimable.length})`;
+      kb.text(totalLabel, "claimall").row();
+    }
+
+    if (currentPage > 0) {
+      kb.text("« Prev", `mybets:page:${currentPage - 1}`);
+    }
+    if (currentPage < actualTotalPages - 1) {
+      kb.text("Next »", `mybets:page:${currentPage + 1}`);
+    }
+    kb.row();
+    kb.text("Refresh", "mybets").row();
+    kb.text("Back", "main");
+
+    await ctx.editMessageText(text, {
+      parse_mode: "Markdown",
+      link_preview: { is_disabled: true },
+      reply_markup: kb,
+    });
+  } else {
+    // Only active bets, no past results
+    const kb = new InlineKeyboard();
+
+    // Also check claimable from active bets that might be resolved
+    // (already handled above, but active means open/closed so no claimable)
+
+    kb.text("Refresh", "mybets").row();
+    kb.text("Back", "main");
+
+    await ctx.editMessageText(text || "No bets to display.", {
+      reply_markup: kb,
+    });
+  }
 }
 
 export async function handleClaimAll(ctx: Context) {
@@ -148,7 +258,7 @@ export async function handleClaimAll(ctx: Context) {
   // Find all claimable markets
   const claimable: { address: string; feed: string; type: "claim" | "refund" }[] = [];
 
-  for (const addr of marketAddresses.slice(0, 5)) {
+  for (const addr of marketAddresses) {
     try {
       if (!(await isMarketFromFactory(addr as Address))) continue;
       const market = await getMarketInfo(addr as Address);

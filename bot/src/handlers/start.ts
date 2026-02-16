@@ -9,11 +9,10 @@ export function mainMenuKeyboard() {
     .text("⚡ Live", "live")
     .text("🎲 My Bets", "mybets")
     .row()
-    .text("📜 History", "history")
     .text("👛 Wallet", "wallet")
+    .text("⚙️ Settings", "settings")
     .row()
-    .text("❓ How it Works", "howitworks")
-    .text("⚙️ Settings", "settings");
+    .text("❓ How it Works", "howitworks");
 }
 
 export async function handleStart(ctx: Context) {

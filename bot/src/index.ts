@@ -9,14 +9,12 @@ import { handleSettings, handleSetBetPrompt, handleSetBetReset, handleSettingsAm
 import { handleHelp } from "./handlers/help.js";
 import { handleHowItWorks } from "./handlers/howitworks.js";
 import { handleAdmin } from "./handlers/admin.js";
-import { handleHistory } from "./handlers/history.js";
 
 const bot = new Bot(config.botToken);
 
 // ── Commands ──────────────────────────────────────────────────────────
 bot.command("start", handleStart);
 bot.command("help", handleHelp);
-bot.command("history", (ctx) => handleHistory(ctx));
 bot.command("settings", handleSettings);
 bot.command("admin", handleAdmin);
 
@@ -87,9 +85,10 @@ bot.on("callback_query:data", async (ctx) => {
       return;
     }
 
-    // My bets
-    else if (data === "mybets") {
-      await handleMyBets(ctx);
+    // My bets (with pagination: mybets, mybets:page:0, mybets:page:1, etc.)
+    else if (data === "mybets" || data.startsWith("mybets:page:")) {
+      const page = data.startsWith("mybets:page:") ? parseInt(data.split(":")[2]) : 0;
+      await handleMyBets(ctx, page);
     }
 
     // Claim all winnings
@@ -97,10 +96,9 @@ bot.on("callback_query:data", async (ctx) => {
       await handleClaimAll(ctx);
     }
 
-    // History
+    // Redirect old history callbacks to mybets
     else if (data === "history" || data.startsWith("history:")) {
-      const page = data.includes(":") ? parseInt(data.split(":")[1]) : 0;
-      await handleHistory(ctx, page);
+      await handleMyBets(ctx, 0);
     }
 
     // Settings
