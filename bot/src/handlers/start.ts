@@ -9,9 +9,10 @@ export function mainMenuKeyboard() {
     .text("⚡ Live", "live")
     .text("🎲 My Bets", "mybets")
     .row()
+    .text("📜 History", "history")
     .text("👛 Wallet", "wallet")
-    .text("❓ How it Works", "howitworks")
     .row()
+    .text("❓ How it Works", "howitworks")
     .text("⚙️ Settings", "settings");
 }
 

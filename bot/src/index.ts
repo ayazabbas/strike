@@ -9,12 +9,14 @@ import { handleSettings } from "./handlers/settings.js";
 import { handleHelp } from "./handlers/help.js";
 import { handleHowItWorks } from "./handlers/howitworks.js";
 import { handleAdmin } from "./handlers/admin.js";
+import { handleHistory } from "./handlers/history.js";
 
 const bot = new Bot(config.botToken);
 
 // ── Commands ──────────────────────────────────────────────────────────
 bot.command("start", handleStart);
 bot.command("help", handleHelp);
+bot.command("history", (ctx) => handleHistory(ctx));
 bot.command("admin", handleAdmin);
 
 // ── Text messages (for custom bet amounts) ────────────────────────────
@@ -93,6 +95,12 @@ bot.on("callback_query:data", async (ctx) => {
     else if (data.startsWith("claim:")) {
       const addr = data.split(":")[1];
       await handleClaim(ctx, addr);
+    }
+
+    // History
+    else if (data === "history" || data.startsWith("history:")) {
+      const page = data.includes(":") ? parseInt(data.split(":")[1]) : 0;
+      await handleHistory(ctx, page);
     }
 
     // Settings

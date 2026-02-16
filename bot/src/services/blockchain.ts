@@ -94,6 +94,13 @@ export const MARKET_ABI = [
     inputs: [],
     outputs: [{ name: "", type: "uint8" }],
   },
+  {
+    name: "resolutionPrice",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "int64" }],
+  },
 ] as const;
 
 export const FACTORY_ABI = [
@@ -256,6 +263,22 @@ export async function getWinningSide(marketAddress: Address): Promise<Side> {
     functionName: "winningSide",
   });
   return Number(side) as Side;
+}
+
+export async function getResolutionPrice(marketAddress: Address): Promise<number> {
+  const [price, expo] = await Promise.all([
+    publicClient.readContract({
+      address: marketAddress,
+      abi: MARKET_ABI,
+      functionName: "resolutionPrice",
+    }),
+    publicClient.readContract({
+      address: marketAddress,
+      abi: MARKET_ABI,
+      functionName: "strikePriceExpo",
+    }),
+  ]);
+  return Number(price) * 10 ** Number(expo);
 }
 
 export function encodeBetCall(side: Side): string {

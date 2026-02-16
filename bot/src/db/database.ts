@@ -112,3 +112,23 @@ export function getBetCount(): { total: number; confirmed: number; failed: numbe
 export function updateBetTx(betId: number, txHash: string, status: "confirmed" | "failed") {
   getDb().prepare("UPDATE bets SET tx_hash = ?, status = ? WHERE id = ?").run(txHash, status, betId);
 }
+
+export function getUserBetCount(telegramId: number): number {
+  const row = getDb().prepare(
+    "SELECT COUNT(DISTINCT market_address) as count FROM bets WHERE telegram_id = ? AND status = 'confirmed'"
+  ).get(telegramId) as { count: number };
+  return row.count;
+}
+
+export function getUserBetMarkets(telegramId: number, offset: number, limit: number): string[] {
+  const rows = getDb().prepare(
+    "SELECT DISTINCT market_address FROM bets WHERE telegram_id = ? AND status = 'confirmed' ORDER BY created_at DESC LIMIT ? OFFSET ?"
+  ).all(telegramId, limit, offset) as Array<{ market_address: string }>;
+  return rows.map((r) => r.market_address);
+}
+
+export function getUserBetsForMarket(telegramId: number, marketAddress: string): DbBet[] {
+  return getDb().prepare(
+    "SELECT * FROM bets WHERE telegram_id = ? AND market_address = ? AND status = 'confirmed' ORDER BY created_at DESC"
+  ).all(telegramId, marketAddress) as DbBet[];
+}

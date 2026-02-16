@@ -3,17 +3,18 @@ import {
   getMarketCount,
   getMarketAddresses,
   getMarketInfo,
+  getUserBets as getOnChainBets,
   MarketState,
   STATE_LABELS,
   type MarketInfo,
   formatEther,
   estimatePayout,
-  parseEther,
   Side,
   publicClient,
 } from "../services/blockchain.js";
 import { getLatestPrices, formatPrice } from "../services/pyth.js";
 import { PYTH, type FeedName } from "../config.js";
+import { getUser } from "../db/database.js";
 import type { Address } from "viem";
 
 // ABI for getCurrentState view function
@@ -152,6 +153,38 @@ export async function handleMarkets(ctx: Context) {
     text += `🔴 DOWN Pool: ${downPool} BNB\n`;
     text += `💎 Total: ${totalPool} BNB\n`;
 
+    // Show user's position if they have a bet
+    const telegramId = ctx.from?.id;
+    if (telegramId) {
+      const user = getUser(telegramId);
+      if (user) {
+        try {
+          const onChain = await getOnChainBets(market.address, user.wallet_address as Address);
+          const userUp = Number(formatEther(onChain.upBet));
+          const userDown = Number(formatEther(onChain.downBet));
+          if (userUp > 0 || userDown > 0) {
+            text += `\n📍 Your Position:\n`;
+            if (userUp > 0) {
+              text += `  🟢 UP: ${userUp.toFixed(4)} BNB (${Number(formatEther(onChain.upShares)).toFixed(4)} shares)`;
+              try {
+                const payout = await estimatePayout(market.address, Side.Up, onChain.upBet);
+                text += ` → ~${Number(formatEther(payout)).toFixed(4)} BNB`;
+              } catch {}
+              text += `\n`;
+            }
+            if (userDown > 0) {
+              text += `  🔴 DOWN: ${userDown.toFixed(4)} BNB (${Number(formatEther(onChain.downShares)).toFixed(4)} shares)`;
+              try {
+                const payout = await estimatePayout(market.address, Side.Down, onChain.downBet);
+                text += ` → ~${Number(formatEther(payout)).toFixed(4)} BNB`;
+              } catch {}
+              text += `\n`;
+            }
+          }
+        } catch {}
+      }
+    }
+
     const kb = new InlineKeyboard();
 
     if (isBettingOpen) {
@@ -216,6 +249,38 @@ export async function handleMarketDetail(ctx: Context, marketAddress: string) {
 
     if (market.state === MarketState.Open) {
       text += `\n⏱ Betting closes: ${timeRemaining(market.tradingEnd)}\n`;
+    }
+
+    // Show user's position if they have a bet
+    const detailTelegramId = ctx.from?.id;
+    if (detailTelegramId) {
+      const detailUser = getUser(detailTelegramId);
+      if (detailUser) {
+        try {
+          const onChain = await getOnChainBets(marketAddress as Address, detailUser.wallet_address as Address);
+          const userUp = Number(formatEther(onChain.upBet));
+          const userDown = Number(formatEther(onChain.downBet));
+          if (userUp > 0 || userDown > 0) {
+            text += `\n📍 Your Position:\n`;
+            if (userUp > 0) {
+              text += `  🟢 UP: ${userUp.toFixed(4)} BNB (${Number(formatEther(onChain.upShares)).toFixed(4)} shares)`;
+              try {
+                const payout = await estimatePayout(marketAddress as Address, Side.Up, onChain.upBet);
+                text += ` → ~${Number(formatEther(payout)).toFixed(4)} BNB`;
+              } catch {}
+              text += `\n`;
+            }
+            if (userDown > 0) {
+              text += `  🔴 DOWN: ${userDown.toFixed(4)} BNB (${Number(formatEther(onChain.downShares)).toFixed(4)} shares)`;
+              try {
+                const payout = await estimatePayout(marketAddress as Address, Side.Down, onChain.downBet);
+                text += ` → ~${Number(formatEther(payout)).toFixed(4)} BNB`;
+              } catch {}
+              text += `\n`;
+            }
+          }
+        } catch {}
+      }
     }
 
     const kb = new InlineKeyboard();

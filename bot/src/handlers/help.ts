@@ -11,6 +11,7 @@ export async function handleHelp(ctx: Context) {
     "3. Browse markets and place bets\n",
     "Commands:",
     "/start - Create wallet & open main menu",
+    "/history - View past markets and results",
     "/help - Show this help message\n",
     "How Betting Works:",
     "- Each market has a strike price and expiry time",

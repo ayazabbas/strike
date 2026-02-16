@@ -18,6 +18,14 @@ function feedNameFromId(priceId: string): string {
   return "Unknown";
 }
 
+function formatTime(ts: number): string {
+  return new Date(ts * 1000).toISOString().slice(11, 16);
+}
+
+function formatTimeWindow(startTime: number, expiryTime: number): string {
+  return `${formatTime(startTime)}-${formatTime(expiryTime)} UTC`;
+}
+
 export async function handleMyBets(ctx: Context) {
   const telegramId = ctx.from!.id;
   const user = getUser(telegramId);
@@ -55,8 +63,8 @@ export async function handleMyBets(ctx: Context) {
       const upBet = Number(formatEther(onChain.upBet)).toFixed(4);
       const downBet = Number(formatEther(onChain.downBet)).toFixed(4);
 
-      text += `${feed} | ${STATE_LABELS[market.state]}\n`;
-      text += `Strike: $${formatPrice(market.strikePrice)}\n`;
+      text += `${feed} | ${formatTimeWindow(market.startTime, market.expiryTime)}\n`;
+      text += `${STATE_LABELS[market.state]} | Strike: $${formatPrice(market.strikePrice)}\n`;
       if (Number(upBet) > 0) text += `UP: ${upBet} BNB\n`;
       if (Number(downBet) > 0) text += `DOWN: ${downBet} BNB\n`;
 
