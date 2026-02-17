@@ -428,4 +428,46 @@ export async function betOnMarketOnChain(marketAddress: Address, side: Side, val
   return hash;
 }
 
+/**
+ * Claim winnings from a resolved market (calls Market.claim() directly).
+ * Returns the tx hash.
+ */
+export async function claimOnMarket(marketAddress: Address): Promise<string> {
+  if (!config.deployerPrivateKey) throw new Error("DEPLOYER_PRIVATE_KEY not set");
+  const account = privateKeyToAccount(config.deployerPrivateKey);
+  const walletClient = createWalletClient({ account, chain, transport: http(config.bscRpcUrl) });
+
+  const hash = await walletClient.writeContract({
+    address: marketAddress,
+    abi: MARKET_ABI,
+    functionName: "claim",
+  });
+  return hash;
+}
+
+/**
+ * Refund bets from a cancelled market (calls Market.refund() directly).
+ * Returns the tx hash.
+ */
+export async function refundOnMarket(marketAddress: Address): Promise<string> {
+  if (!config.deployerPrivateKey) throw new Error("DEPLOYER_PRIVATE_KEY not set");
+  const account = privateKeyToAccount(config.deployerPrivateKey);
+  const walletClient = createWalletClient({ account, chain, transport: http(config.bscRpcUrl) });
+
+  const hash = await walletClient.writeContract({
+    address: marketAddress,
+    abi: MARKET_ABI,
+    functionName: "refund",
+  });
+  return hash;
+}
+
+/**
+ * Get the keeper wallet address derived from the deployer private key.
+ */
+export function getKeeperAddress(): Address {
+  if (!config.deployerPrivateKey) throw new Error("DEPLOYER_PRIVATE_KEY not set");
+  return privateKeyToAccount(config.deployerPrivateKey).address;
+}
+
 export { formatEther, parseEther };

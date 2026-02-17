@@ -16,6 +16,8 @@ import {
   resolveMarketOnChain,
   cancelMarketOnChain,
   betOnMarketOnChain,
+  claimOnMarket,
+  refundOnMarket,
   MarketState,
   Side,
   publicClient,
@@ -179,6 +181,19 @@ async function resolveExpiredMarkets() {
             const cancelReceipt = await publicClient.waitForTransactionReceipt({ hash: cancelHash as `0x${string}` });
             if (cancelReceipt.status === "success") {
               log(`Cancelled empty market ${addr} — tx: ${cancelHash}`);
+
+              // Immediately refund keeper's seed bets
+              try {
+                const refundHash = await refundOnMarket(addr);
+                const refundReceipt = await publicClient.waitForTransactionReceipt({ hash: refundHash as `0x${string}` });
+                if (refundReceipt.status === "success") {
+                  log(`Refunded keeper seed bets for ${addr} — tx: ${refundHash}`);
+                } else {
+                  log(`Refund reverted for ${addr} — tx: ${refundHash}`);
+                }
+              } catch (refundErr) {
+                logError(`Failed to refund keeper seed bets for ${addr}:`, refundErr);
+              }
             } else {
               log(`Cancel reverted for ${addr} — tx: ${cancelHash}`);
             }
@@ -201,6 +216,19 @@ async function resolveExpiredMarkets() {
         const receipt = await publicClient.waitForTransactionReceipt({ hash: hash as `0x${string}` });
         if (receipt.status === "success") {
           log(`Resolved market ${addr} — tx: ${hash}`);
+
+          // Immediately claim keeper's winning-side bet
+          try {
+            const claimHash = await claimOnMarket(addr);
+            const claimReceipt = await publicClient.waitForTransactionReceipt({ hash: claimHash as `0x${string}` });
+            if (claimReceipt.status === "success") {
+              log(`Claimed keeper winnings for ${addr} — tx: ${claimHash}`);
+            } else {
+              log(`Claim reverted for ${addr} — tx: ${claimHash}`);
+            }
+          } catch (claimErr) {
+            logError(`Failed to claim keeper winnings for ${addr}:`, claimErr);
+          }
         } else {
           log(`Resolution reverted for ${addr} — tx: ${hash}`);
         }
