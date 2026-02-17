@@ -14,6 +14,7 @@ import {
   getMarketInfo,
   createMarketOnChain,
   resolveMarketOnChain,
+  cancelMarketOnChain,
   betOnMarketOnChain,
   MarketState,
   Side,
@@ -170,9 +171,20 @@ async function resolveExpiredMarkets() {
         if (info.state === MarketState.Resolved || info.state === MarketState.Cancelled) continue;
         // Only resolve if past expiry time
         if (now < info.expiryTime) continue;
-        // Skip empty markets (no bets — nothing to resolve, will auto-cancel)
+        // Cancel empty expired markets (no bets — nothing to resolve)
         if (info.upPool === 0n && info.downPool === 0n) {
-          log(`Skipping ${addr} — empty pool, will auto-cancel`);
+          log(`Cancelling empty market ${addr}...`);
+          try {
+            const cancelHash = await cancelMarketOnChain(addr);
+            const cancelReceipt = await publicClient.waitForTransactionReceipt({ hash: cancelHash as `0x${string}` });
+            if (cancelReceipt.status === "success") {
+              log(`Cancelled empty market ${addr} — tx: ${cancelHash}`);
+            } else {
+              log(`Cancel reverted for ${addr} — tx: ${cancelHash}`);
+            }
+          } catch (cancelErr) {
+            logError(`Failed to cancel empty market ${addr}:`, cancelErr);
+          }
           continue;
         }
 

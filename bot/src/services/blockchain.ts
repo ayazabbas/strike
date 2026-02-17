@@ -156,6 +156,13 @@ export const FACTORY_ABI = [
     ],
     outputs: [],
   },
+  {
+    name: "cancelMarket",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "market", type: "address" }],
+    outputs: [],
+  },
 ] as const;
 
 const chain = config.chainId === 56 ? bsc : bscTestnet;
@@ -380,6 +387,24 @@ export async function resolveMarketOnChain(marketAddress: Address, pythUpdateDat
     functionName: "resolveMarket",
     args: [marketAddress, pythUpdateData],
     value: parseEther("0.001"),
+  });
+  return hash;
+}
+
+/**
+ * Cancel an empty market via the factory's cancelMarket (onlyOwner).
+ * Returns the tx hash.
+ */
+export async function cancelMarketOnChain(marketAddress: Address): Promise<string> {
+  if (!config.deployerPrivateKey) throw new Error("DEPLOYER_PRIVATE_KEY not set");
+  const account = privateKeyToAccount(config.deployerPrivateKey);
+  const walletClient = createWalletClient({ account, chain, transport: http(config.bscRpcUrl) });
+
+  const hash = await walletClient.writeContract({
+    address: config.marketFactoryAddress,
+    abi: FACTORY_ABI,
+    functionName: "cancelMarket",
+    args: [marketAddress],
   });
   return hash;
 }
