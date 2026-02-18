@@ -132,26 +132,51 @@ strike/
 │   │   ├── Market.t.sol        # 37 market tests
 │   │   └── MarketFactory.t.sol # 14 factory tests
 │   └── script/
-│       └── Deploy.s.sol        # BSC deployment script
-├── bot/                    # Telegram bot
+│       ├── Deploy.s.sol        # BSC deployment script
+│       └── CreateMarket.s.sol  # On-chain market creation
+├── bot/                    # Telegram bot + keeper
+│   ├── Dockerfile              # Container deployment
 │   └── src/
 │       ├── index.ts            # Bot entry point
+│       ├── keeper.ts           # Automated market creation/resolution/claims
 │       ├── config.ts           # Environment config
 │       ├── db/database.ts      # SQLite user/bet storage
 │       ├── handlers/           # Bot command handlers
 │       │   ├── start.ts        # Wallet creation
-│       │   ├── markets.ts      # Market listing
+│       │   ├── admin.ts        # Admin commands
 │       │   ├── betting.ts      # Bet placement
+│       │   ├── help.ts         # Help text
+│       │   ├── history.ts      # Bet history
+│       │   ├── howitworks.ts   # How it works explainer
+│       │   ├── markets.ts      # Market listing
 │       │   ├── mybets.ts       # User positions
-│       │   ├── wallet.ts       # Wallet management
-│       │   └── settings.ts     # Bot settings
-│       └── services/           # External integrations
-│           ├── privy.ts        # Privy wallet API
-│           ├── pyth.ts         # Pyth price feeds
-│           └── blockchain.ts   # BSC contract calls
-└── scripts/                # Admin scripts
-    ├── create-market.ts    # Create new markets
-    └── resolve-markets.ts  # Auto-resolve expired markets
+│       │   ├── settings.ts     # Bot settings
+│       │   └── wallet.ts       # Wallet management
+│       ├── services/           # External integrations
+│       │   ├── blockchain.ts   # BSC contract calls
+│       │   ├── notifications.ts # User notifications
+│       │   ├── privy.ts        # Privy wallet API
+│       │   └── pyth.ts         # Pyth price feeds
+│       ├── scripts/
+│       │   └── recover-funds.ts # Recover unclaimed funds from old markets
+│       └── test/
+│           ├── integration.ts  # Integration tests
+│           └── smoke.ts        # Smoke tests
+├── scripts/                # Standalone admin scripts
+│   ├── create-market.ts    # Create new markets
+│   ├── resolve-markets.ts  # Resolve expired markets
+│   └── run-integration.sh  # Run integration test suite
+├── docs/                   # GitBook documentation
+│   ├── README.md
+│   ├── SUMMARY.md
+│   ├── getting-started/
+│   ├── contracts/
+│   ├── bot/
+│   ├── technical/
+│   ├── project/
+│   └── market-lifecycle.md
+├── assets/                 # Logo SVGs
+└── docker-compose.yml      # Docker deployment config
 ```
 
 ## ⚙️ Setup
