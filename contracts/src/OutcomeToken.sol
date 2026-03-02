@@ -46,40 +46,38 @@ contract OutcomeToken is ERC1155, AccessControl {
     // Mint / Burn
     // -------------------------------------------------------------------------
 
+    /// @dev Build the (ids, amounts) arrays for a YES+NO pair operation.
+    function _pairArgs(uint256 marketId, uint256 amount)
+        private
+        pure
+        returns (uint256[] memory ids, uint256[] memory amounts)
+    {
+        ids = new uint256[](2);
+        amounts = new uint256[](2);
+        ids[0] = yesTokenId(marketId);
+        ids[1] = noTokenId(marketId);
+        amounts[0] = amount;
+        amounts[1] = amount;
+    }
+
     /// @notice Mints one YES + one NO token per `amount` unit of collateral.
-    ///         Called by Vault after receiving collateral from the user.
     /// @param to       Recipient of the tokens.
     /// @param marketId Market identifier.
     /// @param amount   Number of pairs to mint.
     function mintPair(address to, uint256 marketId, uint256 amount) external onlyRole(MINTER_ROLE) {
         require(amount > 0, "OutcomeToken: zero amount");
-
-        uint256[] memory ids = new uint256[](2);
-        uint256[] memory amounts = new uint256[](2);
-        ids[0] = yesTokenId(marketId);
-        ids[1] = noTokenId(marketId);
-        amounts[0] = amount;
-        amounts[1] = amount;
-
+        (uint256[] memory ids, uint256[] memory amounts) = _pairArgs(marketId, amount);
         _mintBatch(to, ids, amounts, "");
         emit PairMinted(to, marketId, amount);
     }
 
     /// @notice Burns one YES + one NO token per `amount`, returning collateral equivalence.
-    ///         Caller (Vault) is responsible for releasing the collateral.
     /// @param from     Token holder to burn from.
     /// @param marketId Market identifier.
     /// @param amount   Number of pairs to burn.
     function burnPair(address from, uint256 marketId, uint256 amount) external onlyRole(MINTER_ROLE) {
         require(amount > 0, "OutcomeToken: zero amount");
-
-        uint256[] memory ids = new uint256[](2);
-        uint256[] memory amounts = new uint256[](2);
-        ids[0] = yesTokenId(marketId);
-        ids[1] = noTokenId(marketId);
-        amounts[0] = amount;
-        amounts[1] = amount;
-
+        (uint256[] memory ids, uint256[] memory amounts) = _pairArgs(marketId, amount);
         _burnBatch(from, ids, amounts);
         emit PairBurned(from, marketId, amount);
     }

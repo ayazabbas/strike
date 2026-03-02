@@ -180,36 +180,14 @@ contract SegmentTreeTest is Test {
     }
 
     function test_FindClearingTick_NoCross_BidBelowAsk() public {
-        // Bid at 30, ask at 70 — no overlap
+        // Bid at 30, ask at 70 -- no real overlap (matched volume = 0).
         h.update(true, 30, 100);
         h.update(false, 70, 100);
-        // cumBid(70) = volume at tick >= 70 = 0 (bids only at 30)
-        // cumAsk(70) = 100
-        // No valid clearing tick exists — bids are at 30 but asks are at 70
-        // Actually let's check: at tick 30, cumBid = 100, cumAsk = prefixSum(askTree, 30) = 0 → clearing!
-        // Bids at tick 30 mean they are willing to pay 30 cents.
-        // Asks at tick 70 mean they are willing to sell at 70 cents.
-        // A bid at 30 would NOT cross an ask at 70. Let me reconsider.
-        // cumBid(p) = total bids at ticks >= p; cumAsk(p) = total asks at ticks <= p.
-        // At p=30: cumBid = 100, cumAsk = 0 → clearing holds but price = 30 < 70 (ask).
-        // This means bids at 30 would be "filled" at clearing tick 30, but askers at 70 are not.
-        // Actually the FBA logic: if cumBid >= cumAsk at some tick, there IS a crossing.
-        // Highest such tick = 30. This seems correct — bids at 30 cross asks at 70 only if
-        // someone bids at 70 or higher. With bid at 30 only, clearing at 30 has cumAsk=0
-        // (no asks at <= 30), so matched volume = min(100, 0) = 0. That's a degenerate case.
-        // The actual "no cross" scenario requires cumBid < cumAsk at ALL ticks.
-        // With bid at 30 and ask at 70:
-        //   p=1..30: cumBid = 100, cumAsk = 0 → cumBid >= cumAsk, clearing = up to 30
-        //   p=31..70: cumBid = 0, cumAsk = 0..100 → depends
-        //   p=70: cumBid = 0, cumAsk = 100 → no clearing
-        // So clearingTick = 30 (highest p where cumBid >= cumAsk).
-        // Matched volume = min(cumBid(30), cumAsk(30)) = min(100, 0) = 0.
-        // This is correct — there's a clearing tick but matched volume is 0.
-        uint256 ct = h.findClearingTick();
-        // At p=69: cumBid=0, cumAsk=0 (no asks <= 69) → 0 >= 0 ✓
-        // At p=70: cumBid=0, cumAsk=100 → 0 >= 100 ✗
-        // Highest valid tick is 69 (matched volume = 0 since asks are above bids)
-        assertEq(ct, 69);
+
+        // Highest p where cumBid(p) >= cumAsk(p):
+        //   p=69: cumBid=0, cumAsk=0 -> 0 >= 0 (yes)
+        //   p=70: cumBid=0, cumAsk=100 -> 0 >= 100 (no)
+        assertEq(h.findClearingTick(), 69);
     }
 
     // -------------------------------------------------------------------------
