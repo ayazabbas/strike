@@ -1,68 +1,37 @@
 # MarketFactory.sol
 
-The factory contract that deploys and manages prediction markets using the EIP-1167 minimal proxy pattern.
+Singleton factory that deploys and manages prediction markets.
 
-## Key Functions
+## `createMarket(priceId, duration, batchInterval)`
 
-### `createMarket()`
-
-Deploy a new prediction market.
-
-```solidity
-function createMarket(
-    bytes32 priceId,
-    uint256 duration,
-    bytes[] calldata pythUpdateData
-) external payable returns (address market)
-```
-
-- **Access:** Keeper or owner only
-- **Duration:** Must be between 60 seconds and 7 days
-- Deploys an EIP-1167 clone of the Market implementation
-- Calls `initialize()` on the new clone
-- Registers the market in the factory's registry
+- Deploys an EIP-1167 minimal proxy clone of the OrderBook implementation
+- Requires market creation bond (funds resolver bounty)
+- Registers market in the factory's market registry
 - Emits `MarketCreated` event
 
-### `getMarkets()`
+### Parameters
 
-List deployed markets with pagination.
+| Param | Description | Constraints |
+|-------|-------------|-------------|
+| `priceId` | Pyth price feed ID | Must be whitelisted |
+| `duration` | Market duration in seconds | 60s – 7 days |
+| `batchInterval` | Batch clearing interval | ≥ 1 block time |
 
-```solidity
-function getMarkets(uint256 offset, uint256 limit)
-    external view returns (address[] memory markets)
-```
+## Market Registry
 
-### `getMarketCount()`
+- `getMarkets(offset, limit)` — paginated list of all markets
+- `getActiveMarkets()` — markets in `Open` state
+- `getMarketCount()` — total markets created
 
-Total number of markets created.
+## Admin Functions
 
-```solidity
-function getMarketCount() external view returns (uint256)
-```
+| Function | Access | Description |
+|----------|--------|-------------|
+| `pause()` / `unpause()` | Owner | Emergency pause on market creation |
+| `setDefaultParams()` | Owner | Update default duration, batch interval, min lot size |
+| `setFeeCollector()` | Owner | Update protocol fee collector address |
+| `whitelistFeed()` | Owner | Add/remove allowed Pyth price feed IDs |
 
-### Admin Functions
+## Access Control
 
-| Function | Description |
-|----------|-------------|
-| `setKeeper(address)` | Set the keeper address (can create/resolve markets) |
-| `removeKeeper(address)` | Remove a keeper |
-| `pause()` / `unpause()` | Emergency controls |
-| `withdrawFees()` | Withdraw collected protocol fees |
-
-## Registry
-
-The factory maintains an ordered list of all deployed markets. This serves as the on-chain registry for market discovery.
-
-```
-markets[0] → 0x1a33...Bf99  (oldest)
-markets[1] → 0xca5f...bf0f
-markets[2] → 0x...           (newest)
-```
-
-## Events
-
-| Event | When |
-|-------|------|
-| `MarketCreated(market, priceId, strikePrice, duration)` | New market deployed |
-| `KeeperAdded(keeper)` | Keeper role granted |
-| `KeeperRemoved(keeper)` | Keeper role revoked |
+Initially admin-only market creation, with a path to permissionless creation once the protocol is battle-tested.

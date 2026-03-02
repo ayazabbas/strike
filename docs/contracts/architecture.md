@@ -2,87 +2,55 @@
 
 ## Overview
 
-Strike uses two contracts working together:
+Strike's protocol is composed of six core contracts:
 
 ```
 MarketFactory (singleton)
-    │
-    ├── createMarket() → deploys Market clone
-    ├── getMarkets() → lists all markets
-    └── manages admin/keeper permissions
-         │
-         ▼
-    Market (EIP-1167 clone)
-    Market (EIP-1167 clone)
-    Market (EIP-1167 clone)
-    ...each is an independent prediction market
+  │
+  ├── Creates markets (EIP-1167 clones)
+  ├── Manages protocol parameters
+  └── Admin controls
+       │
+       ▼
+┌──────────────────────────────────────────────────────┐
+│  Per-Market Contracts (isolated state per market)     │
+│                                                       │
+│  OrderBook ←→ BatchAuction ←→ ClaimSettlement        │
+│      │              │                                 │
+│      ▼              ▼                                 │
+│  SegmentTree    BatchResult storage                   │
+│  (per-side)     (per-batch)                          │
+└──────────────────────────────────────────────────────┘
+       │                    │
+       ▼                    ▼
+    Vault              OutcomeToken
+  (collateral)        (ERC-1155)
+       │                    │
+       ▼                    ▼
+  PythResolver ──→ Redemption
+       │
+  Pyth Oracle (on-chain)
 ```
 
-## EIP-1167 Minimal Proxy Pattern
+## Contract Relationships
 
-Each market is deployed as a **minimal proxy clone** of a single implementation contract. This is dramatically cheaper than deploying full contracts:
+| Contract | Role | Pattern |
+|----------|------|---------|
+| **MarketFactory** | Deploys + registers markets | Singleton |
+| **OrderBook** | Order placement, cancellation, storage | Per-market (EIP-1167 clone) |
+| **BatchAuction** | Clearing algorithm, batch results | Integrated with OrderBook |
+| **Vault** | Collateral custody, locks, accounting | Singleton |
+| **OutcomeToken** | ERC-1155 YES/NO tokens | Singleton |
+| **PythResolver** | Oracle verification, resolution | Singleton (called per-market) |
+| **SegmentTree** | Price-level aggregate volumes | Library (used by OrderBook) |
+| **FeeModel** | Fee calculation, bounties | Library or singleton |
 
-| Approach | Gas Cost |
-|----------|----------|
-| Full contract deploy | ~2,000,000 |
-| EIP-1167 clone | ~440,000 |
+## Design Principles
 
-The factory deploys a lightweight proxy (~45 bytes) that delegates all calls to the implementation. Each clone has its own storage but shares the implementation's code.
+**Per-market isolation.** Each market's orderbook state is isolated via EIP-1167 minimal proxy clones. This prevents cross-market contention and bounds worst-case gas costs to a single market's depth.
 
-## Contract Interactions
+**Bounded iteration.** No contract function iterates over an unbounded set. Segment trees provide O(log N) operations. Claim and prune functions take explicit order ID arrays from the caller.
 
-```
-User                    MarketFactory              Market Clone
-  │                          │                          │
-  │   (admin/keeper only)    │                          │
-  │ ─── createMarket() ────▶│                          │
-  │                          │── deploy clone ────────▶ │
-  │                          │── initialize() ────────▶ │
-  │                          │   (set pyth, priceId,    │
-  │                          │    duration, strike)     │
-  │                          │                          │
-  │ ─── bet(UP, {value}) ──────────────────────────────▶│
-  │                          │                          │── record bet
-  │                          │                          │── calc shares
-  │                          │                          │
-  │   (after expiry)         │                          │
-  │ ─── resolve(pythData) ─────────────────────────────▶│
-  │                          │                          │── verify pyth
-  │                          │                          │── determine winner
-  │                          │                          │── calc payouts
-  │                          │                          │
-  │ ─── claim() ───────────────────────────────────────▶│
-  │ ◀── BNB payout ────────────────────────────────────│
-```
+**Lazy settlement.** Batch clearing writes only aggregate results (clearing price, fill fractions, total volume). Individual fills are computed and settled when traders call `claimFills()`. This keeps `clearBatch()` gas cost constant regardless of order count.
 
-## State Machine
-
-Each market follows a linear state progression:
-
-```
-Open → Closed → Resolved
-                    └──→ Cancelled (if resolution fails)
-```
-
-| State | Description | Transitions |
-|-------|-------------|-------------|
-| **Open** | Accepting bets. Starts at creation. | → Closed (when `tradingEnd` reached) |
-| **Closed** | Betting stopped, awaiting resolution. | → Resolved or → Cancelled |
-| **Resolved** | Winner determined, payouts available. | Terminal state. |
-| **Cancelled** | Refunds available. | Terminal state. |
-
-**Note:** The `state` variable stores the base state, but `getCurrentState()` computes the effective state based on timestamps. For example, an Open market past its `tradingEnd` is effectively Closed even if `state` hasn't been updated on-chain.
-
-## Key Design Decisions
-
-### Parimutuel over Orderbook
-An orderbook requires matching engines and complex liquidity management. The parimutuel model is simpler: all bets pool together, winners split proportionally. Perfect for an MVP.
-
-### Trading Deadline at Halfway
-Betting stops at the halfway point of the market duration (2.5 minutes for a 5-minute market). This prevents last-second bets that could exploit price movements already visible in the mempool.
-
-### Fee on Winnings Only
-The 3% protocol fee is charged on the winning pool, not the total pool. This means losers lose exactly what they bet — no additional fee on top.
-
-### Permissionless Resolution
-Anyone can call `resolve()` after expiry, not just the admin. This makes the system more trustless — if the keeper goes down, any user can resolve markets.
+**Permissionless operations.** Clearing, resolution, and pruning are all callable by anyone. Economic incentives (resolver bounty, pruner bounty) ensure they happen without relying on trusted operators.

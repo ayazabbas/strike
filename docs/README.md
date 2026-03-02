@@ -1,42 +1,40 @@
 # What is Strike?
 
-**Strike** is a parimutuel prediction market on BNB Chain. Bet UP or DOWN on BTC price movements in 5-minute rounds. Fully onchain resolution via Pyth oracle price feeds. Telegram bot interface with embedded wallets.
+**Strike** is a fully on-chain prediction market protocol on BNB Chain. Traders buy and sell binary outcome tokens on whether an asset's price will be above or below a strike price at expiry.
 
-## The Idea
+Unlike simple parimutuel pools, Strike uses a **Frequency Batch Auction (FBA) CLOB** — an orderbook where orders are collected and cleared at uniform prices every ~3 seconds. This gives traders real price discovery, limit orders, and fair execution without the MEV problems of continuous orderbooks.
 
-Every 5 minutes, a new market opens with a simple question:
+All markets are resolved trustlessly by **Pyth Network** oracle price feeds. No human intervention, no subjective arbitration.
 
-> **Will BTC be above or below the current price in 5 minutes?**
+## Core Properties
 
-Players bet UP ⬆️ or DOWN ⬇️ by staking tBNB. When the market expires, the Pyth oracle provides the resolution price. Winners split the entire pool proportionally.
+- **On-chain orderbook** — all orders, matching, and settlement happen on BNB Chain smart contracts
+- **Batch auction clearing** — orders are matched at a single uniform price per batch, with pro-rata fills on the oversubscribed side
+- **Binary outcome tokens** — ERC-1155 YES/NO tokens, fully collateralized, tradeable on the book
+- **Pyth oracle resolution** — deterministic settlement using `parsePriceFeedUpdatesUnique` with cryptographic verification
+- **Claim-based settlement** — fills are not written per-order during clearing; traders claim their pro-rata share afterward, keeping clearing gas-efficient
+- **Permissionless** — anyone can resolve markets, prune expired orders, and clear batches
 
-No house edge. No counterparty. Just a pool of players betting against each other, resolved trustlessly by an oracle.
+## Architecture at a Glance
 
-## Why Strike?
+```
+Traders ──→ OrderBook ──→ BatchAuction ──→ ClaimSettlement
+                │                               │
+           Vault (collateral)            OutcomeToken (ERC-1155)
+                │                               │
+         MarketFactory ◄── PythResolver ──→ Redemption
+                                │
+                          Pyth Oracle (on-chain)
 
-- **Simple** — Binary UP/DOWN. No complex options, no spreads, no order books.
-- **Fast** — 5-minute rounds. Know your result quickly.
-- **Fair** — Parimutuel model means the market sets the odds, not the house.
-- **Trustless** — Pyth oracle resolves every market. No human intervention.
-- **Accessible** — Works inside Telegram. No wallet extensions, no websites.
-
-## Tech Stack
-
-| Component | Technology |
-|-----------|-----------|
-| Smart Contracts | Solidity 0.8.25, Foundry, OpenZeppelin v5 |
-| Blockchain | BNB Chain (BSC Testnet) |
-| Oracle | Pyth Network |
-| Bot | grammY (TypeScript) |
-| Wallets | Privy Server Wallets |
-| Database | SQLite |
-| Proxy Pattern | EIP-1167 Minimal Proxy Clones |
+Off-chain (non-authoritative):
+  • Keepers (clear batches, resolve markets, prune orders)
+  • Indexer + API (orderbook snapshots, trade history, WebSocket)
+  • Telegram Bot (lightweight trading + notifications)
+  • Web Frontend (full trading terminal)
+```
 
 ## Links
 
 - **GitHub:** [ayazabbas/strike](https://github.com/ayazabbas/strike)
-- **Hackathon:** Good Vibes Only: OpenClaw Edition ($100k prize pool)
-
----
-
-Built for the **Good Vibes Only: OpenClaw Edition** hackathon on BNB Chain.
+- **Chain:** BNB Chain (BSC)
+- **Oracle:** [Pyth Network](https://pyth.network/)

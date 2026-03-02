@@ -1,45 +1,68 @@
 # Roadmap
 
-## ✅ Shipped (MVP)
+## ✅ Completed: PoC (v0)
 
-- [x] Core smart contracts (Market + MarketFactory)
-- [x] EIP-1167 minimal proxy pattern
-- [x] Pyth oracle integration (strike price + resolution)
-- [x] Parimutuel payout model
-- [x] 51-test suite (Market + Factory)
-- [x] Telegram bot with inline keyboard UI
-- [x] Privy embedded wallets
-- [x] Live BTC/USD price feeds
-- [x] BSC testnet deployment
-- [x] Keeper service (auto-create + auto-resolve)
-- [x] Systemd services for production operation
-- [x] Documentation (GitBook)
+Proof-of-concept built for the *Good Vibes Only: OpenClaw Edition* hackathon.
 
-## 🔜 Next Up
+- Parimutuel pool model (no orderbook)
+- `Market.sol` + `MarketFactory.sol` with 51 tests
+- Telegram bot with Privy embedded wallets
+- Pyth oracle resolution
+- BSC testnet deployment
+- Keeper service (auto-create + auto-resolve)
 
-- [ ] End-to-end testing with real users
-- [ ] Demo video recording
-- [ ] Leaderboard (track top predictors)
-- [ ] User notifications on market resolution
-- [ ] Multiple asset support (ETH, BNB, SOL)
-- [ ] Variable market durations (1min, 5min, 15min, 1hr)
+Preserved on the `poc` branch.
 
-## 🔮 Future Vision
+## 🔨 In Progress: CLOB (v1)
 
-### AI Market Maker
-- Describe trading strategies in natural language
-- "Bet UP when RSI is oversold and volume is spiking"
-- AI interprets and executes autonomously using Pyth feeds
+### Phase 1A — Core Primitives
+- [ ] OutcomeToken (ERC-1155)
+- [ ] Segment tree library
+- [ ] Collateral vault
+- [ ] Fee model (maker/taker + bounties)
+- [ ] Unit tests (40+)
 
-### Orderbook Model
-- Replace parimutuel with batch auction orderbook
-- Better price discovery and capital efficiency
+### Phase 1B — Orderbook & Batch Auction
+- [ ] Order types (limit, post-only, IOC, batch-only)
+- [ ] OrderBook contract
+- [ ] BatchAuction clearing engine
+- [ ] Claim-based settlement
+- [ ] Order expiry & pruning
+- [ ] Integration tests (50+)
 
-### Multi-Chain
-- Deploy to BSC mainnet, opBNB, Base, Arbitrum
-- Cross-chain market aggregation
+### Phase 1C — Market Lifecycle & Resolution
+- [ ] MarketFactory v2
+- [ ] PythResolver with finality gate + challenge window
+- [ ] Market state machine
+- [ ] Outcome token redemption
+- [ ] Full protocol tests (40+)
 
-### Social Features
-- Share predictions with friends
-- Prediction streaks and achievements
-- Tournament mode with prize pools
+### Phase 2 — Keeper & Indexer Infrastructure
+- [ ] Batch clearing keeper
+- [ ] Market resolution keeper
+- [ ] Order pruning keeper
+- [ ] Event indexer + REST API + WebSocket
+- [ ] Telegram bot integration
+
+### Phase 3 — Web Frontend
+- [ ] Next.js 15 trading terminal
+- [ ] Real-time orderbook visualization
+- [ ] Order management + portfolio
+- [ ] Mobile optimization + PWA
+
+### Phase 4 — Integration, Hardening & Deployment
+- [ ] End-to-end integration tests
+- [ ] Gas optimization pass
+- [ ] Security hardening (Slither, Mythril)
+- [ ] Private submission support (BEP-322)
+- [ ] BSC testnet deployment + soak test
+- [ ] Documentation + demo
+
+## 🔮 Future
+
+- Multi-asset support (ETH, SOL, BNB + any Pyth feed)
+- Variable market durations (1min, 5min, 15min, 1hr)
+- BSC mainnet deployment
+- Multi-chain (Base, Arbitrum)
+- API for programmatic trading
+- Leaderboards

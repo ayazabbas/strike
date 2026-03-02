@@ -1,33 +1,51 @@
 # Table of contents
 
 * [What is Strike?](README.md)
-* [🎮 Play Now](play-now.md)
 
 ## Getting Started
 
 * [How It Works](getting-started/how-it-works.md)
-* [Market Lifecycle](market-lifecycle.md)
+* [Key Concepts](getting-started/key-concepts.md)
 * [Quick Start](getting-started/quick-start.md)
+
+## Protocol
+
+* [Market Lifecycle](protocol/market-lifecycle.md)
+* [Batch Auctions](protocol/batch-auctions.md)
+* [Outcome Tokens](protocol/outcome-tokens.md)
+* [Oracle Resolution](protocol/oracle-resolution.md)
+* [Fees & Incentives](protocol/fees-and-incentives.md)
 
 ## Smart Contracts
 
 * [Architecture](contracts/architecture.md)
-* [Market.sol](contracts/market.md)
+* [OutcomeToken.sol](contracts/outcome-token.md)
+* [OrderBook.sol](contracts/orderbook.md)
+* [BatchAuction.sol](contracts/batch-auction.md)
+* [Vault.sol](contracts/vault.md)
+* [PythResolver.sol](contracts/pyth-resolver.md)
 * [MarketFactory.sol](contracts/market-factory.md)
 * [Deployments](contracts/deployments.md)
 
-## Telegram Bot
+## Infrastructure
 
-* [Overview](bot/overview.md)
-* [Commands](bot/commands.md)
-* [Keeper Service](bot/keeper.md)
+* [Keepers](infrastructure/keepers.md)
+* [Indexer & API](infrastructure/indexer.md)
+* [Telegram Bot](infrastructure/telegram-bot.md)
+
+## Frontend
+
+* [Overview](frontend/overview.md)
+* [Trading Interface](frontend/trading.md)
+* [Portfolio](frontend/portfolio.md)
 
 ## Technical
 
 * [Security](technical/security.md)
-* [Gas & Fees](technical/gas-and-fees.md)
+* [Gas & Costs](technical/gas-and-costs.md)
+* [MEV Mitigation](technical/mev.md)
 
 ## Project
 
-* [AI Build Log](project/ai-build-log.md)
 * [Roadmap](project/roadmap.md)
+* [Design Decisions](project/design-decisions.md)

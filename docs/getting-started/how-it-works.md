@@ -1,81 +1,40 @@
 # How It Works
 
-## The Game Loop
+## The Trading Loop
 
-Strike runs on a continuous 5-minute cycle:
+Strike runs continuous short-duration prediction markets (default: 5 minutes). Each market asks a simple question:
 
-```
-:00  Market opens → Strike price captured from Pyth
-:00 - :02:30  Betting window (first half of duration)
-:02:30  Betting closes (trading deadline)
-:05  Market expires → Pyth price fetched → Winners determined
-:05  New market opens → Cycle repeats
-```
+> **Will BTC/USD be above $X at time T?**
 
-Markets are created at clean 5-minute intervals — on the hour, :05, :10, :15, etc.
+Where `$X` is the strike price (captured from Pyth at market creation) and `T` is the expiry timestamp.
 
-## Parimutuel Model
+Traders express their view by buying outcome tokens on the orderbook:
+- **Buy YES** if you think the price will be above the strike
+- **Buy NO** if you think the price will be below the strike
 
-Strike uses a **parimutuel** betting model — the same system used in horse racing and many prediction markets.
+## Step by Step
 
-### How It Works
+1. **Market opens** — A new market is created with a strike price and expiry. The orderbook begins accepting orders.
 
-1. All bets go into a shared pool
-2. The pool is split into two sides: **UP** and **DOWN**
-3. When the market resolves, the winning side splits the entire pool
-4. Your share = your bet / total winning side bets
+2. **Place orders** — Traders submit limit orders at their desired price (0.01–0.99). A YES token priced at 0.70 means "70% chance price is above strike." Deposit collateral or existing outcome tokens to back your orders.
 
-### Example
+3. **Batches clear** — Every ~3 seconds, all pending orders are matched at a single uniform clearing price. If bids and asks cross, a clearing price is found that maximizes matched volume. The oversubscribed side gets pro-rata partial fills.
 
-| Player | Side | Bet |
-|--------|------|-----|
-| Alice | UP | 0.1 BNB |
-| Bob | UP | 0.1 BNB |
-| Charlie | DOWN | 0.2 BNB |
+4. **Claim fills** — After a batch clears, traders claim their filled amounts. You receive outcome tokens (if buying) or collateral (if selling).
 
-**Total pool:** 0.4 BNB
+5. **Trading halts** — When less than one batch interval remains before expiry, the book stops accepting new orders. The final batch clears normally.
 
-If BTC goes **UP**:
-- Alice gets: (0.1 / 0.2) × 0.4 = **0.2 BNB** (2x return)
-- Bob gets: (0.1 / 0.2) × 0.4 = **0.2 BNB** (2x return)
-- Charlie gets: **0 BNB**
+6. **Market resolves** — After expiry, anyone can submit a signed Pyth price update to resolve the market. The contract verifies the update cryptographically and determines the outcome.
 
-If BTC goes **DOWN**:
-- Charlie gets: (0.2 / 0.2) × 0.4 = **0.4 BNB** (2x return)
-- Alice and Bob get: **0 BNB**
+7. **Redeem winnings** — Winning outcome tokens redeem 1:1 for collateral. Losing tokens are worthless.
 
-A 3% protocol fee is deducted from the winning pool before distribution.
+## What Makes FBA Different?
 
-### Early Bird Bonus
+In a continuous orderbook, the first order to arrive gets priority — this creates speed races and MEV extraction. In a **Frequency Batch Auction**:
 
-Bets placed earlier in the betting window receive a multiplier on their shares (up to 2x at market open, decreasing linearly to 1x at trading close). This incentivizes early participation and discourages waiting until the last second.
+- All orders within a batch window are treated equally (no time priority within a batch)
+- Everyone gets the same clearing price (uniform price)
+- Oversubscribed sides are filled pro-rata (fair partial fills)
+- Makers have time to cancel stale quotes before the next batch
 
-## Edge Cases
-
-- **One-sided market** (everyone bets the same way): All bets are refunded. No one loses.
-- **Exact price tie** (resolution price = strike price): All bets are refunded.
-- **No resolution within 24h**: Market auto-cancels and all bets are refunded.
-- **Empty market** (no bets): Market expires silently, no action needed.
-
-## Oracle Resolution
-
-Markets are resolved using [Pyth Network](https://pyth.network/) price feeds.
-
-1. At market creation, the **strike price** is captured from the current Pyth BTC/USD feed
-2. At expiry, the **resolution price** is fetched from Pyth
-3. If resolution price > strike price → **UP wins**
-4. If resolution price < strike price → **DOWN wins**
-5. If resolution price = strike price → **Tie, all refunded**
-
-The Pyth price data is verified on-chain — the contract checks the Pyth signature and price staleness (max 60 seconds old).
-
-## User Flow
-
-```
-1. /start → Bot creates your wallet (Privy embedded wallet)
-2. Fund wallet → Send tBNB to your wallet address
-3. Browse markets → See the current open market with live BTC price
-4. Place a bet → Tap UP or DOWN, choose an amount
-5. Wait 5 minutes → Market resolves automatically
-6. Claim winnings → If you won, collect your share of the pool
-```
+This is the same mechanism used by traditional stock exchanges for opening/closing auctions, adapted for on-chain prediction markets.
