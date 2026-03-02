@@ -2,35 +2,38 @@
 pragma solidity ^0.8.25;
 
 import {Script, console} from "forge-std/Script.sol";
-import {MarketFactory} from "../src/MarketFactory.sol";
+import {OutcomeToken} from "../src/OutcomeToken.sol";
+import {Vault} from "../src/Vault.sol";
+import {FeeModel} from "../src/FeeModel.sol";
 
+/// @notice Deploy Phase 1A core primitives.
 contract DeployScript is Script {
-    // Pyth contract addresses
-    address constant PYTH_BSC_TESTNET = 0x5744Cbf430D99456a0A8771208b674F27f8EF0Fb;
-    address constant PYTH_BSC_MAINNET = 0x4D7E825f80bDf85e913E0DD2A2D54927e9dE1594;
-
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
-        address feeCollector = vm.envAddress("FEE_COLLECTOR");
+        address deployer = vm.addr(deployerPrivateKey);
+        address feeCollector = vm.envOr("FEE_COLLECTOR", deployer);
 
-        // Default to testnet
-        address pythAddress = PYTH_BSC_TESTNET;
-        if (block.chainid == 56) {
-            pythAddress = PYTH_BSC_MAINNET;
-        }
-
-        console.log("Deploying MarketFactory...");
+        console.log("Deploying Phase 1A contracts...");
         console.log("  Chain ID:", block.chainid);
-        console.log("  Pyth:", pythAddress);
-        console.log("  Fee Collector:", feeCollector);
+        console.log("  Deployer:", deployer);
 
         vm.startBroadcast(deployerPrivateKey);
 
-        MarketFactory factory = new MarketFactory(pythAddress, feeCollector);
+        OutcomeToken outcomeToken = new OutcomeToken(deployer);
+        Vault vault = new Vault(deployer);
+        FeeModel feeModel = new FeeModel(
+            deployer,
+            30, // 0.30% taker fee
+            10, // 0.10% maker rebate
+            0.005 ether, // resolver bounty
+            0.0001 ether, // pruner bounty
+            feeCollector
+        );
 
         vm.stopBroadcast();
 
-        console.log("MarketFactory deployed at:", address(factory));
-        console.log("Market implementation:", factory.marketImplementation());
+        console.log("OutcomeToken deployed at:", address(outcomeToken));
+        console.log("Vault deployed at:", address(vault));
+        console.log("FeeModel deployed at:", address(feeModel));
     }
 }
