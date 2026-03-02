@@ -213,131 +213,27 @@ Market factory, Pyth integration, state machine, and full protocol tests.
 
 ## Phase 2: Keeper & Indexer Infrastructure
 
-Off-chain support services for batch clearing, resolution, and real-time data.
+> **Built in [`strike-infra`](https://github.com/ayazabbas/strike-infra) (private repo)**
 
-### Tasks
+Off-chain support services for batch clearing, resolution, and real-time data. Includes batch clearing keeper, market resolution keeper, order pruning keeper, and event indexer with REST/WebSocket API.
 
-1. **Build batch clearing keeper**
-   - TypeScript service that calls `clearBatch()` on active markets at configured intervals
-   - Monitor pending order volume — skip clearing if no crossing orders (read segment tree aggregates)
-   - Gas estimation + retry logic with exponential backoff
-   - Multi-market scheduling (round-robin or priority-based by volume)
-   - Configurable: RPC endpoint, wallet, gas limits, batch interval override
-
-2. **Build market resolution keeper**
-   - Watch for markets entering `Closed` state
-   - Fetch signed Pyth update data from Hermes historical API: `GET /v2/updates/price/{publishTime}?ids[]={priceId}`
-   - Submit `resolveMarket()` transaction with fetched updateData
-   - Handle fallback: if no update in initial window, retry with extended Δ
-   - After finality window, call `finalizeResolution()`
-   - Claim resolver bounty
-
-3. **Build order pruning keeper**
-   - Periodic scan for expired orders (query contract or index events)
-   - Call `pruneExpiredOrders()` in batches
-   - Claim pruning bounties
-   - Run less frequently than clearing keeper (e.g. every 30s)
-
-4. **Build event indexer + API**
-   - Index events: `OrderPlaced`, `OrderCancelled`, `BatchCleared`, `FillClaimed`, `MarketCreated`, `MarketResolved`
-   - Maintain real-time orderbook state (aggregated by tick level per market)
-   - Store trade history with timestamps, users, amounts
-   - **WebSocket server** for live updates: orderbook snapshots, trade feed, market status changes
-   - **REST API endpoints:**
-     - `GET /markets` — list markets with status, volume, spread
-     - `GET /markets/:id/orderbook` — current book (bids + asks by tick)
-     - `GET /markets/:id/trades` — trade history
-     - `GET /markets/:id/ohlcv` — candlestick data (derived from clearing prices)
-     - `GET /users/:address/orders` — open + historical orders
-     - `GET /users/:address/positions` — outcome token balances
-   - Use dedicated RPC provider (not public BSC endpoints — `eth_getLogs` disabled on some)
-   - SQLite or PostgreSQL for indexed data
-
-5. **Integrate keepers with existing bot**
-   - Replace old keeper logic (parimutuel market creation + resolution) with CLOB keepers
-   - Retain Telegram bot for user notifications: market resolved, fills available, positions won/lost
-   - Keeper health monitoring: log errors, alert on missed clears/resolutions
-   - systemd services for all keeper processes
-
-6. **Update README.md and claude.md**
-   - Document keeper architecture and configuration
-   - Indexer API reference (endpoints, WebSocket events)
-   - Deployment guide for keeper services
-   - Operational runbook (monitoring, troubleshooting)
+See the strike-infra repo for implementation details.
 
 ---
 
 ## Phase 3: Web Frontend
 
-React/Next.js trading interface with real-time orderbook.
+> **Built in [`strike-frontend`](https://github.com/ayazabbas/strike-frontend) (private repo)**
 
-### Tasks
+React/Next.js trading interface with real-time orderbook, order management, portfolio tracking, and mobile optimization.
 
-1. **Project scaffolding**
-   - Next.js 15 + TypeScript + Tailwind CSS + shadcn/ui
-   - Dark trading terminal aesthetic (inspired by Bloomberg / Polymarket)
-   - Wallet connection: RainbowKit (MetaMask, WalletConnect, Coinbase Wallet)
-   - Directory: `frontend/`
-   - Contract ABIs auto-generated from Foundry artifacts
-   - wagmi v2 + viem for contract interactions
-
-2. **Market discovery page**
-   - List active markets with: asset, expiry countdown, current spread, 24h volume, last clearing price
-   - Filter by: asset, status (open/closed/resolved), time remaining
-   - Sort by: volume, expiry, spread
-   - Auto-refresh via WebSocket subscription to indexer
-   - Quick-trade buttons (jump to trading page)
-
-3. **Trading page (core)**
-   - **Orderbook visualization:** bid/ask depth chart + price ladder (tick-by-tick, color-coded)
-   - **Order entry panel:** side toggle (Buy YES / Buy NO), price input (tick slider or numeric), amount, order type dropdown (limit/post-only/IOC)
-   - **Position summary:** open orders, filled positions, unrealized P&L
-   - **Batch info bar:** countdown to next clearing, indicative clearing price (computed client-side from current book), batch ID
-   - **Trade history feed:** recent fills from indexer WebSocket
-   - **Market info sidebar:** asset, expiry, resolution rule, Pyth feed link, contract address
-
-4. **Order management panel**
-   - Open orders table: tick, side, amount, remaining, status, cancel button
-   - Pending claims: fills ready to claim after batch clearing, "Claim All" button
-   - Order history: filled, cancelled, expired — filterable
-   - Bulk cancel functionality
-
-5. **Portfolio page**
-   - Outcome token balances across all markets
-   - Active positions with current mark-to-market (using last clearing price)
-   - Historical P&L chart
-   - "Claim All Fills" and "Redeem All Winners" bulk actions
-   - Collateral balance (deposited, locked, available)
-
-6. **Market detail / resolved market page**
-   - Full orderbook + trade history for active markets
-   - Resolved markets: outcome, settlement price, Pyth proof link
-   - Price chart (from indexed OHLCV / clearing price history)
-   - Market lifecycle status indicator with state transitions
-
-7. **Mobile optimization**
-   - Responsive breakpoints: desktop (full layout), tablet (stacked), mobile (simplified)
-   - Mobile orderbook: compact depth view, swipe between book/trades/orders
-   - Touch-friendly order entry with large tap targets
-   - PWA manifest for home screen installation
-
-8. **Transaction UX**
-   - Transaction status toasts (pending → confirmed → success/error)
-   - Wallet balance display + "insufficient funds" guards
-   - Gas estimation display before confirmation
-   - Batch-aware messaging: "Your order will be included in the next batch clearing (~3s)"
-
-9. **Update README.md and claude.md**
-   - Document frontend setup, environment variables, build/deploy commands
-   - Architecture: frontend ↔ indexer ↔ contracts data flow
-   - Screenshots or wireframe descriptions
-   - Updated project structure with `frontend/` directory
+See the strike-frontend repo for implementation details.
 
 ---
 
 ## Phase 4: Integration, Hardening & Deployment
 
-End-to-end testing, security, testnet deployment, and production readiness.
+> **Cross-repo integration phase.** Contract hardening and gas optimization happen here in the main repo. End-to-end integration, frontend deployment, and keeper deployment are coordinated across all three repos (`strike`, `strike-infra`, `strike-frontend`).
 
 ### Tasks
 
