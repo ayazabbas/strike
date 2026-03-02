@@ -54,4 +54,4 @@ Key architectural choices and why they were made.
 
 **Decision:** Deploy on BSC mainnet, not opBNB L2.
 
-**Why:** Gas is already cheap on BSC (~$0.008/order at 0.05 gwei). opBNB adds bridge friction (users must bridge from BSC), has a smaller ecosystem, charges nontrivial Pyth fees, and lacks the MEV infrastructure (BEP-322, bundle APIs) documented for BSC. The marginal gas savings don't justify the UX and ecosystem trade-offs. opBNB can be a future expansion target.
+**Why:** Gas is already cheap on BSC (~$0.008/order at 0.05 gwei). opBNB adds bridge friction (users must bridge from BSC), has a smaller ecosystem, charges nontrivial Pyth fees, and lacks the MEV infrastructure (BEP-322, bundle APIs) documented for BSC. The marginal gas savings don't justify the UX and ecosystem trade-offs.

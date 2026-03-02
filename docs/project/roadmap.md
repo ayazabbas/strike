@@ -63,6 +63,5 @@ Preserved on the `poc` branch.
 - Multi-asset support (ETH, SOL, BNB + any Pyth feed)
 - Variable market durations (1min, 5min, 15min, 1hr)
 - BSC mainnet deployment
-- Multi-chain (Base, Arbitrum)
 - API for programmatic trading
 - Leaderboards
