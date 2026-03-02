@@ -6,7 +6,6 @@
 
 * [How It Works](getting-started/how-it-works.md)
 * [Key Concepts](getting-started/key-concepts.md)
-* [Quick Start](getting-started/quick-start.md)
 
 ## Protocol
 
