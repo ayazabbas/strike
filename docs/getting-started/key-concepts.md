@@ -30,10 +30,8 @@ If one side of the book has more volume than the other at the clearing price, th
 
 | Type | Behavior |
 |------|----------|
-| **Limit** | Rests on the book until filled, cancelled, or expired |
-| **Post-Only** | Rejected if it would immediately cross the book (maker protection) |
-| **IOC** | Fills in the current batch or is cancelled — never rests |
-| **Batch-Only** | Valid for the next batch only, auto-expires after clearing |
+| **GoodTilCancel (GTC)** | Rests on the book until filled or cancelled by the owner |
+| **GoodTilBatch (GTB)** | Valid for the next batch only — auto-expires after clearing if unfilled |
 
 ## Collateral
 

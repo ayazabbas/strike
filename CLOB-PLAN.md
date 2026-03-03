@@ -85,10 +85,10 @@ Core trading engine — order management, batch clearing, claim-based settlement
 ### Tasks
 
 1. **Implement order types and validation**
-   - **Limit:** resting order at a specific tick, valid until expiry or cancel
-   - **Post-only:** rejected if it would cross the book (maker protection)
-   - **IOC (Immediate-or-Cancel):** fills in current batch or cancelled; never rests
-   - **Batch-only:** valid for next batch only, auto-expires after clearing
+   - **GoodTilCancel (GTC):** resting order at a specific tick, valid until filled or cancelled
+   
+   - **GoodTilBatch (GTB):** valid for the next batch only; auto-expires after clearing if unfilled
+   
    - All orders require: side (bid/ask), tick (1-99), amount, expiry timestamp
    - Validation: tick in range, amount ≥ minimum lot size, expiry ≤ market close, order bond deposited
 
@@ -135,7 +135,7 @@ Core trading engine — order management, batch clearing, claim-based settlement
    - Place/cancel/modify order flows
    - Batch clearing with: balanced book, one-sided, sparse, single order, empty batch
    - Pro-rata fill accuracy at clearing tick (verify BPS math)
-   - Order type behavior: post-only rejection, IOC expiry, batch-only lifecycle
+   - Order type behavior: GTC resting, GTB auto-expiry after clearing
    - Trading halt enforcement near market close
    - Pruning: expired orders, bounty distribution, aggregate updates
    - Multi-batch sequences (place → clear → claim → place again)

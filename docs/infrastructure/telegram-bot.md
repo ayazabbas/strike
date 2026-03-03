@@ -38,7 +38,7 @@ The bot is intentionally simple. For full functionality, it links to the web fro
 |---------|-----|-----|
 | Place limit orders | ✅ (basic) | ✅ (full) |
 | View orderbook | Top 3 levels | Full depth + chart |
-| Order types | Limit only | Limit, Post-Only, IOC, Batch-Only |
+| Order types | GTC only | GoodTilCancel, GoodTilBatch |
 | Bulk operations | ❌ | ✅ |
 | Price charts | ❌ | ✅ |
 | Portfolio analytics | Basic | Full P&L history |

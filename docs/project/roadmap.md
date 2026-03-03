@@ -23,7 +23,7 @@ Preserved on the `poc` branch.
 - [ ] Unit tests (40+)
 
 ### Phase 1B — Orderbook & Batch Auction
-- [ ] Order types (limit, post-only, IOC, batch-only)
+- [x] Order types (GoodTilCancel, GoodTilBatch)
 - [ ] OrderBook contract
 - [ ] BatchAuction clearing engine
 - [ ] Claim-based settlement

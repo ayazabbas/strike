@@ -34,7 +34,7 @@ The trading page (`/market/:id`) is where the action happens.
 - **Side toggle:** Buy YES (green) / Buy NO (red)
 - **Price input:** tick slider (1-99) or numeric input, shows implied probability
 - **Amount:** BNB input with available balance shown
-- **Order type:** dropdown — Limit, Post-Only, IOC, Batch-Only
+- **Order type:** toggle — GoodTilCancel (GTC), GoodTilBatch (GTB)
 - **Submit:** single transaction, status toast tracks confirmation
 
 ## Batch Info Bar

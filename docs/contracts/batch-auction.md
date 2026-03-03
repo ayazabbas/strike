@@ -33,7 +33,7 @@ struct BatchResult {
 - Segment tree traversal: O(log N) for 99 ticks (~7 levels)
 - Clearing writes: O(1) — only the batch result struct
 - No per-order iteration during clearing
-- IOC and batch-only orders are marked expired (not iterated — claimed/pruned later)
+- GoodTilBatch (GTB) orders are auto-expired after clearing if unfilled
 
 ### Events
 

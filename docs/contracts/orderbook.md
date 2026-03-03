@@ -18,7 +18,7 @@ struct Order {
     uint256 remaining; // Unfilled size
     uint256 batchId;  // Batch when placed
     uint256 expiry;   // Auto-expire timestamp
-    OrderType orderType; // Limit, PostOnly, IOC, BatchOnly
+    OrderType orderType; // GoodTilCancel or GoodTilBatch
     bool cancelled;
 }
 ```
@@ -31,7 +31,7 @@ struct Order {
 - Locks collateral (bids) or outcome tokens (asks) in Vault
 - Deposits order bond
 - Updates segment tree aggregate at tick
-- Post-only: reverts if order would cross the book
+
 
 ### `cancelOrder(orderId)`
 - Only callable by order owner
