@@ -213,9 +213,11 @@ Market factory, Pyth integration, state machine, and full protocol tests.
 
 ## Phase 2: Keeper & Indexer Infrastructure
 
-> **Built in [`strike-infra`](https://github.com/ayazabbas/strike-infra) (private repo)**
+> **Built in [`strike-infra`](https://github.com/ayazabbas/strike-infra) (private repo) — all server code written in Rust**
 
-Off-chain support services for batch clearing, resolution, and real-time data. Includes batch clearing keeper, market resolution keeper, order pruning keeper, and event indexer with REST/WebSocket API.
+Off-chain support services for batch clearing, resolution, and real-time data. Includes batch clearing keeper, market resolution keeper, order pruning keeper, and event indexer with REST/WebSocket API. All services are written in **Rust**.
+
+> **Oracle:** Pyth Lazer (Pyth Pro) — NOT the standard Pyth SDK. Lazer uses `uint32` feed IDs and the `PythLazerReceiver` + `PythLazerLib` Solidity SDK.
 
 See the strike-infra repo for implementation details.
 
