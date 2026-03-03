@@ -40,6 +40,15 @@ struct BatchResult {
     uint256 timestamp;     // block.timestamp of clearing
 }
 
+/// @notice Market lifecycle states.
+enum MarketState {
+    Open,      // orders accepted, batches clear
+    Closed,    // no new orders, final batch clears
+    Resolving, // resolution submitted, finality pending
+    Resolved,  // outcome set, redemption open
+    Cancelled  // no resolution within 24h → refunds
+}
+
 /// @notice Market descriptor stored in OrderBook.
 struct Market {
     uint256 id;             // market ID (matches OutcomeToken marketId)

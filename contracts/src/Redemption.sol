@@ -1,0 +1,90 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.25;
+
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "./ITypes.sol";
+import "./MarketFactory.sol";
+import "./OutcomeToken.sol";
+import "./Vault.sol";
+
+/// @title Redemption
+/// @notice Handles post-resolution token redemption for binary outcome markets.
+///         Users burn winning outcome tokens 1:1 for collateral (BNB).
+contract Redemption is ReentrancyGuard {
+    // -------------------------------------------------------------------------
+    // Constants
+    // -------------------------------------------------------------------------
+
+    uint256 public constant LOT_SIZE = 1e15; // must match OrderBook
+
+    // -------------------------------------------------------------------------
+    // State
+    // -------------------------------------------------------------------------
+
+    MarketFactory public immutable factory;
+    OutcomeToken public immutable outcomeToken;
+    Vault public immutable vault;
+
+    // -------------------------------------------------------------------------
+    // Events
+    // -------------------------------------------------------------------------
+
+    event Redeemed(
+        uint256 indexed factoryMarketId,
+        address indexed user,
+        uint256 amount,
+        bool outcomeYes
+    );
+
+    // -------------------------------------------------------------------------
+    // Constructor
+    // -------------------------------------------------------------------------
+
+    constructor(address _factory, address _outcomeToken, address _vault) {
+        require(_factory != address(0), "Redemption: zero factory");
+        require(_outcomeToken != address(0), "Redemption: zero outcomeToken");
+        require(_vault != address(0), "Redemption: zero vault");
+
+        factory = MarketFactory(payable(_factory));
+        outcomeToken = OutcomeToken(_outcomeToken);
+        vault = Vault(payable(_vault));
+    }
+
+    // -------------------------------------------------------------------------
+    // Redeem
+    // -------------------------------------------------------------------------
+
+    /// @notice Redeem winning outcome tokens for collateral.
+    ///         Burns `amount` of the winning token and sends BNB to msg.sender.
+    /// @param factoryMarketId The factory market ID.
+    /// @param amount Number of winning outcome tokens to redeem.
+    function redeem(uint256 factoryMarketId, uint256 amount) external nonReentrant {
+        require(amount > 0, "Redemption: zero amount");
+
+        (
+            ,
+            ,
+            ,
+            ,
+            MarketState state,
+            bool outcomeYes,
+            ,
+            uint256 orderBookMarketId
+        ) = factory.marketMeta(factoryMarketId);
+
+        require(state == MarketState.Resolved, "Redemption: not resolved");
+
+        // Burn winning outcome tokens
+        outcomeToken.redeem(msg.sender, orderBookMarketId, amount, outcomeYes);
+
+        // Transfer collateral: 1 token = 1 wei of collateral (LOT_SIZE basis)
+        // Collateral per lot at 100% = LOT_SIZE
+        // Each outcome token represents 1 lot worth of collateral = LOT_SIZE
+        uint256 payout = amount * LOT_SIZE;
+
+        // Unlock from vault and send to user
+        vault.unlock(msg.sender, payout);
+
+        emit Redeemed(factoryMarketId, msg.sender, amount, outcomeYes);
+    }
+}
