@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  * { margin: 0; padding: 0; }
+  body { width: 1500px; height: 500px; overflow: hidden; background: #0d0d0d; }
+  .banner {
+    width: 1500px;
+    height: 500px;
+    background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #0a0a0a 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 30px;
+    font-family: 'Arial Black', 'Helvetica Neue', Arial, sans-serif;
+    position: relative;
+    overflow: hidden;
+  }
+  .banner::before {
+    content: '';
+    position: absolute;
+    top: -50%; left: -50%;
+    width: 200%; height: 200%;
+    background: radial-gradient(ellipse at 30% 50%, rgba(254, 199, 5, 0.06) 0%, transparent 60%);
+  }
+  .logo {
+    width: 300px;
+    height: 300px;
+    position: relative;
+    z-index: 1;
+    flex-shrink: 0;
+  }
+  .text {
+    position: relative;
+    z-index: 1;
+  }
+  .title {
+    font-size: 96px;
+    font-weight: 900;
+    color: #ffffff;
+    letter-spacing: 6px;
+    line-height: 1;
+  }
+  .subtitle {
+    font-size: 28px;
+    font-weight: 700;
+    color: #FEC705;
+    letter-spacing: 3px;
+    margin-top: 12px;
+    text-transform: uppercase;
+  }
+</style>
+</head>
+<body>
+<div class="banner">
+  <img class="logo" src="strike-logo-dark.svg" />
+  <div class="text">
+    <div class="title">STRIKE</div>
+    <div class="subtitle">Prediction Markets on BNB Chain</div>
+  </div>
+</div>
+</body>
+</html>
