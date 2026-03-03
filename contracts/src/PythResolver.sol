@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.25;
 
-import "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
-import "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
+import "pyth-lazer-sdk/IPythLazer.sol";
+import "pyth-lazer-sdk/PythLazerLib.sol";
+import "pyth-lazer-sdk/PythLazerStructs.sol";
 import "./ITypes.sol";
 import "./MarketFactory.sol";
 
 /// @title PythResolver
-/// @notice Resolves binary outcome markets using Pyth price feeds.
+/// @notice Resolves binary outcome markets using Pyth Lazer price feeds.
 ///         Resolution is permissionless — anyone can submit price data.
 ///         Uses a finality gate: resolution sets pendingResolution, then
 ///         finalizeResolution() is callable after FINALITY_BLOCKS blocks.
@@ -27,11 +28,17 @@ contract PythResolver {
     // State
     // -------------------------------------------------------------------------
 
-    IPyth public immutable pyth;
+    IPythLazer public immutable pythLazer;
     MarketFactory public immutable factory;
 
     /// @notice Confidence threshold in bps (default 100 = 1%)
     uint256 public confThresholdBps = 100;
+
+    /// @notice Mapping from Pyth bytes32 priceId to Lazer uint32 feedId
+    mapping(bytes32 => uint32) public lazerFeedId;
+
+    /// @notice Admin address for feed ID management
+    address public admin;
 
     /// @notice Pending resolution data
     struct PendingResolution {
@@ -67,16 +74,33 @@ contract PythResolver {
         bool outcomeYes,
         address indexed finalizer
     );
+    event LazerFeedIdSet(bytes32 indexed priceId, uint32 feedId);
 
     // -------------------------------------------------------------------------
     // Constructor
     // -------------------------------------------------------------------------
 
-    constructor(address _pyth, address _factory) {
-        require(_pyth != address(0), "PythResolver: zero pyth");
+    constructor(address _pythLazer, address _factory) {
+        require(_pythLazer != address(0), "PythResolver: zero pyth");
         require(_factory != address(0), "PythResolver: zero factory");
-        pyth = IPyth(_pyth);
+        pythLazer = IPythLazer(_pythLazer);
         factory = MarketFactory(payable(_factory));
+        admin = msg.sender;
+    }
+
+    // -------------------------------------------------------------------------
+    // Admin
+    // -------------------------------------------------------------------------
+
+    modifier onlyAdmin() {
+        require(msg.sender == admin, "PythResolver: not admin");
+        _;
+    }
+
+    /// @notice Map a Pyth bytes32 priceId to a Lazer uint32 feedId.
+    function setLazerFeedId(bytes32 priceId, uint32 feedId) external onlyAdmin {
+        lazerFeedId[priceId] = feedId;
+        emit LazerFeedIdSet(priceId, feedId);
     }
 
     // -------------------------------------------------------------------------
@@ -85,20 +109,37 @@ contract PythResolver {
 
     /// @notice Submit resolution for a market. Permissionless.
     /// @param factoryMarketId The market to resolve.
-    /// @param updateData Pyth price update data.
-    function resolveMarket(uint256 factoryMarketId, bytes[] calldata updateData)
+    /// @param update Pyth Lazer signed update bytes.
+    function resolveMarket(uint256 factoryMarketId, bytes calldata update)
         external
         payable
     {
-        (
-            bytes32 priceId,
-            uint256 expiryTime,
-            ,
-            address creator,
-            MarketState state,
-            ,
-            ,
-        ) = factory.marketMeta(factoryMarketId);
+        // Validate market state and extract feed parameters
+        (uint32 feedId, uint256 expiryTime) = _validateAndPrepare(factoryMarketId);
+
+        // Verify update via Pyth Lazer and extract price data
+        uint256 fee = pythLazer.verification_fee();
+        (int64 price, uint256 publishTime) = _verifyAndExtract(update, feedId, expiryTime, fee);
+
+        // Apply resolution or challenge
+        _applyResolution(factoryMarketId, price, publishTime);
+
+        // Refund excess ETH
+        if (msg.value > fee) {
+            (bool ok, ) = msg.sender.call{value: msg.value - fee}("");
+            require(ok, "PythResolver: refund failed");
+        }
+    }
+
+    /// @dev Validate market state and auto-close if needed. Returns feedId and expiryTime.
+    function _validateAndPrepare(uint256 factoryMarketId)
+        internal
+        returns (uint32 feedId, uint256 expiryTime)
+    {
+        bytes32 priceId;
+        address creator;
+        MarketState state;
+        (priceId, expiryTime, , creator, state, , , ) = factory.marketMeta(factoryMarketId);
 
         require(creator != address(0), "PythResolver: market not found");
 
@@ -113,14 +154,37 @@ contract PythResolver {
             "PythResolver: not closed"
         );
 
-        // Parse price from updateData using fallback windows
-        uint256 fee = pyth.getUpdateFee(updateData);
-        (int64 price, uint256 publishTime, uint64 conf) =
-            _parsePriceFromUpdate(updateData, priceId, expiryTime, fee);
+        feedId = lazerFeedId[priceId];
+        require(feedId != 0, "PythResolver: no feed ID mapped");
+    }
 
-        // Confidence check: conf <= confThresholdBps * abs(price) / 10000
+    /// @dev Verify Lazer update, parse payload, extract and validate price.
+    function _verifyAndExtract(
+        bytes calldata update,
+        uint32 feedId,
+        uint256 expiryTime,
+        uint256 fee
+    )
+        internal
+        returns (int64 price, uint256 publishTime)
+    {
+        (bytes memory payload, ) = pythLazer.verifyUpdate{value: fee}(update);
+
+        PythLazerStructs.Update memory parsed =
+            PythLazerLib.parseUpdateFromPayload(payload);
+
+        uint64 conf;
+        (price, conf, publishTime) = _extractFeed(parsed, feedId, expiryTime);
+
         _checkConfidence(price, conf);
+    }
 
+    /// @dev Apply first resolution or challenge to pending resolution.
+    function _applyResolution(
+        uint256 factoryMarketId,
+        int64 price,
+        uint256 publishTime
+    ) internal {
         PendingResolution storage pending = pendingResolutions[factoryMarketId];
 
         if (pending.resolvedAtBlock == 0) {
@@ -150,12 +214,6 @@ contract PythResolver {
 
             emit ResolutionChallenged(factoryMarketId, price, publishTime, msg.sender);
         }
-
-        // Refund excess ETH
-        if (msg.value > fee) {
-            (bool ok, ) = msg.sender.call{value: msg.value - fee}("");
-            require(ok, "PythResolver: refund failed");
-        }
     }
 
     /// @notice Finalize resolution after finality gate passes.
@@ -184,41 +242,52 @@ contract PythResolver {
     // Internal helpers
     // -------------------------------------------------------------------------
 
-    /// @dev Parse price from Pyth updateData using parsePriceFeedUpdates with fallback windows.
-    function _parsePriceFromUpdate(
-        bytes[] calldata updateData,
-        bytes32 priceId,
-        uint256 expiryTime,
-        uint256 fee
+    /// @dev Extract price, confidence, and timestamp from a parsed Lazer update.
+    ///      Validates that the timestamp falls within the fallback windows.
+    function _extractFeed(
+        PythLazerStructs.Update memory update,
+        uint32 feedId,
+        uint256 expiryTime
     )
         internal
-        returns (int64 price, uint256 publishTime, uint64 conf)
+        pure
+        returns (int64 price, uint64 conf, uint256 publishTime)
     {
-        bytes32[] memory priceIds = new bytes32[](1);
-        priceIds[0] = priceId;
+        uint256 timestamp = uint256(update.timestamp);
 
-        // Try each fallback window until one succeeds
-        for (uint256 w = 0; w < MAX_FALLBACK_WINDOWS; w++) {
-            uint256 windowEnd = expiryTime + (w + 1) * FALLBACK_WINDOW;
+        // Timestamp must be within the fallback windows
+        require(
+            timestamp >= expiryTime
+                && timestamp <= expiryTime + MAX_FALLBACK_WINDOWS * FALLBACK_WINDOW,
+            "PythResolver: no valid price in any window"
+        );
 
-            try pyth.parsePriceFeedUpdates{value: fee}(
-                updateData,
-                priceIds,
-                uint64(expiryTime),
-                uint64(windowEnd)
-            ) returns (PythStructs.PriceFeed[] memory feeds) {
-                PythStructs.Price memory p = feeds[0].price;
-                return (p.price, p.publishTime, p.conf);
-            } catch {
-                continue;
+        // Find matching feed by feedId
+        for (uint256 i = 0; i < update.feeds.length; i++) {
+            if (PythLazerLib.getFeedId(update.feeds[i]) == feedId) {
+                require(
+                    PythLazerLib.hasPrice(update.feeds[i]),
+                    "PythResolver: price not available"
+                );
+
+                price = PythLazerLib.getPrice(update.feeds[i]);
+
+                // Confidence is optional in Lazer updates
+                if (PythLazerLib.hasConfidence(update.feeds[i])) {
+                    conf = PythLazerLib.getConfidence(update.feeds[i]);
+                }
+
+                publishTime = timestamp;
+                return (price, conf, publishTime);
             }
         }
 
-        revert("PythResolver: no valid price in any window");
+        revert("PythResolver: feed not found in update");
     }
 
     /// @dev Reject if confidence is too wide.
     function _checkConfidence(int64 price, uint64 conf) internal view {
+        if (conf == 0) return; // no confidence data, skip check
         uint256 absPrice = price >= 0 ? uint256(uint64(price)) : uint256(uint64(-price));
         uint256 maxConf = (absPrice * confThresholdBps) / 10000;
         require(uint256(conf) <= maxConf, "PythResolver: confidence too wide");

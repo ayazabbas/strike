@@ -1,0 +1,8 @@
+{
+  "lib/pyth-crosschain": {
+    "tag": {
+      "name": "v2.38.0",
+      "rev": "25ecd01bf7f5ce6e744f6a300b56dc2cdf7e65e6"
+    }
+  }
+}

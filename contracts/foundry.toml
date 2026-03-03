@@ -7,6 +7,11 @@ optimizer = true
 optimizer_runs = 200
 via_ir = false
 ffi = false
+remappings = [
+  "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+  "@pythnetwork/pyth-sdk-solidity/=node_modules/@pythnetwork/pyth-sdk-solidity/",
+  "pyth-lazer-sdk/=lib/pyth-lazer/src/"
+]
 
 [profile.default.fuzz]
 runs = 256
