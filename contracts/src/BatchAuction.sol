@@ -67,8 +67,8 @@ contract BatchAuction is AccessControl {
     // -------------------------------------------------------------------------
 
     /// @notice Clear the current batch for a market.
-    function clearBatch(uint256 marketId) external onlyRole(OPERATOR_ROLE) returns (BatchResult memory result) {
-        (uint256 id, bool active, bool halted, uint256 currentBatchId, ) = orderBook.markets(marketId);
+    function clearBatch(uint256 marketId) external returns (BatchResult memory result) {
+        (uint256 id, bool active, bool halted, uint256 currentBatchId, , , ) = orderBook.markets(marketId);
         require(id != 0, "BatchAuction: market not found");
         require(active, "BatchAuction: market not active");
         require(!halted, "BatchAuction: market halted");
@@ -224,7 +224,7 @@ contract BatchAuction is AccessControl {
         require(o.orderType == OrderType.GoodTilBatch, "BatchAuction: not GTB order");
         require(o.lots > 0, "BatchAuction: order already empty");
 
-        (, , , uint256 currentBatchId, ) = orderBook.markets(o.marketId);
+        (, , , uint256 currentBatchId, , , ) = orderBook.markets(o.marketId);
         require(currentBatchId > o.batchId, "BatchAuction: batch not yet advanced");
 
         require(

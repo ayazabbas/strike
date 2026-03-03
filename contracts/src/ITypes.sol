@@ -47,4 +47,6 @@ struct Market {
     bool halted;            // true if temporarily halted
     uint256 currentBatchId; // current batch counter
     uint256 minLots;        // minimum order size in lots
+    uint256 batchInterval;  // seconds between batch auctions
+    uint256 expiryTime;     // timestamp when market expires
 }

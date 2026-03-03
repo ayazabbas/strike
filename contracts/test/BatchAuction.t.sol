@@ -36,8 +36,6 @@ contract BatchAuctionTest is Test {
         book.grantRole(book.OPERATOR_ROLE(), address(auction));
         vault.grantRole(vault.PROTOCOL_ROLE(), address(book));
         vault.grantRole(vault.PROTOCOL_ROLE(), address(auction));
-        auction.grantRole(auction.OPERATOR_ROLE(), operator);
-
         vm.stopPrank();
 
         vm.deal(user1, 100 ether);
@@ -51,7 +49,7 @@ contract BatchAuctionTest is Test {
 
     function _setupMarket() internal returns (uint256) {
         vm.prank(operator);
-        return book.registerMarket(1);
+        return book.registerMarket(1, 3, block.timestamp + 3600);
     }
 
     function _deposit(address user, uint256 amount) internal {
@@ -111,7 +109,6 @@ contract BatchAuctionTest is Test {
     function test_ClearBatch_EmptyBook() public {
         uint256 mId = _setupMarket();
 
-        vm.prank(operator);
         BatchResult memory r = auction.clearBatch(mId);
 
         assertEq(r.clearingTick, 0);
@@ -123,7 +120,6 @@ contract BatchAuctionTest is Test {
         uint256 mId = _setupMarket();
         _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
 
-        vm.prank(operator);
         BatchResult memory r = auction.clearBatch(mId);
 
         assertEq(r.clearingTick, 0);
@@ -133,10 +129,9 @@ contract BatchAuctionTest is Test {
     function test_ClearBatch_AdvancesBatchId() public {
         uint256 mId = _setupMarket();
 
-        vm.prank(operator);
         auction.clearBatch(mId);
 
-        (, , , uint256 batchId, ) = book.markets(mId);
+        (, , , uint256 batchId, , , ) = book.markets(mId);
         assertEq(batchId, 2);
     }
 
@@ -146,7 +141,6 @@ contract BatchAuctionTest is Test {
         vm.expectEmit(true, true, false, true);
         emit BatchAuction.BatchCleared(mId, 1, 0, 0);
 
-        vm.prank(operator);
         auction.clearBatch(mId);
     }
 
@@ -161,7 +155,6 @@ contract BatchAuctionTest is Test {
         _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
         _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 50, 10);
 
-        vm.prank(operator);
         BatchResult memory r = auction.clearBatch(mId);
 
         assertEq(r.clearingTick, 50);
@@ -177,7 +170,6 @@ contract BatchAuctionTest is Test {
         _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 60, 10);
         _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 40, 10);
 
-        vm.prank(operator);
         BatchResult memory r = auction.clearBatch(mId);
 
         // Should find a clearing tick in [40, 60]
@@ -193,7 +185,6 @@ contract BatchAuctionTest is Test {
         _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 20);
         _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 50, 10);
 
-        vm.prank(operator);
         BatchResult memory r = auction.clearBatch(mId);
 
         assertEq(r.clearingTick, 50);
@@ -208,12 +199,10 @@ contract BatchAuctionTest is Test {
         _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilCancel, 50, 10);
         _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilCancel, 50, 10);
 
-        vm.prank(operator);
         BatchResult memory r1 = auction.clearBatch(mId);
         assertEq(r1.batchId, 1);
 
         // Second batch (same GTC orders still in book)
-        vm.prank(operator);
         BatchResult memory r2 = auction.clearBatch(mId);
         assertEq(r2.batchId, 2);
     }
@@ -222,17 +211,8 @@ contract BatchAuctionTest is Test {
     // clearBatch — validation
     // =========================================================================
 
-    function test_ClearBatch_RevertIfNotOperator() public {
-        uint256 mId = _setupMarket();
-
-        vm.expectRevert();
-        vm.prank(user1);
-        auction.clearBatch(mId);
-    }
-
     function test_ClearBatch_RevertIfMarketNotFound() public {
         vm.expectRevert("BatchAuction: market not found");
-        vm.prank(operator);
         auction.clearBatch(999);
     }
 
@@ -243,7 +223,6 @@ contract BatchAuctionTest is Test {
         book.haltMarket(mId);
 
         vm.expectRevert("BatchAuction: market halted");
-        vm.prank(operator);
         auction.clearBatch(mId);
     }
 
@@ -254,7 +233,6 @@ contract BatchAuctionTest is Test {
         book.deactivateMarket(mId);
 
         vm.expectRevert("BatchAuction: market not active");
-        vm.prank(operator);
         auction.clearBatch(mId);
     }
 
@@ -268,7 +246,6 @@ contract BatchAuctionTest is Test {
         uint256 bidId = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
         uint256 askId = _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 50, 10);
 
-        vm.prank(operator);
         auction.clearBatch(mId);
 
         // Claim bid fill
@@ -291,7 +268,6 @@ contract BatchAuctionTest is Test {
         uint256 bidId = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
         _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 50, 10);
 
-        vm.prank(operator);
         auction.clearBatch(mId);
 
         uint256 expectedCollateral = (10 * LOT * 50) / 100;
@@ -311,7 +287,6 @@ contract BatchAuctionTest is Test {
         uint256 lockedBefore = vault.locked(user1);
         assertGt(lockedBefore, 0);
 
-        vm.prank(operator);
         auction.clearBatch(mId);
 
         auction.claimFills(bidId);
@@ -326,7 +301,6 @@ contract BatchAuctionTest is Test {
         // Only bids, no asks → no cross
         uint256 bidId = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
 
-        vm.prank(operator);
         auction.clearBatch(mId);
 
         // Claim should succeed but with 0 fill
@@ -346,7 +320,6 @@ contract BatchAuctionTest is Test {
         // Extra bid at tick 30 — below clearing tick of 50
         uint256 lowBidId = _placeOrder(user3, mId, Side.Bid, OrderType.GoodTilBatch, 30, 5);
 
-        vm.prank(operator);
         BatchResult memory r = auction.clearBatch(mId);
         assertEq(r.clearingTick, 50);
 
@@ -369,7 +342,6 @@ contract BatchAuctionTest is Test {
         uint256 bid2 = _placeOrder(user2, mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
         _placeOrder(user3, mId, Side.Ask, OrderType.GoodTilBatch, 50, 10);
 
-        vm.prank(operator);
         BatchResult memory r = auction.clearBatch(mId);
         assertEq(r.matchedLots, 10);
         assertEq(r.totalBidLots, 20);
@@ -393,7 +365,6 @@ contract BatchAuctionTest is Test {
         uint256 ask1 = _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 50, 10);
         uint256 ask2 = _placeOrder(user3, mId, Side.Ask, OrderType.GoodTilBatch, 50, 10);
 
-        vm.prank(operator);
         BatchResult memory r = auction.clearBatch(mId);
         assertEq(r.matchedLots, 10);
         assertEq(r.totalAskLots, 20);
@@ -418,7 +389,6 @@ contract BatchAuctionTest is Test {
         uint256 bidId = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
         _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 50, 10);
 
-        vm.prank(operator);
         auction.clearBatch(mId);
 
         auction.claimFills(bidId);
@@ -446,7 +416,6 @@ contract BatchAuctionTest is Test {
         uint256 orderId = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
 
         // Clear batch to advance it
-        vm.prank(operator);
         auction.clearBatch(mId);
 
         // Now the GTB order is expired (batch advanced)
@@ -466,7 +435,6 @@ contract BatchAuctionTest is Test {
 
         uint256 orderId = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
 
-        vm.prank(operator);
         auction.clearBatch(mId);
 
         vm.expectEmit(true, true, false, false);
@@ -482,7 +450,6 @@ contract BatchAuctionTest is Test {
         uint256 orderId = _placeOrder(user1, mId, Side.Ask, OrderType.GoodTilBatch, 40, 10);
         uint256 expectedCollateral = (10 * LOT * 60) / 100;
 
-        vm.prank(operator);
         auction.clearBatch(mId);
 
         vm.prank(pruner);
@@ -497,7 +464,6 @@ contract BatchAuctionTest is Test {
 
         uint256 orderId = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilCancel, 50, 10);
 
-        vm.prank(operator);
         auction.clearBatch(mId);
 
         vm.expectRevert("BatchAuction: not GTB order");
@@ -521,7 +487,6 @@ contract BatchAuctionTest is Test {
 
         uint256 orderId = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
 
-        vm.prank(operator);
         auction.clearBatch(mId);
 
         // Prune once
@@ -542,7 +507,6 @@ contract BatchAuctionTest is Test {
 
         assertEq(book.bidVolumeAt(mId, 50), 15);
 
-        vm.prank(operator);
         auction.clearBatch(mId);
 
         vm.prank(pruner);
@@ -562,7 +526,6 @@ contract BatchAuctionTest is Test {
         _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
         _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 50, 10);
 
-        vm.prank(operator);
         auction.clearBatch(mId);
 
         BatchResult memory r = auction.getBatchResult(mId, 1);
@@ -591,7 +554,6 @@ contract BatchAuctionTest is Test {
         assertEq(vault.locked(user2), askCollateral);
 
         // Clear batch
-        vm.prank(operator);
         BatchResult memory r = auction.clearBatch(mId);
         assertEq(r.clearingTick, 50);
         assertEq(r.matchedLots, 10);
@@ -616,7 +578,6 @@ contract BatchAuctionTest is Test {
         uint256 ask40 = _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 40, 8);
         uint256 ask50 = _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 50, 7);
 
-        vm.prank(operator);
         BatchResult memory r = auction.clearBatch(mId);
 
         // Should find a clearing tick
@@ -654,7 +615,6 @@ contract BatchAuctionTest is Test {
         _placeOrder(user2, mId, Side.Bid, OrderType.GoodTilBatch, 50, 5);
         _placeOrder(user3, mId, Side.Ask, OrderType.GoodTilBatch, 50, 10);
 
-        vm.prank(operator);
         BatchResult memory r = auction.clearBatch(mId);
 
         assertEq(r.clearingTick, 50);
@@ -667,7 +627,6 @@ contract BatchAuctionTest is Test {
         _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 1, 10);
         _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 1, 10);
 
-        vm.prank(operator);
         BatchResult memory r = auction.clearBatch(mId);
 
         assertEq(r.clearingTick, 1);
@@ -680,7 +639,6 @@ contract BatchAuctionTest is Test {
         _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 99, 10);
         _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 99, 10);
 
-        vm.prank(operator);
         BatchResult memory r = auction.clearBatch(mId);
 
         assertEq(r.clearingTick, 99);
@@ -694,7 +652,6 @@ contract BatchAuctionTest is Test {
         uint256 orderId = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
 
         // Clear batch (no cross)
-        vm.prank(operator);
         auction.clearBatch(mId);
 
         // Claim fills (0 fill since no cross)

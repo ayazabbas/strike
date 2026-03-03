@@ -88,15 +88,19 @@ contract OrderBook is AccessControl {
 
     /// @notice Register a new market for trading.
     /// @param minLots Minimum order size in lots (0 = no minimum).
+    /// @param batchInterval Seconds between batch auctions.
+    /// @param expiryTime Timestamp when market expires.
     /// @return marketId The new market's ID.
-    function registerMarket(uint256 minLots) external onlyRole(OPERATOR_ROLE) returns (uint256 marketId) {
+    function registerMarket(uint256 minLots, uint256 batchInterval, uint256 expiryTime) external onlyRole(OPERATOR_ROLE) returns (uint256 marketId) {
         marketId = nextMarketId++;
         markets[marketId] = Market({
             id: marketId,
             active: true,
             halted: false,
             currentBatchId: 1,
-            minLots: minLots
+            minLots: minLots,
+            batchInterval: batchInterval,
+            expiryTime: expiryTime
         });
         emit MarketRegistered(marketId, minLots);
     }
@@ -148,6 +152,7 @@ contract OrderBook is AccessControl {
         Market storage m = markets[marketId];
         require(m.active, "OrderBook: market not active");
         require(!m.halted, "OrderBook: market halted");
+        require(block.timestamp + m.batchInterval < m.expiryTime, "OrderBook: trading halted");
         require(tick >= MIN_TICK && tick <= MAX_TICK, "OrderBook: tick out of range");
         require(lots > 0, "OrderBook: zero lots");
         require(lots >= m.minLots, "OrderBook: below min lots");
