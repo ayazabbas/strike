@@ -4,6 +4,7 @@ pragma solidity ^0.8.25;
 import "pyth-lazer-sdk/IPythLazer.sol";
 import "pyth-lazer-sdk/PythLazerLib.sol";
 import "pyth-lazer-sdk/PythLazerStructs.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./ITypes.sol";
 import "./MarketFactory.sol";
 
@@ -14,7 +15,7 @@ import "./MarketFactory.sol";
 ///         finalizeResolution() is callable after FINALITY_BLOCKS blocks.
 ///         During finality, challengers can submit alternative data;
 ///         earliest valid publishTime wins.
-contract PythResolver {
+contract PythResolver is ReentrancyGuard {
     // -------------------------------------------------------------------------
     // Constants
     // -------------------------------------------------------------------------
@@ -218,7 +219,7 @@ contract PythResolver {
 
     /// @notice Finalize resolution after finality gate passes.
     /// @param factoryMarketId The market to finalize.
-    function finalizeResolution(uint256 factoryMarketId) external {
+    function finalizeResolution(uint256 factoryMarketId) external nonReentrant {
         PendingResolution storage pending = pendingResolutions[factoryMarketId];
         require(pending.resolvedAtBlock > 0, "PythResolver: no pending resolution");
         require(!pending.finalized, "PythResolver: already finalized");
