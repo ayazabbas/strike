@@ -1,37 +1,64 @@
 # MarketFactory.sol
 
-Singleton factory that deploys and manages prediction markets.
+Singleton factory that creates and manages prediction markets.
 
-## `createMarket(priceId, duration, batchInterval)`
+## `createMarket(priceId, duration, batchInterval, minLots)`
 
-- Deploys an EIP-1167 minimal proxy clone of the OrderBook implementation
-- Requires market creation bond (funds resolver bounty)
-- Registers market in the factory's market registry
+- Registers a new market in OrderBook via `registerMarket()`
+- Requires creation bond (default 0.01 BNB, funds resolver bounty)
+- Stores MarketMeta with lifecycle tracking
 - Emits `MarketCreated` event
 
 ### Parameters
 
-| Param | Description | Constraints |
-|-------|-------------|-------------|
-| `priceId` | Pyth price feed ID | Must be whitelisted |
-| `duration` | Market duration in seconds | 60s – 7 days |
-| `batchInterval` | Batch clearing interval | ≥ 1 block time |
+| Param | Description | Default |
+|-------|-------------|---------|
+| `priceId` | Pyth price feed ID (bytes32) | required |
+| `duration` | Market duration in seconds | required |
+| `batchInterval` | Batch clearing interval (0 = use default 60s) | 60s |
+| `minLots` | Minimum order size (0 = use default 1) | 1 |
+
+## State Machine
+
+```
+Open → Closed → Resolving → Resolved
+                               ↓
+Open → Closed ─────────────→ Cancelled
+```
+
+### Transitions
+
+| From | To | Trigger | Condition |
+|------|----|---------|-----------|
+| Open | Closed | `closeMarket()` | `block.timestamp >= expiryTime` |
+| Closed | Resolving | `setResolving()` | ADMIN_ROLE (PythResolver) |
+| Resolving | Resolved | `setResolved()` | ADMIN_ROLE (PythResolver) |
+| Open/Closed | Cancelled | `cancelMarket()` | 24h after expiry, no resolution |
 
 ## Market Registry
 
-- `getMarkets(offset, limit)` — paginated list of all markets
-- `getActiveMarkets()` — markets in `Open` state
-- `getMarketCount()` — total markets created
+- `getActiveMarketCount()` — number of markets in Open state
+- `getClosedMarketCount()` — number of closed markets
+- `getResolvedMarketCount()` — number of resolved markets
 
 ## Admin Functions
 
 | Function | Access | Description |
 |----------|--------|-------------|
-| `pause()` / `unpause()` | Owner | Emergency pause on market creation |
-| `setDefaultParams()` | Owner | Update default duration, batch interval, min lot size |
-| `setFeeCollector()` | Owner | Update protocol fee collector address |
-| `whitelistFeed()` | Owner | Add/remove allowed Pyth price feed IDs |
+| `pauseFactory()` | ADMIN_ROLE | Emergency pause on market creation |
+| `setDefaultParams()` | ADMIN_ROLE | Update default batch interval + min lots |
+| `setCreationBond()` | ADMIN_ROLE | Update required creation bond |
+| `setFeeCollector()` | ADMIN_ROLE | Update protocol fee collector address |
 
 ## Access Control
 
-Initially admin-only market creation, with a path to permissionless creation once the protocol is battle-tested.
+- **ADMIN_ROLE:** PythResolver (for `setResolving`, `setResolved`, `payResolverBounty`)
+- **DEFAULT_ADMIN_ROLE:** protocol admin (pause, parameter updates)
+- `closeMarket()` and `cancelMarket()` are permissionless
+- Market creation is permissionless (anyone can create with bond)
+
+## Bond Management
+
+- Creator pays `creationBond` on market creation
+- On resolution: bond paid to resolver via `payResolverBounty()`
+- On cancellation: bond refunded to creator

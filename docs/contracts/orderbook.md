@@ -1,53 +1,47 @@
 # OrderBook.sol
 
-Per-market orderbook contract deployed as an EIP-1167 minimal proxy clone.
+Central limit order book for the Strike binary-outcome protocol. Single deployed contract manages all markets.
 
 ## Storage
 
+- **Markets:** `mapping(uint256 => Market)` — market ID to market descriptor
 - **Orders:** `mapping(uint256 => Order)` — order ID to order struct
-- **Segment trees:** one per side (bid/ask), tracking aggregate volume at each tick
-- **Batch results:** `mapping(uint256 => BatchResult)` — batch ID to clearing result
+- **Segment trees:** one per side per market (bid/ask), tracking aggregate volume at each tick
 
 ### Order Struct
 ```solidity
 struct Order {
+    uint256 id;
+    uint256 marketId;
     address owner;
-    Side side;        // Bid or Ask
-    uint8 tick;       // 1-99
-    uint256 amount;   // Total size
-    uint256 remaining; // Unfilled size
-    uint256 batchId;  // Batch when placed
-    uint256 expiry;   // Auto-expire timestamp
+    Side side;           // Bid or Ask
     OrderType orderType; // GoodTilCancel or GoodTilBatch
-    bool cancelled;
+    uint256 tick;        // 1-99
+    uint256 lots;        // remaining lots (each = LOT_SIZE wei)
+    uint256 batchId;     // batch when placed
+    uint256 timestamp;
 }
 ```
 
 ## Key Functions
 
-### `placeOrder(side, tick, amount, orderType, expiry)`
-- Validates: tick in range, amount ≥ min lot size, expiry ≤ market close, market is Open
+### `placeOrder(marketId, side, orderType, tick, lots)`
+- Validates: tick in [1,99], lots > 0, lots >= minLots, market active and not halted
 - **Trading halt:** rejects if `block.timestamp + batchInterval >= expiryTime`
-- Locks collateral (bids) or outcome tokens (asks) in Vault
-- Deposits order bond
+- Locks collateral in Vault:
+  - **Bid:** `lots * LOT_SIZE * tick / 100`
+  - **Ask:** `lots * LOT_SIZE * (100 - tick) / 100`
 - Updates segment tree aggregate at tick
-
 
 ### `cancelOrder(orderId)`
 - Only callable by order owner
-- Unlocks collateral/tokens, refunds order bond
-- Updates segment tree aggregate
-- Available in Open and Closed states
+- Unlocks collateral, updates segment tree
+- Available while market is active
 
-### `claimFills(orderId[])`
-- Batch claim for gas efficiency
-- Computes fill amount per order based on stored `BatchResult`
-- Transfers outcome tokens or collateral via Vault
-- Deducts taker fee / applies maker rebate
-- Marks order as claimed for that batch
+### `registerMarket(minLots, batchInterval, expiryTime)`
+- OPERATOR_ROLE only (MarketFactory)
+- Creates new market with given parameters
 
-### `pruneExpiredOrders(orderId[])`
-- Permissionless — anyone can call
-- Removes expired orders, returns collateral to owner
-- Pays pruner bounty from order bond
-- Updates segment tree aggregates
+## Access Control
+
+- **OPERATOR_ROLE:** BatchAuction (for `reduceOrderLots`, `updateTreeVolume`, `advanceBatch`) and MarketFactory (for `registerMarket`, `deactivateMarket`)
