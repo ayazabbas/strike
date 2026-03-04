@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.25;
 
-/// @title ITypes
-/// @notice Shared types for the Strike CLOB protocol.
+// ITypes — Shared types for the Strike CLOB protocol.
+
+// Size of one lot in wei (0.001 BNB).
+uint256 constant LOT_SIZE = 1e15;
 
 /// @notice Side of an order in a binary outcome market.
 enum Side {

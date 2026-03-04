@@ -12,12 +12,6 @@ import "./Vault.sol";
 ///         Users burn winning outcome tokens 1:1 for collateral (BNB).
 contract Redemption is ReentrancyGuard {
     // -------------------------------------------------------------------------
-    // Constants
-    // -------------------------------------------------------------------------
-
-    uint256 public constant LOT_SIZE = 1e15; // must match OrderBook
-
-    // -------------------------------------------------------------------------
     // State
     // -------------------------------------------------------------------------
 
@@ -77,13 +71,11 @@ contract Redemption is ReentrancyGuard {
         // Burn winning outcome tokens
         outcomeToken.redeem(msg.sender, orderBookMarketId, amount, outcomeYes);
 
-        // Transfer collateral: 1 token = 1 wei of collateral (LOT_SIZE basis)
-        // Collateral per lot at 100% = LOT_SIZE
-        // Each outcome token represents 1 lot worth of collateral = LOT_SIZE
+        // Each outcome token represents 1 lot = LOT_SIZE worth of collateral
         uint256 payout = amount * LOT_SIZE;
 
-        // Unlock from vault and send to user
-        vault.unlock(msg.sender, payout);
+        // Pay out from the market's redemption pool
+        vault.redeemFromPool(orderBookMarketId, msg.sender, payout);
 
         emit Redeemed(factoryMarketId, msg.sender, amount, outcomeYes);
     }

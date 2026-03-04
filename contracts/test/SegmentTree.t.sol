@@ -234,14 +234,10 @@ contract SegmentTreeTest is Test {
         h.update(false, 30, 300);
 
         uint256 ct = h.findClearingTick();
-        // p=30: cumBid = 100, cumAsk = 300 → no (100 < 300)
-        // p=29: cumBid = 100, cumAsk = 0 → yes (100 >= 0)
-        // ...
-        // p=70: cumBid = 100, cumAsk = 300 → no
-        // p=69: cumBid = 100, cumAsk = 300 → no
-        // cumAsk(p) includes all asks at ticks <= p. asks at 30, so cumAsk(29) = 0.
-        // Highest p where cumBid >= cumAsk: p=29 (cumBid=100, cumAsk=0) → yes. p=30: 100<300 → no.
-        assertEq(ct, 29);
+        // p=30: cumBid = 100, cumAsk = 300 → min(100,300) = 100 matched
+        // p=29: cumBid = 100, cumAsk = 0   → min(100,0)   = 0 matched
+        // Clearing tick = 30 (maximizes matched volume)
+        assertEq(ct, 30);
     }
 
     function test_FindClearingTick_MultiTick() public {

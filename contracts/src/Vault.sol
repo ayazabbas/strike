@@ -34,6 +34,9 @@ contract Vault is ReentrancyGuard, AccessControl {
     mapping(address => uint256) public balance;
     mapping(address => uint256) public locked;
 
+    /// @notice marketId => BNB held in escrow for outcome token redemption
+    mapping(uint256 => uint256) public marketPool;
+
     bool public emergencyMode;
     uint256 public emergencyActivatedAt;
 
@@ -46,6 +49,8 @@ contract Vault is ReentrancyGuard, AccessControl {
     event Locked(address indexed user, uint256 amount);
     event Unlocked(address indexed user, uint256 amount);
     event CollateralTransferred(address indexed from, address indexed to, uint256 amount);
+    event AddedToMarketPool(uint256 indexed marketId, uint256 amount);
+    event RedeemedFromPool(uint256 indexed marketId, address indexed to, uint256 amount);
     event EmergencyModeActivated(uint256 timestamp);
     event EmergencyWithdrawn(address indexed user, uint256 amount);
 
@@ -121,6 +126,41 @@ contract Vault is ReentrancyGuard, AccessControl {
         balance[to] += amount;
 
         emit CollateralTransferred(from, to, amount);
+    }
+
+    // -------------------------------------------------------------------------
+    // Market pool (outcome token redemption escrow)
+    // -------------------------------------------------------------------------
+
+    /// @notice Move locked collateral from a user into a market's redemption pool.
+    /// @param user     The user whose locked funds to debit.
+    /// @param marketId Market pool to credit.
+    /// @param amount   Amount in wei.
+    function addToMarketPool(address user, uint256 marketId, uint256 amount) external onlyRole(PROTOCOL_ROLE) {
+        require(amount > 0, "Vault: zero amount");
+        require(locked[user] >= amount, "Vault: insufficient locked balance");
+
+        locked[user] -= amount;
+        balance[user] -= amount;
+        marketPool[marketId] += amount;
+
+        emit AddedToMarketPool(marketId, amount);
+    }
+
+    /// @notice Pay out from a market's redemption pool to a user.
+    /// @param marketId Market pool to debit.
+    /// @param to       Recipient address.
+    /// @param amount   Amount in wei.
+    function redeemFromPool(uint256 marketId, address to, uint256 amount) external onlyRole(PROTOCOL_ROLE) nonReentrant {
+        require(amount > 0, "Vault: zero amount");
+        require(marketPool[marketId] >= amount, "Vault: insufficient market pool");
+
+        marketPool[marketId] -= amount;
+
+        (bool ok,) = to.call{value: amount}("");
+        require(ok, "Vault: transfer failed");
+
+        emit RedeemedFromPool(marketId, to, amount);
     }
 
     // -------------------------------------------------------------------------

@@ -48,7 +48,7 @@ contract IntegrationTest is Test {
         token = new OutcomeToken(admin);
         feeModel = new FeeModel(admin, 30, 10, 0.001 ether, 0.0001 ether, feeCollector);
         book = new OrderBook(admin, address(vault));
-        auction = new BatchAuction(admin, address(book), address(vault), address(feeModel));
+        auction = new BatchAuction(admin, address(book), address(vault), address(feeModel), address(token));
         mockLazer = new MockPythLazer(1); // 1 wei fee
 
         factory = new MarketFactory(admin, address(book), address(token), feeCollector);
@@ -62,7 +62,9 @@ contract IntegrationTest is Test {
         vault.grantRole(vault.PROTOCOL_ROLE(), address(book));
         vault.grantRole(vault.PROTOCOL_ROLE(), address(auction));
         vault.grantRole(vault.PROTOCOL_ROLE(), address(redemption));
+        token.grantRole(token.MINTER_ROLE(), address(auction));
         token.grantRole(token.MINTER_ROLE(), address(redemption));
+        // PythResolver needs ADMIN_ROLE to call setResolving/setResolved/payResolverBounty
         factory.grantRole(factory.ADMIN_ROLE(), address(resolver));
 
         vm.stopPrank();
@@ -404,6 +406,9 @@ contract IntegrationTest is Test {
         auction.claimFills(bid1);
         auction.claimFills(ask1);
 
+        // Advance past batch interval (60s) before next clear
+        vm.warp(block.timestamp + 60);
+
         // Batch 2 — new orders
         uint256 bid2 = _depositAndPlace(user1, obId, Side.Bid, 55, 5);
         uint256 ask2 = _depositAndPlace(user3, obId, Side.Ask, 45, 5);
@@ -414,5 +419,100 @@ contract IntegrationTest is Test {
         assertGt(r2.matchedLots, 0);
         auction.claimFills(bid2);
         auction.claimFills(ask2);
+    }
+
+    // =========================================================================
+    // PythResolver role — resolution fails without ADMIN_ROLE
+    // =========================================================================
+
+    function test_PythResolver_FailsWithoutAdminRole() public {
+        // Deploy a resolver without granting ADMIN_ROLE on factory
+        PythResolver badResolver = new PythResolver(address(mockLazer), address(factory));
+        // test contract is badResolver's admin (msg.sender in constructor)
+        badResolver.setLazerFeedId(PRICE_ID, FEED_ID);
+
+        uint256 fmId = _createMarket(3600);
+        (, uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
+        vm.warp(expiry);
+        factory.closeMarket(fmId);
+
+        uint64 publishTime = uint64(expiry + 10);
+        bytes memory data = _createLazerUpdate(50000_00000000, 100_00000000, publishTime);
+
+        // Should revert because badResolver doesn't have ADMIN_ROLE on factory
+        vm.expectRevert();
+        vm.prank(user1);
+        badResolver.resolveMarket{value: 1}(fmId, data);
+    }
+
+    // =========================================================================
+    // Redemption e2e: create → trade → clear → claim → resolve → redeem
+    // =========================================================================
+
+    function test_Redemption_E2E() public {
+        // Use a zero-fee model for clean redemption math
+        vm.startPrank(admin);
+        FeeModel zeroFee = new FeeModel(admin, 0, 0, 0.001 ether, 0.0001 ether, feeCollector);
+        BatchAuction zeroAuction = new BatchAuction(admin, address(book), address(vault), address(zeroFee), address(token));
+        book.grantRole(book.OPERATOR_ROLE(), address(zeroAuction));
+        vault.grantRole(vault.PROTOCOL_ROLE(), address(zeroAuction));
+        token.grantRole(token.MINTER_ROLE(), address(zeroAuction));
+        vm.stopPrank();
+
+        // 1. Create market
+        uint256 fmId = _createMarket(3600);
+        (, uint256 expiry, , , , , , uint256 obId) = factory.marketMeta(fmId);
+
+        // 2. Place matching orders at tick 60
+        uint256 bidCollateral = (10 * LOT * 60) / 100;
+        uint256 askCollateral = (10 * LOT * 40) / 100;
+
+        vm.prank(user1);
+        vault.deposit{value: bidCollateral}();
+        vm.prank(user1);
+        uint256 bid1 = book.placeOrder(obId, Side.Bid, OrderType.GoodTilCancel, 60, 10);
+
+        vm.prank(user2);
+        vault.deposit{value: askCollateral}();
+        vm.prank(user2);
+        uint256 ask1 = book.placeOrder(obId, Side.Ask, OrderType.GoodTilCancel, 60, 10);
+
+        // 3. Clear batch
+        vm.prank(operator);
+        BatchResult memory result = zeroAuction.clearBatch(obId);
+        assertEq(result.matchedLots, 10);
+
+        // 4. Claim fills — tokens minted, collateral to pool
+        zeroAuction.claimFills(bid1);
+        zeroAuction.claimFills(ask1);
+
+        // With zero fees: pool = bidCollateral + askCollateral = 10 * LOT
+        assertEq(vault.marketPool(obId), 10 * LOT);
+
+        // user1 has 10 YES tokens, user2 has 10 NO tokens
+        assertEq(token.balanceOf(user1, token.yesTokenId(obId)), 10);
+        assertEq(token.balanceOf(user2, token.noTokenId(obId)), 10);
+
+        // 5. Close and resolve market (YES wins with positive price)
+        vm.warp(expiry);
+        factory.closeMarket(fmId);
+
+        uint64 publishTime = uint64(expiry + 10);
+        bytes memory updateData = _createLazerUpdate(50000_00000000, 100_00000000, publishTime);
+        vm.prank(user3);
+        resolver.resolveMarket{value: 1}(fmId, updateData);
+
+        vm.roll(block.number + 3);
+        resolver.finalizeResolution(fmId);
+        assertEq(uint256(factory.getMarketState(fmId)), uint256(MarketState.Resolved));
+
+        // 6. Redeem — user1 redeems 10 YES tokens for 10 * LOT_SIZE BNB
+        uint256 user1BalBefore = user1.balance;
+        vm.prank(user1);
+        redemption.redeem(fmId, 10);
+
+        uint256 expectedPayout = 10 * LOT;
+        assertEq(user1.balance - user1BalBefore, expectedPayout);
+        assertEq(vault.marketPool(obId), 0);
     }
 }

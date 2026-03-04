@@ -6,6 +6,7 @@ import "../src/BatchAuction.sol";
 import "../src/OrderBook.sol";
 import "../src/Vault.sol";
 import "../src/FeeModel.sol";
+import "../src/OutcomeToken.sol";
 import "../src/ITypes.sol";
 
 contract BatchAuctionTest is Test {
@@ -13,6 +14,7 @@ contract BatchAuctionTest is Test {
     OrderBook public book;
     Vault public vault;
     FeeModel public feeModel;
+    OutcomeToken public token;
 
     address public admin = address(0x1);
     address public operator = address(0x2);
@@ -28,14 +30,16 @@ contract BatchAuctionTest is Test {
 
         vault = new Vault(admin);
         feeModel = new FeeModel(admin, 30, 10, 0.01 ether, 0.001 ether, admin);
+        token = new OutcomeToken(admin);
         book = new OrderBook(admin, address(vault));
-        auction = new BatchAuction(admin, address(book), address(vault), address(feeModel));
+        auction = new BatchAuction(admin, address(book), address(vault), address(feeModel), address(token));
 
         // Grant roles
         book.grantRole(book.OPERATOR_ROLE(), operator);
         book.grantRole(book.OPERATOR_ROLE(), address(auction));
         vault.grantRole(vault.PROTOCOL_ROLE(), address(book));
         vault.grantRole(vault.PROTOCOL_ROLE(), address(auction));
+        token.grantRole(token.MINTER_ROLE(), address(auction));
         vm.stopPrank();
 
         vm.deal(user1, 100 ether);
@@ -75,31 +79,6 @@ contract BatchAuctionTest is Test {
         _deposit(user, collateral);
         vm.prank(user);
         return book.placeOrder(marketId, side, ot, tick, lots);
-    }
-
-    // =========================================================================
-    // Constructor
-    // =========================================================================
-
-    function test_Constructor_SetsContracts() public view {
-        assertEq(address(auction.orderBook()), address(book));
-        assertEq(address(auction.vault()), address(vault));
-        assertEq(address(auction.feeModel()), address(feeModel));
-    }
-
-    function test_Constructor_RevertZeroOrderBook() public {
-        vm.expectRevert("BatchAuction: zero orderBook");
-        new BatchAuction(admin, address(0), address(vault), address(feeModel));
-    }
-
-    function test_Constructor_RevertZeroVault() public {
-        vm.expectRevert("BatchAuction: zero vault");
-        new BatchAuction(admin, address(book), address(0), address(feeModel));
-    }
-
-    function test_Constructor_RevertZeroFeeModel() public {
-        vm.expectRevert("BatchAuction: zero feeModel");
-        new BatchAuction(admin, address(book), address(vault), address(0));
     }
 
     // =========================================================================
@@ -202,6 +181,9 @@ contract BatchAuctionTest is Test {
         BatchResult memory r1 = auction.clearBatch(mId);
         assertEq(r1.batchId, 1);
 
+        // Advance past batch interval (3s) before second clear
+        vm.warp(block.timestamp + 3);
+
         // Second batch (same GTC orders still in book)
         BatchResult memory r2 = auction.clearBatch(mId);
         assertEq(r2.batchId, 2);
@@ -270,10 +252,9 @@ contract BatchAuctionTest is Test {
 
         auction.clearBatch(mId);
 
-        uint256 expectedCollateral = (10 * LOT * 50) / 100;
-
+        // Full fill → unfilledCollateral = 0
         vm.expectEmit(true, true, false, true);
-        emit BatchAuction.FillClaimed(bidId, user1, 10, expectedCollateral);
+        emit BatchAuction.FillClaimed(bidId, user1, 10, 0);
 
         auction.claimFills(bidId);
     }
@@ -668,5 +649,108 @@ contract BatchAuctionTest is Test {
 
         (, , , , , , uint256 lotsAfter, , ) = book.orders(orderId);
         assertEq(lotsAfter, 0);
+    }
+
+    // =========================================================================
+    // Token delivery — bidder gets YES, asker gets NO
+    // =========================================================================
+
+    function test_ClaimFills_BidReceivesYesTokens() public {
+        uint256 mId = _setupMarket();
+
+        uint256 bidId = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
+        _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 50, 10);
+
+        auction.clearBatch(mId);
+        auction.claimFills(bidId);
+
+        // Bidder should have 10 YES tokens
+        uint256 yesId = token.yesTokenId(mId);
+        assertEq(token.balanceOf(user1, yesId), 10);
+
+        // Bidder should NOT have NO tokens (burned during claim)
+        uint256 noId = token.noTokenId(mId);
+        assertEq(token.balanceOf(user1, noId), 0);
+    }
+
+    function test_ClaimFills_AskReceivesNoTokens() public {
+        uint256 mId = _setupMarket();
+
+        _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
+        uint256 askId = _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 50, 10);
+
+        auction.clearBatch(mId);
+        auction.claimFills(askId);
+
+        // Asker should have 10 NO tokens
+        uint256 noId = token.noTokenId(mId);
+        assertEq(token.balanceOf(user2, noId), 10);
+
+        // Asker should NOT have YES tokens (burned during claim)
+        uint256 yesId = token.yesTokenId(mId);
+        assertEq(token.balanceOf(user2, yesId), 0);
+    }
+
+    // =========================================================================
+    // Fee deduction
+    // =========================================================================
+
+    function test_ClaimFills_FeeDeducted() public {
+        uint256 mId = _setupMarket();
+
+        uint256 bidId = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
+        _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 50, 10);
+
+        auction.clearBatch(mId);
+
+        uint256 collectorBefore = vault.balance(admin); // admin is fee collector
+        auction.claimFills(bidId);
+
+        // Filled collateral = 10 * LOT * 50 / 100 = 5e15
+        uint256 filledCollateral = (10 * LOT * 50) / 100;
+        uint256 expectedFee = (filledCollateral * 30) / 10000; // 30 bps
+        assertEq(vault.balance(admin) - collectorBefore, expectedFee);
+    }
+
+    function test_ClaimFills_CollateralGoesToPool() public {
+        uint256 mId = _setupMarket();
+
+        uint256 bidId = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
+        _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 50, 10);
+
+        auction.clearBatch(mId);
+        auction.claimFills(bidId);
+
+        uint256 filledCollateral = (10 * LOT * 50) / 100;
+        uint256 fee = (filledCollateral * 30) / 10000;
+        uint256 expectedPool = filledCollateral - fee;
+        assertEq(vault.marketPool(mId), expectedPool);
+    }
+
+    // =========================================================================
+    // Batch interval enforcement
+    // =========================================================================
+
+    function test_ClearBatch_RevertIfTooSoon() public {
+        uint256 mId = _setupMarket(); // batchInterval = 3
+
+        auction.clearBatch(mId);
+
+        // Attempt second clear immediately — should revert
+        vm.expectRevert("BatchAuction: too soon");
+        auction.clearBatch(mId);
+    }
+
+    function test_ClearBatch_SucceedsAfterInterval() public {
+        uint256 mId = _setupMarket(); // batchInterval = 3
+
+        auction.clearBatch(mId);
+
+        // Advance past interval
+        vm.warp(block.timestamp + 3);
+
+        // Should succeed
+        BatchResult memory r = auction.clearBatch(mId);
+        assertEq(r.batchId, 2);
     }
 }

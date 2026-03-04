@@ -22,7 +22,6 @@ contract OrderBook is AccessControl {
     // Constants
     // -------------------------------------------------------------------------
 
-    uint256 public constant LOT_SIZE = 1e15; // 0.001 BNB per lot
     uint256 public constant MIN_TICK = 1;
     uint256 public constant MAX_TICK = 99;
 

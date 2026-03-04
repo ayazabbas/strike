@@ -48,7 +48,7 @@ contract PythResolverTest is Test {
 
         resolver = new PythResolver(address(mockLazer), address(factory));
 
-        // Grant resolver ADMIN_ROLE on factory
+        // PythResolver needs ADMIN_ROLE to call setResolving/setResolved/payResolverBounty
         factory.grantRole(factory.ADMIN_ROLE(), address(resolver));
 
         // Map priceId to Lazer feedId (resolver admin is admin since it deployed the resolver)

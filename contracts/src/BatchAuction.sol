@@ -6,6 +6,7 @@ import "./ITypes.sol";
 import "./OrderBook.sol";
 import "./Vault.sol";
 import "./FeeModel.sol";
+import "./OutcomeToken.sol";
 
 /// @title BatchAuction
 /// @notice Implements Frequent Batch Auction clearing for the Strike CLOB.
@@ -22,12 +23,16 @@ contract BatchAuction is AccessControl {
     OrderBook public immutable orderBook;
     Vault public immutable vault;
     FeeModel public immutable feeModel;
+    OutcomeToken public immutable outcomeToken;
 
     /// @notice marketId => batchId => BatchResult
     mapping(uint256 => mapping(uint256 => BatchResult)) public batchResults;
 
     /// @notice orderId => true if fills have been claimed for this order
     mapping(uint256 => bool) public claimed;
+
+    /// @notice marketId => timestamp of last batch clear
+    mapping(uint256 => uint256) public lastClearTime;
 
     // -------------------------------------------------------------------------
     // Events
@@ -51,15 +56,17 @@ contract BatchAuction is AccessControl {
     // Constructor
     // -------------------------------------------------------------------------
 
-    constructor(address admin, address _orderBook, address _vault, address _feeModel) {
+    constructor(address admin, address _orderBook, address _vault, address _feeModel, address _outcomeToken) {
         require(_orderBook != address(0), "BatchAuction: zero orderBook");
         require(_vault != address(0), "BatchAuction: zero vault");
         require(_feeModel != address(0), "BatchAuction: zero feeModel");
+        require(_outcomeToken != address(0), "BatchAuction: zero outcomeToken");
 
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         orderBook = OrderBook(_orderBook);
         vault = Vault(payable(_vault));
         feeModel = FeeModel(_feeModel);
+        outcomeToken = OutcomeToken(_outcomeToken);
     }
 
     // -------------------------------------------------------------------------
@@ -68,10 +75,16 @@ contract BatchAuction is AccessControl {
 
     /// @notice Clear the current batch for a market.
     function clearBatch(uint256 marketId) external returns (BatchResult memory result) {
-        (uint256 id, bool active, bool halted, uint256 currentBatchId, , , ) = orderBook.markets(marketId);
+        (uint256 id, bool active, bool halted, uint256 currentBatchId, , uint256 batchInterval, ) = orderBook.markets(marketId);
         require(id != 0, "BatchAuction: market not found");
         require(active, "BatchAuction: market not active");
         require(!halted, "BatchAuction: market halted");
+
+        // Enforce batch interval (skip for first clear)
+        uint256 lastClear = lastClearTime[marketId];
+        if (lastClear != 0) {
+            require(block.timestamp >= lastClear + batchInterval, "BatchAuction: too soon");
+        }
 
         uint256 clearingTick = orderBook.findClearingTick(marketId);
 
@@ -85,22 +98,6 @@ contract BatchAuction is AccessControl {
             matchedLots = totalBidLots < totalAskLots ? totalBidLots : totalAskLots;
         }
 
-        // The segment tree finds the highest tick where cumBid >= cumAsk.
-        // Check tick+1: if more volume matches there (asks exceed bids at that tick),
-        // use it as the clearing tick instead.
-        if (clearingTick < 99) {
-            uint256 nextTick = clearingTick + 1;
-            uint256 nextBid = orderBook.cumulativeBidVolume(marketId, nextTick);
-            uint256 nextAsk = orderBook.cumulativeAskVolume(marketId, nextTick);
-            uint256 nextMatched = nextBid < nextAsk ? nextBid : nextAsk;
-            if (nextMatched > matchedLots) {
-                clearingTick = nextTick;
-                totalBidLots = nextBid;
-                totalAskLots = nextAsk;
-                matchedLots = nextMatched;
-            }
-        }
-
         result = BatchResult({
             marketId: marketId,
             batchId: currentBatchId,
@@ -112,6 +109,7 @@ contract BatchAuction is AccessControl {
         });
 
         batchResults[marketId][currentBatchId] = result;
+        lastClearTime[marketId] = block.timestamp;
         orderBook.advanceBatch(marketId);
 
         emit BatchCleared(marketId, currentBatchId, clearingTick, matchedLots);
@@ -122,11 +120,11 @@ contract BatchAuction is AccessControl {
     // -------------------------------------------------------------------------
 
     /// @dev Calculate collateral for lots at a given tick and side.
-    function _collateral(uint256 lots, uint256 tick, Side side) internal view returns (uint256) {
+    function _collateral(uint256 lots, uint256 tick, Side side) internal pure returns (uint256) {
         if (side == Side.Bid) {
-            return (lots * orderBook.LOT_SIZE() * tick) / 100;
+            return (lots * LOT_SIZE * tick) / 100;
         } else {
-            return (lots * orderBook.LOT_SIZE() * (100 - tick)) / 100;
+            return (lots * LOT_SIZE * (100 - tick)) / 100;
         }
     }
 
@@ -139,6 +137,14 @@ contract BatchAuction is AccessControl {
         uint256 tick;
         uint256 lots;
         uint256 batchId;
+    }
+
+    /// @dev Settlement amounts computed during claimFills.
+    struct SettleAmounts {
+        uint256 filledLots;
+        uint256 unfilledCollateral;
+        uint256 toPool;
+        uint256 protocolFee;
     }
 
     function _readOrder(uint256 orderId) internal view returns (OrderInfo memory info) {
@@ -156,13 +162,28 @@ contract BatchAuction is AccessControl {
         info = OrderInfo(marketId, owner, side, orderType, tick, lots, batchId);
     }
 
+    /// @dev Compute settlement amounts for an order.
+    function _settleAmounts(OrderInfo memory o, BatchResult storage result)
+        internal
+        view
+        returns (SettleAmounts memory s)
+    {
+        s.filledLots = _calcFilledLots(o.lots, o.side, result);
+        uint256 unfilledLots = o.lots - s.filledLots;
+        s.unfilledCollateral = _collateral(unfilledLots, o.tick, o.side);
+        uint256 filledCollateral = _collateral(o.lots, o.tick, o.side) - s.unfilledCollateral;
+        s.protocolFee = feeModel.calculateTakerFee(filledCollateral);
+        s.toPool = filledCollateral - s.protocolFee;
+    }
+
     // -------------------------------------------------------------------------
     // Claim fills (pro-rata settlement)
     // -------------------------------------------------------------------------
 
     /// @notice Claim fills for an order after its batch has been cleared.
     ///         Pro-rata: if side is oversubscribed, each order gets a proportional fill.
-    ///         All collateral for the order is unlocked (filled + unfilled).
+    ///         Filled collateral goes to the market pool; unfilled is returned to owner.
+    ///         Bidders receive YES outcome tokens; askers receive NO outcome tokens.
     /// @param orderId The order to claim fills for.
     function claimFills(uint256 orderId) external {
         require(!claimed[orderId], "BatchAuction: already claimed");
@@ -173,28 +194,41 @@ contract BatchAuction is AccessControl {
         BatchResult storage result = batchResults[o.marketId][o.batchId];
         require(result.timestamp != 0, "BatchAuction: batch not cleared");
 
-        uint256 clearingTick = result.clearingTick;
-
         // Check if order participates in the clearing
-        bool participates = _orderParticipates(o.side, o.tick, clearingTick);
-
-        if (!participates || o.lots == 0) {
+        if (!_orderParticipates(o.side, o.tick, result.clearingTick) || o.lots == 0) {
             emit FillClaimed(orderId, o.owner, 0, 0);
             return;
         }
 
-        // Calculate pro-rata fill
-        uint256 filledLots = _calcFilledLots(o.lots, o.side, result);
+        SettleAmounts memory s = _settleAmounts(o, result);
 
-        // Unlock ALL collateral that was locked for this order
-        uint256 totalLockedCollateral = _collateral(o.lots, o.tick, o.side);
-
-        // Remove entire order from the book (filled + unfilled)
+        // Remove entire order from the book
         orderBook.reduceOrderLots(orderId, o.lots);
         orderBook.updateTreeVolume(o.marketId, o.side, o.tick, -int256(o.lots));
-        vault.unlock(o.owner, totalLockedCollateral);
 
-        emit FillClaimed(orderId, o.owner, filledLots, totalLockedCollateral);
+        // Move filled collateral to market pool (minus fee)
+        if (s.toPool > 0) {
+            vault.addToMarketPool(o.owner, o.marketId, s.toPool);
+        }
+
+        // Send protocol fee to fee collector
+        if (s.protocolFee > 0) {
+            vault.transferCollateral(o.owner, feeModel.protocolFeeCollector(), s.protocolFee);
+        }
+
+        // Return unfilled collateral to owner
+        if (s.unfilledCollateral > 0) {
+            vault.unlock(o.owner, s.unfilledCollateral);
+        }
+
+        // Mint outcome tokens: bid → YES, ask → NO
+        if (s.filledLots > 0) {
+            outcomeToken.mintPair(o.owner, o.marketId, s.filledLots);
+            // Burn the side the user doesn't want: bidder burns NO, asker burns YES
+            outcomeToken.redeem(o.owner, o.marketId, s.filledLots, o.side != Side.Bid);
+        }
+
+        emit FillClaimed(orderId, o.owner, s.filledLots, s.unfilledCollateral);
     }
 
     function _orderParticipates(Side side, uint256 tick, uint256 clearingTick) internal pure returns (bool) {

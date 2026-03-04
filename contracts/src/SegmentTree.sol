@@ -149,12 +149,34 @@ library SegmentTree {
             uint256 cumAsk = prefixSum(askTree, mid);
 
             if (cumBid >= cumAsk) {
-                // Crossing holds at mid — try higher.
                 clearingTick = mid;
                 lo = mid + 1;
             } else {
-                // No crossing at mid — try lower.
                 hi = mid - 1;
+            }
+        }
+
+        // The binary search finds the highest tick where cumBid >= cumAsk.
+        // But max matched volume min(cumBid, cumAsk) may be at clearingTick+1
+        // where cumAsk > cumBid. Check both and pick the tick with more matches.
+        if (clearingTick < MAX_TICK) {
+            uint256 nextTick = clearingTick + 1;
+
+            uint256 matchCur;
+            if (clearingTick > 0) {
+                uint256 bp = clearingTick > 1 ? prefixSum(bidTree, clearingTick - 1) : 0;
+                uint256 cb = totalBids - bp;
+                uint256 ca = prefixSum(askTree, clearingTick);
+                matchCur = cb < ca ? cb : ca;
+            }
+
+            uint256 bpN = prefixSum(bidTree, nextTick - 1);
+            uint256 cbN = totalBids >= bpN ? totalBids - bpN : 0;
+            uint256 caN = prefixSum(askTree, nextTick);
+            uint256 matchNext = cbN < caN ? cbN : caN;
+
+            if (matchNext > matchCur) {
+                clearingTick = nextTick;
             }
         }
     }
