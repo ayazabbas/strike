@@ -101,6 +101,48 @@ Typical workflow:
 | grammY | Telegram bot framework |
 | viem | Blockchain interaction |
 
+## Phase 3: CLOB Integration & Hardening (Feb–Mar 2026)
+
+### What was built
+
+**Phases 1A–1C (Core CLOB Contracts):**
+- OutcomeToken (ERC-1155), SegmentTree, Vault, FeeModel, OrderBook, BatchAuction, MarketFactory, PythResolver
+- Full order lifecycle: place → batch clear → claim fills → resolve → redeem
+- 130+ tests across all contract suites
+
+**Gas Optimisation:**
+- Struct packing: Order 7→2 storage slots, BatchResult 7→2 slots, Market 6→1 slot
+- `settleFill` consolidation: single cross-contract call to Vault replaces separate `unlock` + `lockToPool` + `transferFee`
+- `mintSingle`: mint only the outcome token the user needs (bidder→YES, asker→NO) instead of `mintPair` + `redeem`
+- Removed `bidOrderIds`/`askOrderIds` on-chain arrays — keepers query events via indexer, no need for per-tick on-chain enumeration
+
+**Security Hardening:**
+- Reentrancy guards (`nonReentrant`) on `placeOrder`, `cancelOrder`, `cancelMarket`, `finalizeResolution`
+- CEI pattern fix in `claimFills`: state mutations (mark claimed, reduce lots, update tree) before external calls (vault.settleFill, outcomeToken.mintSingle)
+- Overflow checks on packed struct downcasts (uint64, uint40, uint32, uint8)
+- `_orderParticipates` check in `pruneExpiredOrder` prevents settlement bypass
+
+**Devnet Integration (strike-infra, Rust):**
+- Docker-compose stack: anvil + PostgreSQL + batch-keeper + resolution-keeper + pruning-keeper + indexer
+- Full e2e test suite: market creation, deposit, order placement, batch clearing, claim fills, outcome token verification
+- Partial fill e2e test: pro-rata path where bid volume ≠ ask volume
+
+### Key Architectural Decisions
+
+| Decision | Choice | Rationale |
+|----------|--------|-----------|
+| Struct packing | Manual `uint8`/`uint32`/`uint40`/`uint64` sizing | Solidity compiler doesn't auto-pack; manual layout saved 5+ storage slots per order |
+| `settleFill` consolidation | Single vault call with all params | Each cross-contract call costs ~2.6k gas overhead; consolidation saves 3 calls |
+| `mintSingle` vs `mintPair+redeem` | Mint only needed token | Bidder only needs YES, asker only needs NO — halves mint gas |
+| Remove order ID arrays | Keepers use event indexer | On-chain `push`/`pop` arrays cost 20k+ gas per order; off-chain indexer is free |
+| Pyth Lazer (Pro) | Not standard Pyth SDK | Sub-second price feeds, `uint32` feed IDs, lower latency for resolution |
+
+### Test Results
+
+297 tests passing across 9 test suites after all changes. Gas target: `placeOrder` at 288k (target 250k — deferred optimisation).
+
+---
+
 ## Key Moments Where AI Excelled
 
 1. **Contract test coverage** — Claude Code wrote 51 comprehensive tests including edge cases (one-sided markets, exact price ties, emergency cancellation) without being asked for specific scenarios
