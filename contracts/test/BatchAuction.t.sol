@@ -753,4 +753,187 @@ contract BatchAuctionTest is Test {
         BatchResult memory r = auction.clearBatch(mId);
         assertEq(r.batchId, 2);
     }
+
+    // =========================================================================
+    // _orderParticipates — bid/ask logic (tested via claimFills)
+    // =========================================================================
+
+    function test_Participates_BidAtClearingTick() public {
+        uint256 mId = _setupMarket();
+
+        // Clearing tick will be 50
+        uint256 bidId = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 5);
+        _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 50, 5);
+
+        auction.clearBatch(mId);
+        auction.claimFills(bidId);
+
+        // Bid at clearing tick participates — should get fill
+        uint256 yesId = token.yesTokenId(mId);
+        assertEq(token.balanceOf(user1, yesId), 5, "bid at clearing tick should fill");
+    }
+
+    function test_Participates_BidAboveClearingTick() public {
+        uint256 mId = _setupMarket();
+
+        // Bid at 60, ask at 50 → clearing at 50 (or somewhere ≤60)
+        uint256 bidId = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 60, 5);
+        _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 50, 5);
+
+        BatchResult memory r = auction.clearBatch(mId);
+        assertLe(r.clearingTick, 60, "clearing tick should be <= 60");
+
+        auction.claimFills(bidId);
+
+        // Bid above clearing tick participates
+        uint256 yesId = token.yesTokenId(mId);
+        assertEq(token.balanceOf(user1, yesId), 5, "bid above clearing tick should fill");
+    }
+
+    function test_Participates_BidBelowClearingTick() public {
+        uint256 mId = _setupMarket();
+
+        // Create crossing at tick 50, place a bid at 30 (below clearing)
+        _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 5);
+        _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 50, 5);
+        uint256 lowBidId = _placeOrder(user3, mId, Side.Bid, OrderType.GoodTilBatch, 30, 5);
+
+        BatchResult memory r = auction.clearBatch(mId);
+        assertEq(r.clearingTick, 50);
+
+        auction.claimFills(lowBidId);
+
+        // Bid below clearing tick does NOT participate — 0 tokens
+        uint256 yesId = token.yesTokenId(mId);
+        assertEq(token.balanceOf(user3, yesId), 0, "bid below clearing tick should NOT fill");
+    }
+
+    function test_Participates_AskAtClearingTick() public {
+        uint256 mId = _setupMarket();
+
+        _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 5);
+        uint256 askId = _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 50, 5);
+
+        auction.clearBatch(mId);
+        auction.claimFills(askId);
+
+        // Ask at clearing tick participates
+        uint256 noId = token.noTokenId(mId);
+        assertEq(token.balanceOf(user2, noId), 5, "ask at clearing tick should fill");
+    }
+
+    function test_Participates_AskBelowClearingTick() public {
+        uint256 mId = _setupMarket();
+
+        // Bid at 50, ask at 40 → clearing at some tick in [40,50]; ask at 40 is below or at clearing
+        uint256 askId = _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 40, 5);
+        _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 5);
+
+        BatchResult memory r = auction.clearBatch(mId);
+        assertGe(r.clearingTick, 40, "clearing should be >= ask tick");
+
+        auction.claimFills(askId);
+
+        // Ask below clearing tick participates
+        uint256 noId = token.noTokenId(mId);
+        assertEq(token.balanceOf(user2, noId), 5, "ask below clearing tick should fill");
+    }
+
+    function test_Participates_AskAboveClearingTick() public {
+        uint256 mId = _setupMarket();
+
+        // Create crossing at tick 50, place an ask at 70 (above clearing)
+        _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 5);
+        _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 50, 5);
+        uint256 highAskId = _placeOrder(user3, mId, Side.Ask, OrderType.GoodTilBatch, 70, 5);
+
+        BatchResult memory r = auction.clearBatch(mId);
+        assertEq(r.clearingTick, 50);
+
+        auction.claimFills(highAskId);
+
+        // Ask above clearing tick does NOT participate — 0 tokens
+        uint256 noId = token.noTokenId(mId);
+        assertEq(token.balanceOf(user3, noId), 0, "ask above clearing tick should NOT fill");
+    }
+
+    function test_Participates_NoCross_ClearingTickZero() public {
+        uint256 mId = _setupMarket();
+
+        // Only bids, no asks → clearingTick = 0
+        uint256 bidId = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 5);
+
+        BatchResult memory r = auction.clearBatch(mId);
+        assertEq(r.clearingTick, 0, "one-sided book should have clearingTick = 0");
+        assertEq(r.matchedLots, 0);
+
+        // Bid gets 0 fill when clearingTick == 0
+        auction.claimFills(bidId);
+
+        uint256 yesId = token.yesTokenId(mId);
+        assertEq(token.balanceOf(user1, yesId), 0, "bid should not fill when clearingTick = 0");
+    }
+
+    function test_Participates_NoCross_NeitherSideParticipates() public {
+        uint256 mId = _setupMarket();
+
+        // Bid far below ask — segment tree may find a non-zero clearing tick
+        // but neither order participates because bid < clearing and ask > clearing
+        uint256 bidId = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 30, 5);
+        uint256 askId = _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 70, 5);
+
+        BatchResult memory r = auction.clearBatch(mId);
+        // matchedLots should be 0 regardless of clearing tick
+        assertEq(r.matchedLots, 0, "no real cross means 0 matched lots");
+
+        // Neither side gets tokens
+        auction.claimFills(bidId);
+        auction.claimFills(askId);
+
+        uint256 yesId = token.yesTokenId(mId);
+        uint256 noId = token.noTokenId(mId);
+        assertEq(token.balanceOf(user1, yesId), 0, "bid should not fill");
+        assertEq(token.balanceOf(user2, noId), 0, "ask should not fill");
+    }
+
+    // =========================================================================
+    // pruneExpiredOrder — participation-dependent pruning
+    // =========================================================================
+
+    function test_PruneExpired_AskBelowClearing_RequiresClaimFirst() public {
+        uint256 mId = _setupMarket();
+
+        // Ask at tick 40, bid at tick 50 → clearing at some tick >= 40
+        // Ask participates (tick <= clearingTick)
+        uint256 askId = _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 40, 5);
+        _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 5);
+
+        BatchResult memory r = auction.clearBatch(mId);
+        assertGe(r.clearingTick, 40, "clearing tick should be >= 40");
+
+        // Try to prune without claiming — should revert because the ask participated
+        vm.expectRevert("BatchAuction: claim fills first");
+        vm.prank(pruner);
+        auction.pruneExpiredOrder(askId);
+    }
+
+    function test_PruneExpired_AskAboveClearing_PrunesDirectly() public {
+        uint256 mId = _setupMarket();
+
+        // Ask at tick 70 (above clearing of 50), does NOT participate
+        uint256 highAskId = _placeOrder(user3, mId, Side.Ask, OrderType.GoodTilBatch, 70, 5);
+        _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 5);
+        _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 50, 5);
+
+        BatchResult memory r = auction.clearBatch(mId);
+        assertEq(r.clearingTick, 50);
+
+        // High ask didn't participate — can be pruned directly without claiming
+        vm.prank(pruner);
+        auction.pruneExpiredOrder(highAskId);
+
+        (, , , , uint64 lots, , , , ) = book.orders(highAskId);
+        assertEq(lots, 0, "non-participating ask should be pruned");
+        assertEq(vault.locked(user3), 0, "collateral should be unlocked");
+    }
 }
