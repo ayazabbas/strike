@@ -211,7 +211,7 @@ Market factory, Pyth integration, state machine, and full protocol tests.
 
 ---
 
-## Phase 2: Keeper & Indexer Infrastructure
+## Phase 2: Keeper & Indexer Infrastructure ✅ COMPLETE
 
 > **Built in [`strike-infra`](https://github.com/ayazabbas/strike-infra) (private repo) — all server code written in Rust**
 
@@ -223,19 +223,10 @@ See the strike-infra repo for implementation details.
 
 ---
 
-## Phase 3: Web Frontend
+## Phase 3: Integration, Hardening & Deployment
 
-> **Built in [`strike-frontend`](https://github.com/ayazabbas/strike-frontend) (private repo)**
-
-React/Next.js trading interface with real-time orderbook, order management, portfolio tracking, and mobile optimization.
-
-See the strike-frontend repo for implementation details.
-
----
-
-## Phase 4: Integration, Hardening & Deployment
-
-> **Cross-repo integration phase.** Contract hardening and gas optimization happen here in the main repo. End-to-end integration, frontend deployment, and keeper deployment are coordinated across all three repos (`strike`, `strike-infra`, `strike-frontend`).
+> **Moved before frontend** — validate everything end-to-end on testnet, find and fix bugs in contracts + infra, before building the frontend on top of a working backend.
+> Contract hardening and gas optimization in the main `strike` repo. Keeper + indexer deployment in `strike-infra`. Frontend deployment deferred to Phase 4.
 
 ### Tasks
 
@@ -299,3 +290,23 @@ See the strike-frontend repo for implementation details.
    - Final gas benchmark table
    - Complete project structure with all directories
    - Updated roadmap reflecting CLOB completion
+
+---
+
+## Phase 4: Web Frontend
+
+> **Built in [`strike-frontend`](https://github.com/ayazabbas/strike-frontend) (private repo)**
+> Built after Phase 3 testnet validation — the backend is proven to work before we build UI on top of it.
+
+React/Next.js trading interface with real-time orderbook, order management, portfolio tracking, and mobile optimization. Connects to the live indexer API and contracts deployed in Phase 3.
+
+### Tasks
+
+1. **Trading UI** — real-time orderbook display (bids/asks by tick), order placement form, portfolio view
+2. **Wallet integration** — wagmi/viem + MetaMask/WalletConnect, BNB deposit/withdraw flows
+3. **WebSocket live updates** — subscribe to indexer WS, update orderbook + fills in real time
+4. **Market browser** — list active/closed/resolved markets, market detail page with chart
+5. **Position management** — open orders, fill history, outcome token balances, redeem winning tokens
+6. **Mobile optimization** — responsive layout, touch-friendly order entry
+7. **Telegram bot update** — place limit orders via inline buttons, orderbook summary, link to frontend
+8. **Deploy** — Vercel or self-hosted, connect to testnet then mainnet
