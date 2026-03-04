@@ -194,7 +194,7 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
     }
 
     /// @notice Cancel a market (no resolution within 24h of expiry).
-    function cancelMarket(uint256 factoryMarketId) external {
+    function cancelMarket(uint256 factoryMarketId) external nonReentrant {
         MarketMeta storage meta = marketMeta[factoryMarketId];
         require(meta.creator != address(0), "MarketFactory: market not found");
         require(

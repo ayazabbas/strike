@@ -98,6 +98,9 @@ contract BatchAuction is AccessControl {
             matchedLots = totalBidLots < totalAskLots ? totalBidLots : totalAskLots;
         }
 
+        require(totalBidLots <= type(uint64).max, "BatchAuction: totalBidLots overflow");
+        require(totalAskLots <= type(uint64).max, "BatchAuction: totalAskLots overflow");
+
         result = BatchResult({
             marketId: uint32(marketId),
             batchId: currentBatchId,
@@ -248,10 +251,18 @@ contract BatchAuction is AccessControl {
         (, , , uint32 currentBatchId, , , ) = orderBook.markets(o.marketId);
         require(currentBatchId > o.batchId, "BatchAuction: batch not yet advanced");
 
-        require(
-            claimed[orderId] || batchResults[o.marketId][o.batchId].timestamp != 0,
-            "BatchAuction: batch not cleared"
-        );
+        // Batch must have been cleared
+        BatchResult memory result = batchResults[o.marketId][o.batchId];
+        require(result.timestamp != 0, "BatchAuction: batch not cleared");
+
+        // If the order participated in clearing, it must be claimed first
+        // to ensure filled collateral flows to market pool (prevents settlement bypass)
+        if (_orderParticipates(o.side, o.tick, result.clearingTick)) {
+            require(claimed[orderId], "BatchAuction: claim fills first");
+        }
+
+        // Mark as claimed to prevent any future claimFills attempt
+        claimed[orderId] = true;
 
         uint256 collateral = _collateral(o.lots, o.tick, o.side);
 

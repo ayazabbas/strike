@@ -2,6 +2,7 @@
 pragma solidity ^0.8.25;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./ITypes.sol";
 import "./SegmentTree.sol";
 import "./Vault.sol";
@@ -13,7 +14,7 @@ import "./Vault.sol";
 ///         on placement and unlocked on cancel.
 ///
 ///         Orders feed into BatchAuction for periodic FBA clearing.
-contract OrderBook is AccessControl {
+contract OrderBook is AccessControl, ReentrancyGuard {
     using SegmentTree for SegmentTree.Tree;
 
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
@@ -146,7 +147,7 @@ contract OrderBook is AccessControl {
         OrderType orderType,
         uint256 tick,
         uint256 lots
-    ) external returns (uint256 orderId) {
+    ) external nonReentrant returns (uint256 orderId) {
         Market storage m = markets[marketId];
         require(m.active, "OrderBook: market not active");
         require(!m.halted, "OrderBook: market halted");
@@ -155,6 +156,7 @@ contract OrderBook is AccessControl {
         require(lots > 0, "OrderBook: zero lots");
         require(lots >= m.minLots, "OrderBook: below min lots");
         require(lots <= type(uint64).max, "OrderBook: lots overflow");
+        require(marketId <= type(uint32).max, "OrderBook: marketId overflow");
 
         // Calculate collateral required:
         // Bid: pay tick/100 per lot → collateral = lots * LOT_SIZE * tick / 100
@@ -166,10 +168,7 @@ contract OrderBook is AccessControl {
             collateral = (lots * LOT_SIZE * (100 - tick)) / 100;
         }
 
-        // Lock collateral in vault
-        vault.lock(msg.sender, collateral);
-
-        // Create order (packed into 2 storage slots)
+        // Create order (packed into 2 storage slots) — effects before interaction (CEI)
         uint64 oid = nextOrderId++;
         orderId = oid;
         orders[orderId] = Order({
@@ -191,6 +190,9 @@ contract OrderBook is AccessControl {
             askTrees[marketId].update(tick, int256(lots));
         }
 
+        // Lock collateral in vault — interaction last (CEI)
+        vault.lock(msg.sender, collateral);
+
         emit OrderPlaced(orderId, marketId, msg.sender, side, tick, lots, m.currentBatchId);
     }
 
@@ -200,7 +202,7 @@ contract OrderBook is AccessControl {
 
     /// @notice Cancel an open order. Unlocks collateral in the vault.
     /// @param orderId The order to cancel.
-    function cancelOrder(uint256 orderId) external {
+    function cancelOrder(uint256 orderId) external nonReentrant {
         Order storage o = orders[orderId];
         require(o.owner == msg.sender, "OrderBook: not owner");
         require(o.lots > 0, "OrderBook: already cancelled/filled");
