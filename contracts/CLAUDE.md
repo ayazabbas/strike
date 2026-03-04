@@ -7,7 +7,7 @@ Binary outcome prediction market protocol on BNB Chain. Users trade YES/NO outco
 ## Key Design Decisions
 
 - **Ask collateral model (Option A):** Askers lock BNB, not outcome tokens. Both sides are BNB-collateralized. This avoids requiring users to pre-hold tokens.
-- **Pyth Lazer (not Crosschain):** Resolution uses Pyth Lazer SDK for sub-second price feeds. Feed IDs are `uint32` (not `bytes32` like Crosschain).
+- **Pyth Core (standard pull oracle):** Resolution uses `IPyth.parsePriceFeedUpdates()` from `@pythnetwork/pyth-sdk-solidity`. Price feed IDs are `bytes32`. BSC testnet Pyth: `0xd7308b14BF4008e7C7196eC35610B1427C5702EA`.
 - **Order types:** GoodTilCancel (GTC) persists across batches; GoodTilBatch (GTB) expires after one batch.
 - **LOT_SIZE = 1e15 wei (0.001 BNB):** Defined in `ITypes.sol`. All collateral math uses this constant.
 - **Segment tree clearing:** 99-tick range (1-99), each tick = 1% probability. Binary search + tick+1 correction for maximum matched volume.
@@ -35,7 +35,7 @@ Binary outcome prediction market protocol on BNB Chain. Users trade YES/NO outco
 - **OPERATOR_ROLE grants:** BatchAuction AND MarketFactory both need OPERATOR_ROLE on OrderBook.
 - **MINTER_ROLE grants:** BatchAuction AND Redemption both need MINTER_ROLE on OutcomeToken.
 - **PROTOCOL_ROLE grants:** OrderBook, BatchAuction, AND Redemption need PROTOCOL_ROLE on Vault.
-- **Pyth feedId is uint32** (Lazer), not bytes32 (Crosschain). Mapped via `setLazerFeedId(priceId, feedId)`.
+- **Pyth priceId is bytes32** (stored in `MarketMeta.priceId`). No feed ID mapping needed — PythResolver reads it directly from MarketFactory.
 - **Batch interval enforcement:** `clearBatch` enforces minimum time between clears. Tests must `vm.warp()` between consecutive clears.
 - **Stack-too-deep:** `claimFills` uses `SettleAmounts` struct to avoid stack overflow. Add structs for multi-variable functions.
 - **PythResolver admin:** Set to `msg.sender` in constructor (simple ownership, not AccessControl).

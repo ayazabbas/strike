@@ -2,7 +2,7 @@
 pragma solidity ^0.8.25;
 
 import "forge-std/Test.sol";
-import "./mocks/MockPythLazer.sol";
+import "@pythnetwork/pyth-sdk-solidity/MockPyth.sol";
 import "../src/MarketFactory.sol";
 import "../src/PythResolver.sol";
 import "../src/OrderBook.sol";
@@ -23,7 +23,7 @@ contract IntegrationTest is Test {
     Vault public vault;
     FeeModel public feeModel;
     Redemption public redemption;
-    MockPythLazer public mockLazer;
+    MockPyth public mockPyth;
 
     // Actors
     address public admin = address(0x1);
@@ -34,11 +34,7 @@ contract IntegrationTest is Test {
     address public feeCollector = address(0x99);
 
     bytes32 public constant PRICE_ID = bytes32(uint256(0xB7C));
-    uint32 public constant FEED_ID = 1001;
     uint256 public constant LOT = 1e15;
-
-    // Lazer payload format magic
-    uint32 constant FORMAT_MAGIC = 2479346549;
 
     function setUp() public {
         vm.startPrank(admin);
@@ -49,10 +45,12 @@ contract IntegrationTest is Test {
         feeModel = new FeeModel(admin, 30, 10, 0.001 ether, 0.0001 ether, feeCollector);
         book = new OrderBook(admin, address(vault));
         auction = new BatchAuction(admin, address(book), address(vault), address(feeModel), address(token));
-        mockLazer = new MockPythLazer(1); // 1 wei fee
+
+        // 120s valid period, 1 wei fee per update
+        mockPyth = new MockPyth(120, 1);
 
         factory = new MarketFactory(admin, address(book), address(token), feeCollector);
-        resolver = new PythResolver(address(mockLazer), address(factory));
+        resolver = new PythResolver(address(mockPyth), address(factory));
         redemption = new Redemption(address(factory), address(token), address(vault));
 
         // Grant roles
@@ -68,10 +66,6 @@ contract IntegrationTest is Test {
         factory.grantRole(factory.ADMIN_ROLE(), address(resolver));
 
         vm.stopPrank();
-
-        // Map priceId to Lazer feedId
-        vm.prank(admin);
-        resolver.setLazerFeedId(PRICE_ID, FEED_ID);
 
         vm.deal(user1, 100 ether);
         vm.deal(user2, 100 ether);
@@ -108,22 +102,21 @@ contract IntegrationTest is Test {
         orderId = book.placeOrder(obMarketId, side, OrderType.GoodTilCancel, tick, lots);
     }
 
-    function _createLazerUpdate(int64 price, uint64 conf, uint64 publishTime)
+    function _createPriceUpdate(int64 price, uint64 conf, uint64 publishTime)
         internal
-        pure
-        returns (bytes memory)
+        view
+        returns (bytes[] memory updateData)
     {
-        return abi.encodePacked(
-            FORMAT_MAGIC,
-            publishTime,
-            uint8(1),           // channel: RealTime
-            uint8(1),           // feedsLen
-            FEED_ID,
-            uint8(2),           // numProperties (Price + Confidence)
-            uint8(0),           // PriceFeedProperty.Price
+        updateData = new bytes[](1);
+        updateData[0] = mockPyth.createPriceFeedUpdateData(
+            PRICE_ID,
             price,
-            uint8(5),           // PriceFeedProperty.Confidence
-            conf
+            conf,
+            -8,           // expo
+            price,        // emaPrice
+            conf,         // emaConf
+            publishTime,
+            publishTime > 0 ? publishTime - 1 : 0
         );
     }
 
@@ -161,7 +154,7 @@ contract IntegrationTest is Test {
 
         // 6. Resolve market
         uint64 publishTime = uint64(expiry + 10);
-        bytes memory updateData = _createLazerUpdate(50000_00000000, 100_00000000, publishTime);
+        bytes[] memory updateData = _createPriceUpdate(50000_00000000, 100_00000000, publishTime);
 
         vm.prank(user3);
         resolver.resolveMarket{value: 1}(fmId, updateData);
@@ -236,13 +229,13 @@ contract IntegrationTest is Test {
 
         // Resolver1 submits at publishTime = expiry + 30
         uint64 pt1 = uint64(expiry + 30);
-        bytes memory data1 = _createLazerUpdate(50000_00000000, 100_00000000, pt1);
+        bytes[] memory data1 = _createPriceUpdate(50000_00000000, 100_00000000, pt1);
         vm.prank(user2);
         resolver.resolveMarket{value: 1}(fmId, data1);
 
         // Resolver2 challenges with earlier publishTime = expiry + 5
         uint64 pt2 = uint64(expiry + 5);
-        bytes memory data2 = _createLazerUpdate(48000_00000000, 100_00000000, pt2);
+        bytes[] memory data2 = _createPriceUpdate(48000_00000000, 100_00000000, pt2);
         vm.prank(user3);
         resolver.resolveMarket{value: 1}(fmId, data2);
 
@@ -329,11 +322,11 @@ contract IntegrationTest is Test {
         factory.closeMarket(fmId);
 
         uint64 publishTime = uint64(expiry + 10);
-        bytes memory data = _createLazerUpdate(50000_00000000, 100_00000000, publishTime);
+        bytes[] memory updateData = _createPriceUpdate(50000_00000000, 100_00000000, publishTime);
 
         vm.prank(user1);
         uint256 gasBefore = gasleft();
-        resolver.resolveMarket{value: 1}(fmId, data);
+        resolver.resolveMarket{value: 1}(fmId, updateData);
         uint256 gasUsed = gasBefore - gasleft();
         emit log_named_uint("resolveMarket gas", gasUsed);
     }
@@ -427,9 +420,7 @@ contract IntegrationTest is Test {
 
     function test_PythResolver_FailsWithoutAdminRole() public {
         // Deploy a resolver without granting ADMIN_ROLE on factory
-        PythResolver badResolver = new PythResolver(address(mockLazer), address(factory));
-        // test contract is badResolver's admin (msg.sender in constructor)
-        badResolver.setLazerFeedId(PRICE_ID, FEED_ID);
+        PythResolver badResolver = new PythResolver(address(mockPyth), address(factory));
 
         uint256 fmId = _createMarket(3600);
         (, uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
@@ -437,12 +428,12 @@ contract IntegrationTest is Test {
         factory.closeMarket(fmId);
 
         uint64 publishTime = uint64(expiry + 10);
-        bytes memory data = _createLazerUpdate(50000_00000000, 100_00000000, publishTime);
+        bytes[] memory updateData = _createPriceUpdate(50000_00000000, 100_00000000, publishTime);
 
         // Should revert because badResolver doesn't have ADMIN_ROLE on factory
         vm.expectRevert();
         vm.prank(user1);
-        badResolver.resolveMarket{value: 1}(fmId, data);
+        badResolver.resolveMarket{value: 1}(fmId, updateData);
     }
 
     // =========================================================================
@@ -498,7 +489,7 @@ contract IntegrationTest is Test {
         factory.closeMarket(fmId);
 
         uint64 publishTime = uint64(expiry + 10);
-        bytes memory updateData = _createLazerUpdate(50000_00000000, 100_00000000, publishTime);
+        bytes[] memory updateData = _createPriceUpdate(50000_00000000, 100_00000000, publishTime);
         vm.prank(user3);
         resolver.resolveMarket{value: 1}(fmId, updateData);
 

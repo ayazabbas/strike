@@ -2,7 +2,7 @@
 pragma solidity ^0.8.25;
 
 import "forge-std/Test.sol";
-import "./mocks/MockPythLazer.sol";
+import "@pythnetwork/pyth-sdk-solidity/MockPyth.sol";
 import "../src/PythResolver.sol";
 import "../src/MarketFactory.sol";
 import "../src/OrderBook.sol";
@@ -13,7 +13,7 @@ import "../src/ITypes.sol";
 contract PythResolverTest is Test {
     PythResolver public resolver;
     MarketFactory public factory;
-    MockPythLazer public mockLazer;
+    MockPyth public mockPyth;
     OrderBook public book;
     OutcomeToken public token;
     Vault public vault;
@@ -24,12 +24,8 @@ contract PythResolverTest is Test {
     address public user1 = address(0x3);
 
     bytes32 public constant PRICE_ID = bytes32(uint256(0xB7C));
-    uint32 public constant FEED_ID = 1001;
     uint256 public marketId;
     uint256 public expiryTime;
-
-    // Lazer payload format magic
-    uint32 constant FORMAT_MAGIC = 2479346549;
 
     function setUp() public {
         vm.startPrank(admin);
@@ -38,7 +34,8 @@ contract PythResolverTest is Test {
         token = new OutcomeToken(admin);
         book = new OrderBook(admin, address(vault));
 
-        mockLazer = new MockPythLazer(1); // 1 wei fee
+        // 120s valid period, 1 wei fee per update
+        mockPyth = new MockPyth(120, 1);
 
         factory = new MarketFactory(admin, address(book), address(token), address(0x99));
 
@@ -46,15 +43,12 @@ contract PythResolverTest is Test {
         book.grantRole(book.OPERATOR_ROLE(), address(factory));
         vault.grantRole(vault.PROTOCOL_ROLE(), address(book));
 
-        resolver = new PythResolver(address(mockLazer), address(factory));
+        resolver = new PythResolver(address(mockPyth), address(factory));
 
         // PythResolver needs ADMIN_ROLE to call setResolving/setResolved/payResolverBounty
         factory.grantRole(factory.ADMIN_ROLE(), address(resolver));
 
-        // Map priceId to Lazer feedId (resolver admin is admin since it deployed the resolver)
         vm.stopPrank();
-        vm.prank(admin);
-        resolver.setLazerFeedId(PRICE_ID, FEED_ID);
 
         vm.deal(resolver1, 100 ether);
         vm.deal(resolver2, 100 ether);
@@ -71,41 +65,22 @@ contract PythResolverTest is Test {
     // Helpers
     // =========================================================================
 
-    /// @dev Encode a Lazer payload with one feed containing Price + Confidence.
-    function _createLazerUpdate(int64 price, uint64 conf, uint64 publishTime)
+    /// @dev Create a Pyth Core mock price update for testing.
+    function _createPriceUpdate(bytes32 priceId, int64 price, uint64 conf, uint64 publishTime)
         internal
-        pure
-        returns (bytes memory)
+        view
+        returns (bytes[] memory updateData)
     {
-        return abi.encodePacked(
-            FORMAT_MAGIC,           // 4 bytes: magic
-            publishTime,            // 8 bytes: timestamp
-            uint8(1),               // 1 byte: channel (RealTime)
-            uint8(1),               // 1 byte: feedsLen
-            FEED_ID,                // 4 bytes: feedId
-            uint8(2),               // 1 byte: numProperties (Price + Confidence)
-            uint8(0),               // 1 byte: PriceFeedProperty.Price
-            price,                  // 8 bytes: price value
-            uint8(5),               // 1 byte: PriceFeedProperty.Confidence
-            conf                    // 8 bytes: confidence value
-        );
-    }
-
-    /// @dev Encode a Lazer payload with one feed containing only Price (no confidence).
-    function _createLazerUpdateNoConf(int64 price, uint64 publishTime)
-        internal
-        pure
-        returns (bytes memory)
-    {
-        return abi.encodePacked(
-            FORMAT_MAGIC,
+        updateData = new bytes[](1);
+        updateData[0] = mockPyth.createPriceFeedUpdateData(
+            priceId,
+            price,
+            conf,
+            -8,           // expo: 8 decimal places
+            price,        // emaPrice
+            conf,         // emaConf
             publishTime,
-            uint8(1),               // channel: RealTime
-            uint8(1),               // feedsLen
-            FEED_ID,
-            uint8(1),               // numProperties: 1 (Price only)
-            uint8(0),               // PriceFeedProperty.Price
-            price
+            publishTime > 0 ? publishTime - 1 : 0 // prevPublishTime
         );
     }
 
@@ -122,10 +97,10 @@ contract PythResolverTest is Test {
         _closeMarket();
 
         uint64 publishTime = uint64(expiryTime + 10);
-        bytes memory data = _createLazerUpdate(50000_00000000, 100_00000000, publishTime);
+        bytes[] memory updateData = _createPriceUpdate(PRICE_ID, 50000_00000000, 100_00000000, publishTime);
 
         vm.prank(resolver1);
-        resolver.resolveMarket{value: 1}(marketId, data);
+        resolver.resolveMarket{value: 1}(marketId, updateData);
 
         (int64 price, uint256 pt, uint256 resolvedBlock, address res, bool fin) =
             resolver.pendingResolutions(marketId);
@@ -141,14 +116,14 @@ contract PythResolverTest is Test {
     }
 
     function test_ResolveMarket_AutoCloses() public {
-        // Don't manually close — resolver should auto-close
+        // Don't manually close — resolver should auto-close when expired
         vm.warp(expiryTime);
 
         uint64 publishTime = uint64(expiryTime + 10);
-        bytes memory data = _createLazerUpdate(50000_00000000, 100_00000000, publishTime);
+        bytes[] memory updateData = _createPriceUpdate(PRICE_ID, 50000_00000000, 100_00000000, publishTime);
 
         vm.prank(resolver1);
-        resolver.resolveMarket{value: 1}(marketId, data);
+        resolver.resolveMarket{value: 1}(marketId, updateData);
 
         assertEq(uint256(factory.getMarketState(marketId)), uint256(MarketState.Resolving));
     }
@@ -156,37 +131,36 @@ contract PythResolverTest is Test {
     function test_ResolveMarket_RevertIfNotClosed() public {
         // Market is still Open, not expired
         uint64 publishTime = uint64(expiryTime + 10);
-        bytes memory data = _createLazerUpdate(50000_00000000, 100_00000000, publishTime);
+        bytes[] memory updateData = _createPriceUpdate(PRICE_ID, 50000_00000000, 100_00000000, publishTime);
 
         vm.expectRevert("PythResolver: not closed");
         vm.prank(resolver1);
-        resolver.resolveMarket{value: 1}(marketId, data);
+        resolver.resolveMarket{value: 1}(marketId, updateData);
     }
 
     function test_ResolveMarket_RevertIfConfidenceTooWide() public {
         _closeMarket();
 
         // Price = 50000, conf = 1000 (2%) > 1% threshold
-        // conf threshold = 50000 * 100 / 10000 = 500
-        // conf = 1000 > 500 → should revert
         uint64 publishTime = uint64(expiryTime + 10);
-        bytes memory data = _createLazerUpdate(50000, 1000, publishTime);
+        bytes[] memory updateData = _createPriceUpdate(PRICE_ID, 50000, 1000, publishTime);
 
         vm.expectRevert("PythResolver: confidence too wide");
         vm.prank(resolver1);
-        resolver.resolveMarket{value: 1}(marketId, data);
+        resolver.resolveMarket{value: 1}(marketId, updateData);
     }
 
     function test_ResolveMarket_RevertIfStaleData() public {
         _closeMarket();
 
-        // Publish time before expiry — outside all windows
+        // Publish time before expiry — outside the valid window [expiry, expiry+300]
         uint64 publishTime = uint64(expiryTime - 100);
-        bytes memory data = _createLazerUpdate(50000_00000000, 100_00000000, publishTime);
+        bytes[] memory updateData = _createPriceUpdate(PRICE_ID, 50000_00000000, 100_00000000, publishTime);
 
-        vm.expectRevert("PythResolver: no valid price in any window");
+        // parsePriceFeedUpdates will revert because publishTime < expiryTime (minPublishTime)
+        vm.expectRevert();
         vm.prank(resolver1);
-        resolver.resolveMarket{value: 1}(marketId, data);
+        resolver.resolveMarket{value: 1}(marketId, updateData);
     }
 
     function test_ResolveMarket_FallbackWindow() public {
@@ -194,10 +168,10 @@ contract PythResolverTest is Test {
 
         // Publish time in window 2 (between 60-120s after expiry)
         uint64 publishTime = uint64(expiryTime + 90);
-        bytes memory data = _createLazerUpdate(50000_00000000, 100_00000000, publishTime);
+        bytes[] memory updateData = _createPriceUpdate(PRICE_ID, 50000_00000000, 100_00000000, publishTime);
 
         vm.prank(resolver1);
-        resolver.resolveMarket{value: 1}(marketId, data);
+        resolver.resolveMarket{value: 1}(marketId, updateData);
 
         (int64 price, , , , ) = resolver.pendingResolutions(marketId);
         assertEq(price, 50000_00000000);
@@ -208,44 +182,37 @@ contract PythResolverTest is Test {
 
         // Publish time beyond all 5 windows (>300s after expiry)
         uint64 publishTime = uint64(expiryTime + 301);
-        bytes memory data = _createLazerUpdate(50000_00000000, 100_00000000, publishTime);
+        bytes[] memory updateData = _createPriceUpdate(PRICE_ID, 50000_00000000, 100_00000000, publishTime);
 
-        vm.expectRevert("PythResolver: no valid price in any window");
+        // parsePriceFeedUpdates reverts with PriceFeedNotFoundWithinRange
+        vm.expectRevert();
         vm.prank(resolver1);
-        resolver.resolveMarket{value: 1}(marketId, data);
+        resolver.resolveMarket{value: 1}(marketId, updateData);
     }
 
     function test_ResolveMarket_NoConfidence_SkipsCheck() public {
         _closeMarket();
 
         uint64 publishTime = uint64(expiryTime + 10);
-        bytes memory data = _createLazerUpdateNoConf(50000_00000000, publishTime);
+        // conf = 0 → confidence check is skipped
+        bytes[] memory updateData = _createPriceUpdate(PRICE_ID, 50000_00000000, 0, publishTime);
 
         vm.prank(resolver1);
-        resolver.resolveMarket{value: 1}(marketId, data);
+        resolver.resolveMarket{value: 1}(marketId, updateData);
 
         (int64 price, , , , ) = resolver.pendingResolutions(marketId);
         assertEq(price, 50000_00000000);
     }
 
-    function test_ResolveMarket_RevertIfNoFeedIdMapped() public {
+    function test_ResolveMarket_RevertIfInsufficientFee() public {
         _closeMarket();
 
-        // Create market with unmapped priceId
-        bytes32 unmappedPriceId = bytes32(uint256(0xDEAD));
-        vm.prank(user1);
-        uint256 newMarketId = factory.createMarket{value: 0.01 ether}(unmappedPriceId, 3600, 60, 1);
+        uint64 publishTime = uint64(expiryTime + 10);
+        bytes[] memory updateData = _createPriceUpdate(PRICE_ID, 50000_00000000, 100_00000000, publishTime);
 
-        (, uint256 newExpiry, , , , , , ) = factory.marketMeta(newMarketId);
-        vm.warp(newExpiry);
-        factory.closeMarket(newMarketId);
-
-        uint64 publishTime = uint64(newExpiry + 10);
-        bytes memory data = _createLazerUpdate(50000_00000000, 100_00000000, publishTime);
-
-        vm.expectRevert("PythResolver: no feed ID mapped");
+        vm.expectRevert("PythResolver: insufficient fee");
         vm.prank(resolver1);
-        resolver.resolveMarket{value: 1}(newMarketId, data);
+        resolver.resolveMarket{value: 0}(marketId, updateData);
     }
 
     // =========================================================================
@@ -257,14 +224,14 @@ contract PythResolverTest is Test {
 
         // First resolution at publishTime = expiry + 30
         uint64 pt1 = uint64(expiryTime + 30);
-        bytes memory data1 = _createLazerUpdate(50000_00000000, 100_00000000, pt1);
+        bytes[] memory data1 = _createPriceUpdate(PRICE_ID, 50000_00000000, 100_00000000, pt1);
 
         vm.prank(resolver1);
         resolver.resolveMarket{value: 1}(marketId, data1);
 
         // Challenge with earlier publishTime = expiry + 10
         uint64 pt2 = uint64(expiryTime + 10);
-        bytes memory data2 = _createLazerUpdate(48000_00000000, 100_00000000, pt2);
+        bytes[] memory data2 = _createPriceUpdate(PRICE_ID, 48000_00000000, 100_00000000, pt2);
 
         vm.prank(resolver2);
         resolver.resolveMarket{value: 1}(marketId, data2);
@@ -279,14 +246,14 @@ contract PythResolverTest is Test {
         _closeMarket();
 
         uint64 pt1 = uint64(expiryTime + 10);
-        bytes memory data1 = _createLazerUpdate(50000_00000000, 100_00000000, pt1);
+        bytes[] memory data1 = _createPriceUpdate(PRICE_ID, 50000_00000000, 100_00000000, pt1);
 
         vm.prank(resolver1);
         resolver.resolveMarket{value: 1}(marketId, data1);
 
         // Try to challenge with later publishTime — should fail
         uint64 pt2 = uint64(expiryTime + 20);
-        bytes memory data2 = _createLazerUpdate(48000_00000000, 100_00000000, pt2);
+        bytes[] memory data2 = _createPriceUpdate(PRICE_ID, 48000_00000000, 100_00000000, pt2);
 
         vm.expectRevert("PythResolver: not earlier");
         vm.prank(resolver2);
@@ -297,7 +264,7 @@ contract PythResolverTest is Test {
         _closeMarket();
 
         uint64 pt1 = uint64(expiryTime + 10);
-        bytes memory data1 = _createLazerUpdate(50000_00000000, 100_00000000, pt1);
+        bytes[] memory data1 = _createPriceUpdate(PRICE_ID, 50000_00000000, 100_00000000, pt1);
 
         vm.prank(resolver1);
         resolver.resolveMarket{value: 1}(marketId, data1);
@@ -306,7 +273,7 @@ contract PythResolverTest is Test {
         vm.roll(block.number + 3);
 
         uint64 pt2 = uint64(expiryTime + 5);
-        bytes memory data2 = _createLazerUpdate(48000_00000000, 100_00000000, pt2);
+        bytes[] memory data2 = _createPriceUpdate(PRICE_ID, 48000_00000000, 100_00000000, pt2);
 
         vm.expectRevert("PythResolver: finality passed");
         vm.prank(resolver2);
@@ -321,10 +288,10 @@ contract PythResolverTest is Test {
         _closeMarket();
 
         uint64 publishTime = uint64(expiryTime + 10);
-        bytes memory data = _createLazerUpdate(50000_00000000, 100_00000000, publishTime);
+        bytes[] memory updateData = _createPriceUpdate(PRICE_ID, 50000_00000000, 100_00000000, publishTime);
 
         vm.prank(resolver1);
-        resolver.resolveMarket{value: 1}(marketId, data);
+        resolver.resolveMarket{value: 1}(marketId, updateData);
 
         // Advance past finality gate
         vm.roll(block.number + 3);
@@ -347,10 +314,10 @@ contract PythResolverTest is Test {
         _closeMarket();
 
         uint64 publishTime = uint64(expiryTime + 10);
-        bytes memory data = _createLazerUpdate(50000_00000000, 100_00000000, publishTime);
+        bytes[] memory updateData = _createPriceUpdate(PRICE_ID, 50000_00000000, 100_00000000, publishTime);
 
         vm.prank(resolver1);
-        resolver.resolveMarket{value: 1}(marketId, data);
+        resolver.resolveMarket{value: 1}(marketId, updateData);
 
         vm.roll(block.number + 3);
         resolver.finalizeResolution(marketId);
@@ -363,11 +330,10 @@ contract PythResolverTest is Test {
         _closeMarket();
 
         uint64 publishTime = uint64(expiryTime + 10);
-        // Negative price
-        bytes memory data = _createLazerUpdate(-50000_00000000, 100_00000000, publishTime);
+        bytes[] memory updateData = _createPriceUpdate(PRICE_ID, -50000_00000000, 100_00000000, publishTime);
 
         vm.prank(resolver1);
-        resolver.resolveMarket{value: 1}(marketId, data);
+        resolver.resolveMarket{value: 1}(marketId, updateData);
 
         vm.roll(block.number + 3);
         resolver.finalizeResolution(marketId);
@@ -385,10 +351,10 @@ contract PythResolverTest is Test {
         _closeMarket();
 
         uint64 publishTime = uint64(expiryTime + 10);
-        bytes memory data = _createLazerUpdate(50000_00000000, 100_00000000, publishTime);
+        bytes[] memory updateData = _createPriceUpdate(PRICE_ID, 50000_00000000, 100_00000000, publishTime);
 
         vm.prank(resolver1);
-        resolver.resolveMarket{value: 1}(marketId, data);
+        resolver.resolveMarket{value: 1}(marketId, updateData);
 
         vm.expectRevert("PythResolver: finality not reached");
         resolver.finalizeResolution(marketId);
@@ -398,10 +364,10 @@ contract PythResolverTest is Test {
         _closeMarket();
 
         uint64 publishTime = uint64(expiryTime + 10);
-        bytes memory data = _createLazerUpdate(50000_00000000, 100_00000000, publishTime);
+        bytes[] memory updateData = _createPriceUpdate(PRICE_ID, 50000_00000000, 100_00000000, publishTime);
 
         vm.prank(resolver1);
-        resolver.resolveMarket{value: 1}(marketId, data);
+        resolver.resolveMarket{value: 1}(marketId, updateData);
 
         vm.roll(block.number + 3);
         resolver.finalizeResolution(marketId);
@@ -411,20 +377,13 @@ contract PythResolverTest is Test {
     }
 
     // =========================================================================
-    // Admin: setLazerFeedId
+    // getPythUpdateFee
     // =========================================================================
 
-    function test_SetLazerFeedId_OnlyAdmin() public {
-        vm.prank(user1);
-        vm.expectRevert("PythResolver: not admin");
-        resolver.setLazerFeedId(bytes32(uint256(1)), 42);
-    }
-
-    function test_SetLazerFeedId_Works() public {
-        bytes32 newPriceId = bytes32(uint256(0xCAFE));
-        vm.prank(admin);
-        resolver.setLazerFeedId(newPriceId, 2002);
-        assertEq(resolver.lazerFeedId(newPriceId), 2002);
+    function test_GetPythUpdateFee() public {
+        bytes[] memory updateData = _createPriceUpdate(PRICE_ID, 50000_00000000, 100_00000000, uint64(block.timestamp));
+        uint256 fee = resolver.getPythUpdateFee(updateData);
+        assertEq(fee, 1); // MockPyth charges 1 wei per update
     }
 
     // =========================================================================
@@ -438,6 +397,6 @@ contract PythResolverTest is Test {
 
     function test_Constructor_RevertZeroFactory() public {
         vm.expectRevert("PythResolver: zero factory");
-        new PythResolver(address(mockLazer), address(0));
+        new PythResolver(address(mockPyth), address(0));
     }
 }

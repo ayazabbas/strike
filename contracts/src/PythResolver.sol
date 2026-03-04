@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.25;
 
-import "pyth-lazer-sdk/IPythLazer.sol";
-import "pyth-lazer-sdk/PythLazerLib.sol";
-import "pyth-lazer-sdk/PythLazerStructs.sol";
+import "@pythnetwork/pyth-sdk-solidity/IPyth.sol";
+import "@pythnetwork/pyth-sdk-solidity/PythStructs.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./ITypes.sol";
 import "./MarketFactory.sol";
 
 /// @title PythResolver
-/// @notice Resolves binary outcome markets using Pyth Lazer price feeds.
+/// @notice Resolves binary outcome markets using Pyth Core price feeds (pull oracle).
 ///         Resolution is permissionless — anyone can submit price data.
 ///         Uses a finality gate: resolution sets pendingResolution, then
 ///         finalizeResolution() is callable after FINALITY_BLOCKS blocks.
@@ -29,16 +28,13 @@ contract PythResolver is ReentrancyGuard {
     // State
     // -------------------------------------------------------------------------
 
-    IPythLazer public immutable pythLazer;
+    IPyth public immutable pyth;
     MarketFactory public immutable factory;
 
     /// @notice Confidence threshold in bps (default 100 = 1%)
     uint256 public confThresholdBps = 100;
 
-    /// @notice Mapping from Pyth bytes32 priceId to Lazer uint32 feedId
-    mapping(bytes32 => uint32) public lazerFeedId;
-
-    /// @notice Admin address for feed ID management
+    /// @notice Admin address for configuration
     address public admin;
 
     /// @notice Pending resolution data
@@ -75,16 +71,15 @@ contract PythResolver is ReentrancyGuard {
         bool outcomeYes,
         address indexed finalizer
     );
-    event LazerFeedIdSet(bytes32 indexed priceId, uint32 feedId);
 
     // -------------------------------------------------------------------------
     // Constructor
     // -------------------------------------------------------------------------
 
-    constructor(address _pythLazer, address _factory) {
-        require(_pythLazer != address(0), "PythResolver: zero pyth");
+    constructor(address _pyth, address _factory) {
+        require(_pyth != address(0), "PythResolver: zero pyth");
         require(_factory != address(0), "PythResolver: zero factory");
-        pythLazer = IPythLazer(_pythLazer);
+        pyth = IPyth(_pyth);
         factory = MarketFactory(payable(_factory));
         admin = msg.sender;
     }
@@ -98,10 +93,8 @@ contract PythResolver is ReentrancyGuard {
         _;
     }
 
-    /// @notice Map a Pyth bytes32 priceId to a Lazer uint32 feedId.
-    function setLazerFeedId(bytes32 priceId, uint32 feedId) external onlyAdmin {
-        lazerFeedId[priceId] = feedId;
-        emit LazerFeedIdSet(priceId, feedId);
+    function setConfThreshold(uint256 newBps) external onlyAdmin {
+        confThresholdBps = newBps;
     }
 
     // -------------------------------------------------------------------------
@@ -110,34 +103,55 @@ contract PythResolver is ReentrancyGuard {
 
     /// @notice Submit resolution for a market. Permissionless.
     /// @param factoryMarketId The market to resolve.
-    /// @param update Pyth Lazer signed update bytes.
-    function resolveMarket(uint256 factoryMarketId, bytes calldata update)
+    /// @param priceUpdateData Pyth price update data from Hermes API.
+    function resolveMarket(uint256 factoryMarketId, bytes[] calldata priceUpdateData)
         external
         payable
+        nonReentrant
     {
-        // Validate market state and extract feed parameters
-        (uint32 feedId, uint256 expiryTime) = _validateAndPrepare(factoryMarketId);
+        // Validate market state and get priceId + expiryTime
+        (bytes32 priceId, uint256 expiryTime) = _validateAndPrepare(factoryMarketId);
 
-        // Verify update via Pyth Lazer and extract price data
-        uint256 fee = pythLazer.verification_fee();
-        (int64 price, uint256 publishTime) = _verifyAndExtract(update, feedId, expiryTime, fee);
+        // Parse price from the update data within the valid time window.
+        // Uses parsePriceFeedUpdates (not updatePriceFeeds) so challengers
+        // can submit earlier publishTimes that wouldn't overwrite the on-chain price.
+        uint256 fee = pyth.getUpdateFee(priceUpdateData);
+        require(msg.value >= fee, "PythResolver: insufficient fee");
+
+        bytes32[] memory ids = new bytes32[](1);
+        ids[0] = priceId;
+
+        PythStructs.PriceFeed[] memory feeds = pyth.parsePriceFeedUpdates{value: fee}(
+            priceUpdateData,
+            ids,
+            uint64(expiryTime),
+            uint64(expiryTime + MAX_FALLBACK_WINDOWS * FALLBACK_WINDOW)
+        );
+
+        // Refund excess
+        if (msg.value > fee) {
+            payable(msg.sender).transfer(msg.value - fee);
+        }
+
+        PythStructs.Price memory p = feeds[0].price;
+
+        // Check confidence
+        _checkConfidence(p.price, p.conf);
 
         // Apply resolution or challenge
-        _applyResolution(factoryMarketId, price, publishTime);
-
-        // Refund excess ETH
-        if (msg.value > fee) {
-            (bool ok, ) = msg.sender.call{value: msg.value - fee}("");
-            require(ok, "PythResolver: refund failed");
-        }
+        _applyResolution(factoryMarketId, p.price, p.publishTime);
     }
 
-    /// @dev Validate market state and auto-close if needed. Returns feedId and expiryTime.
+    /// @notice Get the Pyth update fee for given price update data.
+    function getPythUpdateFee(bytes[] calldata priceUpdateData) external view returns (uint256) {
+        return pyth.getUpdateFee(priceUpdateData);
+    }
+
+    /// @dev Validate market state and auto-close if needed. Returns priceId and expiryTime.
     function _validateAndPrepare(uint256 factoryMarketId)
         internal
-        returns (uint32 feedId, uint256 expiryTime)
+        returns (bytes32 priceId, uint256 expiryTime)
     {
-        bytes32 priceId;
         address creator;
         MarketState state;
         (priceId, expiryTime, , creator, state, , , ) = factory.marketMeta(factoryMarketId);
@@ -154,30 +168,6 @@ contract PythResolver is ReentrancyGuard {
             state == MarketState.Closed || state == MarketState.Resolving,
             "PythResolver: not closed"
         );
-
-        feedId = lazerFeedId[priceId];
-        require(feedId != 0, "PythResolver: no feed ID mapped");
-    }
-
-    /// @dev Verify Lazer update, parse payload, extract and validate price.
-    function _verifyAndExtract(
-        bytes calldata update,
-        uint32 feedId,
-        uint256 expiryTime,
-        uint256 fee
-    )
-        internal
-        returns (int64 price, uint256 publishTime)
-    {
-        (bytes memory payload, ) = pythLazer.verifyUpdate{value: fee}(update);
-
-        PythLazerStructs.Update memory parsed =
-            PythLazerLib.parseUpdateFromPayload(payload);
-
-        uint64 conf;
-        (price, conf, publishTime) = _extractFeed(parsed, feedId, expiryTime);
-
-        _checkConfidence(price, conf);
     }
 
     /// @dev Apply first resolution or challenge to pending resolution.
@@ -242,49 +232,6 @@ contract PythResolver is ReentrancyGuard {
     // -------------------------------------------------------------------------
     // Internal helpers
     // -------------------------------------------------------------------------
-
-    /// @dev Extract price, confidence, and timestamp from a parsed Lazer update.
-    ///      Validates that the timestamp falls within the fallback windows.
-    function _extractFeed(
-        PythLazerStructs.Update memory update,
-        uint32 feedId,
-        uint256 expiryTime
-    )
-        internal
-        pure
-        returns (int64 price, uint64 conf, uint256 publishTime)
-    {
-        uint256 timestamp = uint256(update.timestamp);
-
-        // Timestamp must be within the fallback windows
-        require(
-            timestamp >= expiryTime
-                && timestamp <= expiryTime + MAX_FALLBACK_WINDOWS * FALLBACK_WINDOW,
-            "PythResolver: no valid price in any window"
-        );
-
-        // Find matching feed by feedId
-        for (uint256 i = 0; i < update.feeds.length; i++) {
-            if (PythLazerLib.getFeedId(update.feeds[i]) == feedId) {
-                require(
-                    PythLazerLib.hasPrice(update.feeds[i]),
-                    "PythResolver: price not available"
-                );
-
-                price = PythLazerLib.getPrice(update.feeds[i]);
-
-                // Confidence is optional in Lazer updates
-                if (PythLazerLib.hasConfidence(update.feeds[i])) {
-                    conf = PythLazerLib.getConfidence(update.feeds[i]);
-                }
-
-                publishTime = timestamp;
-                return (price, conf, publishTime);
-            }
-        }
-
-        revert("PythResolver: feed not found in update");
-    }
 
     /// @dev Reject if confidence is too wide.
     function _checkConfidence(int64 price, uint64 conf) internal view {

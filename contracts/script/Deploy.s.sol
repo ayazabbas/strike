@@ -9,9 +9,9 @@ import {OrderBook} from "../src/OrderBook.sol";
 import {BatchAuction} from "../src/BatchAuction.sol";
 import {MarketFactory} from "../src/MarketFactory.sol";
 import {PythResolver} from "../src/PythResolver.sol";
-import {MockPyth} from "./mocks/MockPyth.sol";
+import {MockPyth} from "@pythnetwork/pyth-sdk-solidity/MockPyth.sol";
 
-/// @notice Deploy the full Strike protocol and seed a test market.
+/// @notice Deploy the full Strike protocol and seed a test market (devnet/anvil).
 ///
 ///   Deployment order (PythResolver.factory is immutable, so MarketFactory
 ///   must be deployed first):
@@ -21,13 +21,12 @@ import {MockPyth} from "./mocks/MockPyth.sol";
 ///     3. Vault
 ///     4. OrderBook
 ///     5. BatchAuction
-///     6. MockPyth
+///     6. MockPyth (SDK standard mock)
 ///     7. MarketFactory      (needs orderBook, outcomeToken)
 ///     8. PythResolver        (needs mockPyth, factory)
 ///     9. Wire roles
-///    10. Set Lazer feed ID mapping
-///    11. Create test market
-///    12. Print addresses as JSON
+///    10. Create test market
+///    11. Print addresses as JSON
 contract DeployScript is Script {
     function run() external {
         // Default to anvil account 0 if PRIVATE_KEY not set
@@ -71,8 +70,8 @@ contract DeployScript is Script {
             address(outcomeToken)
         );
 
-        // 6. MockPyth
-        MockPyth mockPyth = new MockPyth();
+        // 6. MockPyth (60s valid period, 1 wei fee)
+        MockPyth mockPyth = new MockPyth(60, 1);
 
         // 7. MarketFactory
         MarketFactory factory = new MarketFactory(
@@ -99,19 +98,8 @@ contract DeployScript is Script {
 
         factory.grantRole(factory.ADMIN_ROLE(), address(pythResolver));
 
-        // 10. Map mock BTC/USD priceId → Lazer feedId 1
+        // 10. Create test market: BTC/USD, 1 hour, 12s batches
         bytes32 priceId = bytes32(uint256(1));
-        pythResolver.setLazerFeedId(priceId, 1);
-
-        // Seed MockPyth with a price (useful for later resolution testing)
-        mockPyth.setPrice(
-            1,                           // feedId
-            int64(int256(50000_00000000)), // BTC ~$50,000 (8 decimals)
-            uint64(500_00000000),         // $500 confidence
-            uint64(block.timestamp)
-        );
-
-        // 11. Create test market: BTC/USD, 1 hour, 12s batches
         uint256 factoryMarketId = factory.createMarket{value: 0.01 ether}(
             priceId,
             3600,  // 1 hour duration
@@ -121,7 +109,7 @@ contract DeployScript is Script {
 
         vm.stopBroadcast();
 
-        // 12. Print deployed addresses as JSON (grep-able by deploy container)
+        // 11. Print deployed addresses as JSON (grep-able by deploy container)
         string memory json = string.concat(
             '{"feeModel":"', vm.toString(address(feeModel)),
             '","outcomeToken":"', vm.toString(address(outcomeToken)),
