@@ -33,6 +33,7 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
     /// @notice Market metadata stored by the factory
     struct MarketMeta {
         bytes32 priceId;       // Pyth price feed ID
+        int64 strikePrice;     // resolution threshold: price >= strikePrice → YES wins
         uint256 expiryTime;    // when the market closes
         uint256 creationBond;  // bond paid at creation
         address creator;       // who created the market
@@ -61,6 +62,7 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
         uint256 indexed factoryMarketId,
         uint256 indexed orderBookMarketId,
         bytes32 priceId,
+        int64 strikePrice,
         uint256 expiryTime,
         address indexed creator
     );
@@ -94,12 +96,14 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
 
     /// @notice Create a new binary outcome market.
     /// @param priceId     Pyth price feed ID for resolution.
+    /// @param strikePrice Resolution threshold: price >= strikePrice → YES wins.
     /// @param duration    Duration in seconds from now until market expiry.
     /// @param batchInterval Seconds between batch auctions (0 = use default).
     /// @param minLots     Minimum order size in lots (0 = use default).
     /// @return factoryMarketId The new market's factory ID.
     function createMarket(
         bytes32 priceId,
+        int64 strikePrice,
         uint256 duration,
         uint256 batchInterval,
         uint128 minLots
@@ -108,6 +112,7 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
         require(msg.value >= creationBond, "MarketFactory: insufficient bond");
         require(duration > 0, "MarketFactory: zero duration");
         require(priceId != bytes32(0), "MarketFactory: zero priceId");
+        require(strikePrice > 0, "MarketFactory: zero strikePrice");
 
         uint256 interval = batchInterval > 0 ? batchInterval : defaultBatchInterval;
         uint128 lots = minLots > 0 ? minLots : defaultMinLots;
@@ -122,6 +127,7 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
 
         marketMeta[factoryMarketId] = MarketMeta({
             priceId: priceId,
+            strikePrice: strikePrice,
             expiryTime: expiryTime,
             creationBond: msg.value,
             creator: msg.sender,
@@ -141,7 +147,7 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
             require(ok, "MarketFactory: refund failed");
         }
 
-        emit MarketCreated(factoryMarketId, obMarketId, priceId, expiryTime, msg.sender);
+        emit MarketCreated(factoryMarketId, obMarketId, priceId, strikePrice, expiryTime, msg.sender);
     }
 
     // -------------------------------------------------------------------------

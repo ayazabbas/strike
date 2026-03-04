@@ -100,8 +100,10 @@ contract DeployScript is Script {
 
         // 10. Create test market: BTC/USD, 1 hour, 12s batches
         bytes32 priceId = bytes32(uint256(1));
+        int64 strikePrice = int64(5_000_000_000_000); // $50,000 with expo=-8
         uint256 factoryMarketId = factory.createMarket{value: 0.01 ether}(
             priceId,
+            strikePrice,
             3600,  // 1 hour duration
             12,    // 12s batch interval
             1      // min 1 lot

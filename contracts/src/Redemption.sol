@@ -60,6 +60,7 @@ contract Redemption is ReentrancyGuard {
             ,
             ,
             ,
+            ,
             MarketState state,
             bool outcomeYes,
             ,

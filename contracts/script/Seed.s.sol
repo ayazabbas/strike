@@ -21,7 +21,7 @@ contract SeedScript is Script {
         MarketFactory factory = MarketFactory(payable(vm.envAddress("MARKET_FACTORY_ADDR")));
 
         // Get orderBook market ID from factory market #1
-        (,,,,,,, uint256 obMarketId) = factory.marketMeta(1);
+        (,,,,,,,, uint256 obMarketId) = factory.marketMeta(1);
         require(obMarketId > 0, "Seed: no market found");
 
         console.log("Seeding market (OB ID):", obMarketId);

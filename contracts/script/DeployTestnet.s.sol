@@ -80,8 +80,9 @@ contract DeployTestnetScript is Script {
         outcomeToken.grantRole(outcomeToken.MINTER_ROLE(), address(batchAuction));
         factory.grantRole(factory.ADMIN_ROLE(), address(pythResolver));
 
-        // Create test market: BTC/USD, 1 hour, 12s batches
-        d.testMarketId = factory.createMarket{value: 0.01 ether}(BTC_USD_PRICE_ID, 3600, 12, 1);
+        // Create test market: BTC/USD, strike $50k, 1 hour, 12s batches
+        int64 btcStrikePrice = int64(5_000_000_000_000); // $50,000 with expo=-8
+        d.testMarketId = factory.createMarket{value: 0.01 ether}(BTC_USD_PRICE_ID, btcStrikePrice, 3600, 12, 1);
 
         vm.stopBroadcast();
 

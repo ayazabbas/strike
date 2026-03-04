@@ -24,6 +24,7 @@ contract PythResolverTest is Test {
     address public user1 = address(0x3);
 
     bytes32 public constant PRICE_ID = bytes32(uint256(0xB7C));
+    int64 public constant STRIKE_PRICE = int64(50000_00000000); // $50,000 with expo=-8
     uint256 public marketId;
     uint256 public expiryTime;
 
@@ -56,9 +57,9 @@ contract PythResolverTest is Test {
 
         // Create a market
         vm.prank(user1);
-        marketId = factory.createMarket{value: 0.01 ether}(PRICE_ID, 3600, 60, 1);
+        marketId = factory.createMarket{value: 0.01 ether}(PRICE_ID, STRIKE_PRICE, 3600, 60, 1);
 
-        (, expiryTime, , , , , , ) = factory.marketMeta(marketId);
+        (, , expiryTime, , , , , , ) = factory.marketMeta(marketId);
     }
 
     // =========================================================================
@@ -310,11 +311,11 @@ contract PythResolverTest is Test {
         assertTrue(fin);
     }
 
-    function test_FinalizeResolution_PositivePrice_YesWins() public {
+    function test_FinalizeResolution_AboveStrike_YesWins() public {
         _closeMarket();
 
         uint64 publishTime = uint64(expiryTime + 10);
-        bytes[] memory updateData = _createPriceUpdate(PRICE_ID, 50000_00000000, 100_00000000, publishTime);
+        bytes[] memory updateData = _createPriceUpdate(PRICE_ID, 60000_00000000, 100_00000000, publishTime);
 
         vm.prank(resolver1);
         resolver.resolveMarket{value: 1}(marketId, updateData);
@@ -322,15 +323,16 @@ contract PythResolverTest is Test {
         vm.roll(block.number + 3);
         resolver.finalizeResolution(marketId);
 
-        (, , , , , bool outcomeYes, , ) = factory.marketMeta(marketId);
+        (, , , , , , bool outcomeYes, , ) = factory.marketMeta(marketId);
         assertTrue(outcomeYes);
     }
 
-    function test_FinalizeResolution_NegativePrice_NoWins() public {
+    function test_FinalizeResolution_AtStrike_YesWins() public {
         _closeMarket();
 
         uint64 publishTime = uint64(expiryTime + 10);
-        bytes[] memory updateData = _createPriceUpdate(PRICE_ID, -50000_00000000, 100_00000000, publishTime);
+        // Price exactly at strike → YES wins (>= check)
+        bytes[] memory updateData = _createPriceUpdate(PRICE_ID, STRIKE_PRICE, 100_00000000, publishTime);
 
         vm.prank(resolver1);
         resolver.resolveMarket{value: 1}(marketId, updateData);
@@ -338,7 +340,23 @@ contract PythResolverTest is Test {
         vm.roll(block.number + 3);
         resolver.finalizeResolution(marketId);
 
-        (, , , , , bool outcomeYes, , ) = factory.marketMeta(marketId);
+        (, , , , , , bool outcomeYes, , ) = factory.marketMeta(marketId);
+        assertTrue(outcomeYes);
+    }
+
+    function test_FinalizeResolution_BelowStrike_NoWins() public {
+        _closeMarket();
+
+        uint64 publishTime = uint64(expiryTime + 10);
+        bytes[] memory updateData = _createPriceUpdate(PRICE_ID, 40000_00000000, 100_00000000, publishTime);
+
+        vm.prank(resolver1);
+        resolver.resolveMarket{value: 1}(marketId, updateData);
+
+        vm.roll(block.number + 3);
+        resolver.finalizeResolution(marketId);
+
+        (, , , , , , bool outcomeYes, , ) = factory.marketMeta(marketId);
         assertFalse(outcomeYes);
     }
 

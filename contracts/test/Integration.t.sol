@@ -34,6 +34,7 @@ contract IntegrationTest is Test {
     address public feeCollector = address(0x99);
 
     bytes32 public constant PRICE_ID = bytes32(uint256(0xB7C));
+    int64 public constant STRIKE_PRICE = int64(50000_00000000);
     uint256 public constant LOT = 1e15;
 
     function setUp() public {
@@ -78,7 +79,7 @@ contract IntegrationTest is Test {
 
     function _createMarket(uint256 duration) internal returns (uint256) {
         vm.prank(user1);
-        return factory.createMarket{value: 0.01 ether}(PRICE_ID, duration, 60, 1);
+        return factory.createMarket{value: 0.01 ether}(PRICE_ID, STRIKE_PRICE, duration, 60, 1);
     }
 
     function _depositAndPlace(
@@ -127,7 +128,7 @@ contract IntegrationTest is Test {
     function test_FullLifecycle() public {
         // 1. Create market
         uint256 fmId = _createMarket(3600);
-        (, , , , , , , uint256 obId) = factory.marketMeta(fmId);
+        (, , , , , , , , uint256 obId) = factory.marketMeta(fmId);
 
         // 2. Place orders: user1 bids at 60, user2 asks at 50
         uint256 bid1 = _depositAndPlace(user1, obId, Side.Bid, 60, 10);
@@ -147,7 +148,7 @@ contract IntegrationTest is Test {
         auction.claimFills(ask1);
 
         // 5. Close market
-        (, uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
+        (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
         vm.warp(expiry);
         factory.closeMarket(fmId);
         assertEq(uint256(factory.getMarketState(fmId)), uint256(MarketState.Closed));
@@ -172,7 +173,7 @@ contract IntegrationTest is Test {
 
     function test_MultiUser_ThreeTraders() public {
         uint256 fmId = _createMarket(3600);
-        (, , , , , , , uint256 obId) = factory.marketMeta(fmId);
+        (, , , , , , , , uint256 obId) = factory.marketMeta(fmId);
 
         // user1 bids at 60 (10 lots)
         uint256 bid1 = _depositAndPlace(user1, obId, Side.Bid, 60, 10);
@@ -201,7 +202,7 @@ contract IntegrationTest is Test {
         uint256 fmId = _createMarket(3600);
 
         // Close market
-        (, uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
+        (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
         vm.warp(expiry);
         factory.closeMarket(fmId);
 
@@ -223,7 +224,7 @@ contract IntegrationTest is Test {
     function test_Challenge_TwoResolvers() public {
         uint256 fmId = _createMarket(3600);
 
-        (, uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
+        (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
         vm.warp(expiry);
         factory.closeMarket(fmId);
 
@@ -258,7 +259,7 @@ contract IntegrationTest is Test {
 
     function test_GasSnapshot_PlaceOrder() public {
         uint256 fmId = _createMarket(3600);
-        (, , , , , , , uint256 obId) = factory.marketMeta(fmId);
+        (, , , , , , , , uint256 obId) = factory.marketMeta(fmId);
 
         uint256 collateral = (10 * LOT * 50) / 100;
         vm.prank(user1);
@@ -273,7 +274,7 @@ contract IntegrationTest is Test {
 
     function test_GasSnapshot_CancelOrder() public {
         uint256 fmId = _createMarket(3600);
-        (, , , , , , , uint256 obId) = factory.marketMeta(fmId);
+        (, , , , , , , , uint256 obId) = factory.marketMeta(fmId);
 
         uint256 orderId = _depositAndPlace(user1, obId, Side.Bid, 50, 10);
 
@@ -286,7 +287,7 @@ contract IntegrationTest is Test {
 
     function test_GasSnapshot_ClearBatch() public {
         uint256 fmId = _createMarket(3600);
-        (, , , , , , , uint256 obId) = factory.marketMeta(fmId);
+        (, , , , , , , , uint256 obId) = factory.marketMeta(fmId);
 
         _depositAndPlace(user1, obId, Side.Bid, 60, 10);
         _depositAndPlace(user2, obId, Side.Ask, 50, 10);
@@ -300,7 +301,7 @@ contract IntegrationTest is Test {
 
     function test_GasSnapshot_ClaimFills() public {
         uint256 fmId = _createMarket(3600);
-        (, , , , , , , uint256 obId) = factory.marketMeta(fmId);
+        (, , , , , , , , uint256 obId) = factory.marketMeta(fmId);
 
         uint256 bid1 = _depositAndPlace(user1, obId, Side.Bid, 60, 10);
         _depositAndPlace(user2, obId, Side.Ask, 50, 10);
@@ -317,7 +318,7 @@ contract IntegrationTest is Test {
     function test_GasSnapshot_ResolveMarket() public {
         uint256 fmId = _createMarket(3600);
 
-        (, uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
+        (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
         vm.warp(expiry);
         factory.closeMarket(fmId);
 
@@ -337,7 +338,7 @@ contract IntegrationTest is Test {
 
     function test_MarketCreation_RegistersInOrderBook() public {
         uint256 fmId = _createMarket(3600);
-        (, , , , , , , uint256 obId) = factory.marketMeta(fmId);
+        (, , , , , , , , uint256 obId) = factory.marketMeta(fmId);
 
         (uint32 mId, bool active, , , , , ) = book.markets(obId);
         assertEq(mId, obId);
@@ -346,7 +347,7 @@ contract IntegrationTest is Test {
 
     function test_CloseMarket_DeactivatesOrderBook() public {
         uint256 fmId = _createMarket(3600);
-        (, uint256 expiry, , , , , , uint256 obId) = factory.marketMeta(fmId);
+        (, , uint256 expiry, , , , , , uint256 obId) = factory.marketMeta(fmId);
 
         vm.warp(expiry);
         factory.closeMarket(fmId);
@@ -357,7 +358,7 @@ contract IntegrationTest is Test {
 
     function test_CannotPlaceOrderAfterClose() public {
         uint256 fmId = _createMarket(3600);
-        (, uint256 expiry, , , , , , uint256 obId) = factory.marketMeta(fmId);
+        (, , uint256 expiry, , , , , , uint256 obId) = factory.marketMeta(fmId);
 
         vm.warp(expiry);
         factory.closeMarket(fmId);
@@ -373,7 +374,7 @@ contract IntegrationTest is Test {
 
     function test_CancelMarket_FromOpenState() public {
         uint256 fmId = _createMarket(3600);
-        (, uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
+        (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
 
         // Wait past expiry + 24h without closing
         vm.warp(expiry + 24 hours);
@@ -387,7 +388,7 @@ contract IntegrationTest is Test {
 
     function test_MultipleBatches_BeforeClose() public {
         uint256 fmId = _createMarket(3600);
-        (, , , , , , , uint256 obId) = factory.marketMeta(fmId);
+        (, , , , , , , , uint256 obId) = factory.marketMeta(fmId);
 
         // Batch 1
         uint256 bid1 = _depositAndPlace(user1, obId, Side.Bid, 60, 10);
@@ -423,7 +424,7 @@ contract IntegrationTest is Test {
         PythResolver badResolver = new PythResolver(address(mockPyth), address(factory));
 
         uint256 fmId = _createMarket(3600);
-        (, uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
+        (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
         vm.warp(expiry);
         factory.closeMarket(fmId);
 
@@ -452,7 +453,7 @@ contract IntegrationTest is Test {
 
         // 1. Create market
         uint256 fmId = _createMarket(3600);
-        (, uint256 expiry, , , , , , uint256 obId) = factory.marketMeta(fmId);
+        (, , uint256 expiry, , , , , , uint256 obId) = factory.marketMeta(fmId);
 
         // 2. Place matching orders at tick 60
         uint256 bidCollateral = (10 * LOT * 60) / 100;
