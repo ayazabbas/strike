@@ -129,6 +129,50 @@ contract Vault is ReentrancyGuard, AccessControl {
     }
 
     // -------------------------------------------------------------------------
+    // Settlement (combined operation for gas efficiency)
+    // -------------------------------------------------------------------------
+
+    /// @notice Combined settlement for BatchAuction.claimFills().
+    ///         Moves filled collateral to market pool, protocol fee to collector,
+    ///         and unlocks unfilled collateral — all in a single call.
+    /// @param user          The order owner.
+    /// @param marketId      Market pool to credit.
+    /// @param toPool        Amount going to market pool.
+    /// @param feeCollector  Protocol fee recipient.
+    /// @param protocolFee   Amount going to fee collector.
+    /// @param unlockAmount  Amount to unlock (unfilled collateral).
+    function settleFill(
+        address user,
+        uint256 marketId,
+        uint256 toPool,
+        address feeCollector,
+        uint256 protocolFee,
+        uint256 unlockAmount
+    ) external onlyRole(PROTOCOL_ROLE) {
+        uint256 totalDeduct = toPool + protocolFee + unlockAmount;
+        require(locked[user] >= totalDeduct, "Vault: insufficient locked balance");
+
+        // Single write to locked (instead of 3 separate decrements)
+        locked[user] -= totalDeduct;
+
+        if (toPool > 0) {
+            balance[user] -= toPool;
+            marketPool[marketId] += toPool;
+            emit AddedToMarketPool(marketId, toPool);
+        }
+
+        if (protocolFee > 0) {
+            balance[user] -= protocolFee;
+            balance[feeCollector] += protocolFee;
+            emit CollateralTransferred(user, feeCollector, protocolFee);
+        }
+
+        if (unlockAmount > 0) {
+            emit Unlocked(user, unlockAmount);
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Market pool (outcome token redemption escrow)
     // -------------------------------------------------------------------------
 

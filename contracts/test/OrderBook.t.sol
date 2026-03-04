@@ -52,7 +52,7 @@ contract OrderBookTest is Test {
         vm.prank(operator);
         uint256 id = book.registerMarket(10, 3, block.timestamp + 3600);
 
-        (uint256 mId, bool active, bool halted, uint256 batchId, uint256 minLots, , ) = book.markets(id);
+        (uint32 mId, bool active, bool halted, uint32 batchId, uint32 minLots, , ) = book.markets(id);
         assertEq(mId, 1);
         assertTrue(active);
         assertFalse(halted);
@@ -219,18 +219,18 @@ contract OrderBookTest is Test {
         uint256 orderId = _depositAndPlace(user1, mId, Side.Bid, 50, 10);
 
         (
-            uint256 id,
-            uint256 marketId,
             address owner,
             Side side,
             ,
-            uint256 tick,
-            uint256 lots,
-            uint256 batchId,
+            uint8 tick,
+            uint64 lots,
+            uint64 id,
+            uint32 marketId,
+            uint32 batchId,
         ) = book.orders(orderId);
 
         assertEq(id, 1);
-        assertEq(marketId, mId);
+        assertEq(marketId, uint32(mId));
         assertEq(owner, user1);
         assertTrue(side == Side.Bid);
         assertEq(tick, 50);
@@ -242,7 +242,7 @@ contract OrderBookTest is Test {
         uint256 mId = _setupMarket();
         uint256 orderId = _depositAndPlace(user1, mId, Side.Ask, 60, 5);
 
-        (, , , Side side, , uint256 tick, uint256 lots, , ) = book.orders(orderId);
+        (, Side side, , uint8 tick, uint64 lots, , , , ) = book.orders(orderId);
         assertTrue(side == Side.Ask);
         assertEq(tick, 60);
         assertEq(lots, 5);
@@ -410,7 +410,7 @@ contract OrderBookTest is Test {
         vault.deposit{value: collateralBid}();
         vm.prank(user1);
         uint256 oid1 = book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 1, 1);
-        (, , , , , , uint256 lots1, , ) = book.orders(oid1);
+        (, , , , uint64 lots1, , , , ) = book.orders(oid1);
         assertEq(lots1, 1);
 
         // Ask at tick 99: collateral = lots * LOT * 1 / 100 = minimal
@@ -419,7 +419,7 @@ contract OrderBookTest is Test {
         vault.deposit{value: collateralAsk}();
         vm.prank(user2);
         uint256 oid2 = book.placeOrder(mId, Side.Ask, OrderType.GoodTilCancel, 99, 1);
-        (, , , , , , uint256 lots2, , ) = book.orders(oid2);
+        (, , , , uint64 lots2, , , , ) = book.orders(oid2);
         assertEq(lots2, 1);
     }
 
@@ -436,7 +436,7 @@ contract OrderBookTest is Test {
         vm.prank(user1);
         book.cancelOrder(orderId);
 
-        (, , , , , , uint256 lots, , ) = book.orders(orderId);
+        (, , , , uint64 lots, , , , ) = book.orders(orderId);
         assertEq(lots, 0);
         assertEq(vault.locked(user1), 0);
         assertEq(vault.available(user1), collateral);
@@ -557,17 +557,6 @@ contract OrderBookTest is Test {
         assertEq(book.cumulativeBidVolume(mId, 50), 15);
         // cumBid at 60 = bids at >= 60 = 5
         assertEq(book.cumulativeBidVolume(mId, 60), 5);
-    }
-
-    function test_GetOrderIdsAtTick() public {
-        uint256 mId = _setupMarket();
-        uint256 oid1 = _depositAndPlace(user1, mId, Side.Bid, 50, 10);
-        uint256 oid2 = _depositAndPlace(user2, mId, Side.Bid, 50, 5);
-
-        uint256[] memory ids = book.getOrderIdsAtTick(mId, Side.Bid, 50);
-        assertEq(ids.length, 2);
-        assertEq(ids[0], oid1);
-        assertEq(ids[1], oid2);
     }
 
     // =========================================================================

@@ -31,8 +31,8 @@ contract OrderBook is AccessControl {
 
     Vault public immutable vault;
 
-    uint256 public nextOrderId = 1;
-    uint256 public nextMarketId = 1;
+    uint64 public nextOrderId = 1;
+    uint32 public nextMarketId = 1;
 
     /// @notice marketId => Market descriptor
     mapping(uint256 => Market) public markets;
@@ -45,12 +45,6 @@ contract OrderBook is AccessControl {
 
     /// @notice marketId => ask segment tree (tick = willingness to sell)
     mapping(uint256 => SegmentTree.Tree) internal askTrees;
-
-    /// @notice marketId => tick => array of order IDs at that tick (bid side)
-    mapping(uint256 => mapping(uint256 => uint256[])) public bidOrderIds;
-
-    /// @notice marketId => tick => array of order IDs at that tick (ask side)
-    mapping(uint256 => mapping(uint256 => uint256[])) public askOrderIds;
 
     // -------------------------------------------------------------------------
     // Events
@@ -91,15 +85,20 @@ contract OrderBook is AccessControl {
     /// @param expiryTime Timestamp when market expires.
     /// @return marketId The new market's ID.
     function registerMarket(uint256 minLots, uint256 batchInterval, uint256 expiryTime) external onlyRole(OPERATOR_ROLE) returns (uint256 marketId) {
-        marketId = nextMarketId++;
+        require(minLots <= type(uint32).max, "OrderBook: minLots overflow");
+        require(batchInterval <= type(uint32).max, "OrderBook: batchInterval overflow");
+        require(expiryTime <= type(uint40).max, "OrderBook: expiryTime overflow");
+
+        uint32 id = nextMarketId++;
+        marketId = id;
         markets[marketId] = Market({
-            id: marketId,
+            id: id,
             active: true,
             halted: false,
             currentBatchId: 1,
-            minLots: minLots,
-            batchInterval: batchInterval,
-            expiryTime: expiryTime
+            minLots: uint32(minLots),
+            batchInterval: uint32(batchInterval),
+            expiryTime: uint40(expiryTime)
         });
         emit MarketRegistered(marketId, minLots);
     }
@@ -155,6 +154,7 @@ contract OrderBook is AccessControl {
         require(tick >= MIN_TICK && tick <= MAX_TICK, "OrderBook: tick out of range");
         require(lots > 0, "OrderBook: zero lots");
         require(lots >= m.minLots, "OrderBook: below min lots");
+        require(lots <= type(uint64).max, "OrderBook: lots overflow");
 
         // Calculate collateral required:
         // Bid: pay tick/100 per lot → collateral = lots * LOT_SIZE * tick / 100
@@ -169,27 +169,26 @@ contract OrderBook is AccessControl {
         // Lock collateral in vault
         vault.lock(msg.sender, collateral);
 
-        // Create order
-        orderId = nextOrderId++;
+        // Create order (packed into 2 storage slots)
+        uint64 oid = nextOrderId++;
+        orderId = oid;
         orders[orderId] = Order({
-            id: orderId,
-            marketId: marketId,
             owner: msg.sender,
             side: side,
             orderType: orderType,
-            tick: tick,
-            lots: lots,
+            tick: uint8(tick),
+            lots: uint64(lots),
+            id: oid,
+            marketId: uint32(marketId),
             batchId: m.currentBatchId,
-            timestamp: block.timestamp
+            timestamp: uint40(block.timestamp)
         });
 
-        // Update segment tree and order list
+        // Update segment tree
         if (side == Side.Bid) {
             bidTrees[marketId].update(tick, int256(lots));
-            bidOrderIds[marketId][tick].push(orderId);
         } else {
             askTrees[marketId].update(tick, int256(lots));
-            askOrderIds[marketId][tick].push(orderId);
         }
 
         emit OrderPlaced(orderId, marketId, msg.sender, side, tick, lots, m.currentBatchId);
@@ -259,19 +258,6 @@ contract OrderBook is AccessControl {
         return askTrees[marketId].totalVolume();
     }
 
-    /// @notice Get order IDs at a tick for a side.
-    function getOrderIdsAtTick(uint256 marketId, Side side, uint256 tick)
-        external
-        view
-        returns (uint256[] memory)
-    {
-        if (side == Side.Bid) {
-            return bidOrderIds[marketId][tick];
-        } else {
-            return askOrderIds[marketId][tick];
-        }
-    }
-
     // -------------------------------------------------------------------------
     // Internal helpers for BatchAuction
     // -------------------------------------------------------------------------
@@ -281,7 +267,7 @@ contract OrderBook is AccessControl {
     function reduceOrderLots(uint256 orderId, uint256 lotsToReduce) external onlyRole(OPERATOR_ROLE) {
         Order storage o = orders[orderId];
         require(o.lots >= lotsToReduce, "OrderBook: insufficient lots");
-        o.lots -= lotsToReduce;
+        o.lots -= uint64(lotsToReduce);
     }
 
     /// @notice Update segment tree volume (called by BatchAuction after fills).

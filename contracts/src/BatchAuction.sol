@@ -75,7 +75,7 @@ contract BatchAuction is AccessControl {
 
     /// @notice Clear the current batch for a market.
     function clearBatch(uint256 marketId) external returns (BatchResult memory result) {
-        (uint256 id, bool active, bool halted, uint256 currentBatchId, , uint256 batchInterval, ) = orderBook.markets(marketId);
+        (uint32 id, bool active, bool halted, uint32 currentBatchId, , uint32 batchInterval, ) = orderBook.markets(marketId);
         require(id != 0, "BatchAuction: market not found");
         require(active, "BatchAuction: market not active");
         require(!halted, "BatchAuction: market halted");
@@ -99,13 +99,13 @@ contract BatchAuction is AccessControl {
         }
 
         result = BatchResult({
-            marketId: marketId,
+            marketId: uint32(marketId),
             batchId: currentBatchId,
-            clearingTick: clearingTick,
-            matchedLots: matchedLots,
-            totalBidLots: totalBidLots,
-            totalAskLots: totalAskLots,
-            timestamp: block.timestamp
+            clearingTick: uint8(clearingTick),
+            matchedLots: uint64(matchedLots),
+            totalBidLots: uint64(totalBidLots),
+            totalAskLots: uint64(totalAskLots),
+            timestamp: uint40(block.timestamp)
         });
 
         batchResults[marketId][currentBatchId] = result;
@@ -149,21 +149,21 @@ contract BatchAuction is AccessControl {
 
     function _readOrder(uint256 orderId) internal view returns (OrderInfo memory info) {
         (
-            uint256 id,
-            uint256 marketId,
             address owner,
             Side side,
             OrderType orderType,
-            uint256 tick,
-            uint256 lots,
-            uint256 batchId,
+            uint8 tick,
+            uint64 lots,
+            uint64 id,
+            uint32 marketId,
+            uint32 batchId,
         ) = orderBook.orders(orderId);
         require(id != 0, "BatchAuction: order not found");
         info = OrderInfo(marketId, owner, side, orderType, tick, lots, batchId);
     }
 
     /// @dev Compute settlement amounts for an order.
-    function _settleAmounts(OrderInfo memory o, BatchResult storage result)
+    function _settleAmounts(OrderInfo memory o, BatchResult memory result)
         internal
         view
         returns (SettleAmounts memory s)
@@ -191,7 +191,8 @@ contract BatchAuction is AccessControl {
 
         OrderInfo memory o = _readOrder(orderId);
 
-        BatchResult storage result = batchResults[o.marketId][o.batchId];
+        // Read batch result into memory once (saves repeated SLOADs on packed struct)
+        BatchResult memory result = batchResults[o.marketId][o.batchId];
         require(result.timestamp != 0, "BatchAuction: batch not cleared");
 
         // Check if order participates in the clearing
@@ -206,26 +207,12 @@ contract BatchAuction is AccessControl {
         orderBook.reduceOrderLots(orderId, o.lots);
         orderBook.updateTreeVolume(o.marketId, o.side, o.tick, -int256(o.lots));
 
-        // Move filled collateral to market pool (minus fee)
-        if (s.toPool > 0) {
-            vault.addToMarketPool(o.owner, o.marketId, s.toPool);
-        }
+        // Settle vault in one call (saves cross-contract overhead)
+        vault.settleFill(o.owner, o.marketId, s.toPool, feeModel.protocolFeeCollector(), s.protocolFee, s.unfilledCollateral);
 
-        // Send protocol fee to fee collector
-        if (s.protocolFee > 0) {
-            vault.transferCollateral(o.owner, feeModel.protocolFeeCollector(), s.protocolFee);
-        }
-
-        // Return unfilled collateral to owner
-        if (s.unfilledCollateral > 0) {
-            vault.unlock(o.owner, s.unfilledCollateral);
-        }
-
-        // Mint outcome tokens: bid → YES, ask → NO
+        // Mint only the outcome token the user needs (bid → YES, ask → NO)
         if (s.filledLots > 0) {
-            outcomeToken.mintPair(o.owner, o.marketId, s.filledLots);
-            // Burn the side the user doesn't want: bidder burns NO, asker burns YES
-            outcomeToken.redeem(o.owner, o.marketId, s.filledLots, o.side != Side.Bid);
+            outcomeToken.mintSingle(o.owner, o.marketId, s.filledLots, o.side == Side.Bid);
         }
 
         emit FillClaimed(orderId, o.owner, s.filledLots, s.unfilledCollateral);
@@ -237,7 +224,7 @@ contract BatchAuction is AccessControl {
         return tick <= clearingTick;
     }
 
-    function _calcFilledLots(uint256 lots, Side side, BatchResult storage result) internal view returns (uint256) {
+    function _calcFilledLots(uint256 lots, Side side, BatchResult memory result) internal pure returns (uint256) {
         uint256 totalSideLots = side == Side.Bid ? result.totalBidLots : result.totalAskLots;
         if (totalSideLots <= result.matchedLots) {
             return lots;
@@ -258,7 +245,7 @@ contract BatchAuction is AccessControl {
         require(o.orderType == OrderType.GoodTilBatch, "BatchAuction: not GTB order");
         require(o.lots > 0, "BatchAuction: order already empty");
 
-        (, , , uint256 currentBatchId, , , ) = orderBook.markets(o.marketId);
+        (, , , uint32 currentBatchId, , , ) = orderBook.markets(o.marketId);
         require(currentBatchId > o.batchId, "BatchAuction: batch not yet advanced");
 
         require(

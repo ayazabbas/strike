@@ -110,7 +110,7 @@ contract BatchAuctionTest is Test {
 
         auction.clearBatch(mId);
 
-        (, , , uint256 batchId, , , ) = book.markets(mId);
+        (, , , uint32 batchId, , , ) = book.markets(mId);
         assertEq(batchId, 2);
     }
 
@@ -234,13 +234,13 @@ contract BatchAuctionTest is Test {
         auction.claimFills(bidId);
 
         // Order should be zeroed out
-        (, , , , , , uint256 bidLots, , ) = book.orders(bidId);
+        (, , , , uint64 bidLots, , , , ) = book.orders(bidId);
         assertEq(bidLots, 0);
 
         // Claim ask fill
         auction.claimFills(askId);
 
-        (, , , , , , uint256 askLots, , ) = book.orders(askId);
+        (, , , , uint64 askLots, , , , ) = book.orders(askId);
         assertEq(askLots, 0);
     }
 
@@ -332,8 +332,8 @@ contract BatchAuctionTest is Test {
         auction.claimFills(bid2);
 
         // Both orders should be fully removed from book
-        (, , , , , , uint256 lots1, , ) = book.orders(bid1);
-        (, , , , , , uint256 lots2, , ) = book.orders(bid2);
+        (, , , , uint64 lots1, , , , ) = book.orders(bid1);
+        (, , , , uint64 lots2, , , , ) = book.orders(bid2);
         assertEq(lots1, 0);
         assertEq(lots2, 0);
     }
@@ -354,8 +354,8 @@ contract BatchAuctionTest is Test {
         auction.claimFills(ask2);
 
         // Both orders should be fully removed
-        (, , , , , , uint256 lots1, , ) = book.orders(ask1);
-        (, , , , , , uint256 lots2, , ) = book.orders(ask2);
+        (, , , , uint64 lots1, , , , ) = book.orders(ask1);
+        (, , , , uint64 lots2, , , , ) = book.orders(ask2);
         assertEq(lots1, 0);
         assertEq(lots2, 0);
     }
@@ -404,7 +404,7 @@ contract BatchAuctionTest is Test {
         auction.pruneExpiredOrder(orderId);
 
         // Order should be zeroed out
-        (, , , , , , uint256 lots, , ) = book.orders(orderId);
+        (, , , , uint64 lots, , , , ) = book.orders(orderId);
         assertEq(lots, 0);
 
         // Collateral should be unlocked
@@ -640,14 +640,14 @@ contract BatchAuctionTest is Test {
 
         // Order still has lots since it got 0 fill but claim didn't remove non-participating orders
         // Actually our claimFills removes 0 lots for non-participating
-        (, , , , , , uint256 lots, , ) = book.orders(orderId);
+        (, , , , uint64 lots, , , , ) = book.orders(orderId);
         assertEq(lots, 10); // Still has lots
 
         // Now prune
         vm.prank(pruner);
         auction.pruneExpiredOrder(orderId);
 
-        (, , , , , , uint256 lotsAfter, , ) = book.orders(orderId);
+        (, , , , uint64 lotsAfter, , , , ) = book.orders(orderId);
         assertEq(lotsAfter, 0);
     }
 

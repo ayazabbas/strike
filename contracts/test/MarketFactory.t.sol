@@ -136,7 +136,7 @@ contract MarketFactoryTest is Test {
         uint256 id = factory.createMarket{value: 0.01 ether}(PRICE_ID, 3600, 0, 0);
 
         (, , , , , , , uint256 obId) = factory.marketMeta(id);
-        (, , , , uint256 minLots, uint256 batchInterval, ) = book.markets(obId);
+        (, , , , uint32 minLots, uint32 batchInterval, ) = book.markets(obId);
 
         assertEq(batchInterval, 60); // default
         assertEq(minLots, 1); // default

@@ -346,7 +346,7 @@ contract IntegrationTest is Test {
         uint256 fmId = _createMarket(3600);
         (, , , , , , , uint256 obId) = factory.marketMeta(fmId);
 
-        (uint256 mId, bool active, , , , , ) = book.markets(obId);
+        (uint32 mId, bool active, , , , , ) = book.markets(obId);
         assertEq(mId, obId);
         assertTrue(active);
     }

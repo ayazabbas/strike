@@ -71,6 +71,17 @@ contract OutcomeToken is ERC1155, AccessControl {
         emit PairMinted(to, marketId, amount);
     }
 
+    /// @notice Mints a single outcome token (YES or NO) for gas-efficient settlement.
+    /// @param to       Recipient of the token.
+    /// @param marketId Market identifier.
+    /// @param amount   Number of tokens to mint.
+    /// @param isYes    True = mint YES token, false = mint NO token.
+    function mintSingle(address to, uint256 marketId, uint256 amount, bool isYes) external onlyRole(MINTER_ROLE) {
+        require(amount > 0, "OutcomeToken: zero amount");
+        uint256 tokenId = isYes ? yesTokenId(marketId) : noTokenId(marketId);
+        _mint(to, tokenId, amount, "");
+    }
+
     /// @notice Burns one YES + one NO token per `amount`, returning collateral equivalence.
     /// @param from     Token holder to burn from.
     /// @param marketId Market identifier.
