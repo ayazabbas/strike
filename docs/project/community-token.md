@@ -4,6 +4,9 @@
 
 A community token for Strike was created on [flap.sh](https://flap.sh) by members of the BNB degen community. We want to be transparent about what this token is and what it isn't.
 
+- **Contract:** `0xdccc017b0f923cf3f3acdb535eb1019439717777`
+- **flap.sh:** [https://flap.sh/bnb/0xdccc017b0f923cf3f3acdb535eb1019439717777](https://flap.sh/bnb/0xdccc017b0f923cf3f3acdb535eb1019439717777)
+
 ## What You Should Know
 
 **This is not an official Strike token.**
