@@ -26,22 +26,12 @@ Every market has a **resolver bounty** funded by the market creation bond (e.g.,
 - Incentivizes permissionless resolution — anyone can earn by resolving expired markets
 - If the market auto-cancels (no resolution within 24h), the bond is returned to the market creator
 
-## Pruner Bounty
-
-Expired or stale orders consume storage. A small bounty incentivizes cleanup:
-
-- Each order deposits a small **order bond** on placement
-- Anyone can call `pruneExpiredOrders()` to remove expired orders
-- The pruner receives the order bond as compensation
-- This keeps the orderbook clean without relying on centralized maintenance
-
 ## Anti-Spam
 
 | Mechanism | Purpose |
 |-----------|---------|
 | **Minimum lot size** | Prevents dust orders |
-| **Order bond** | Economic cost to spamming orders (refunded on cancel/fill, paid to pruner on expiry) |
-| **Per-tick order caps** | Bounds worst-case clearing gas cost |
+| **Full collateral locking** | Economic cost to placing orders (capital is locked until fill or cancel) |
 
 ## Market Creation Bond
 

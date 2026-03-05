@@ -16,7 +16,7 @@ Prices on the orderbook use a **tick system**: 99 discrete price levels from 0.0
 
 ## Batch Intervals
 
-The orderbook doesn't match orders continuously. Instead, orders accumulate and are matched every **batch interval** (~3 seconds by default). This is configurable per market.
+The orderbook doesn't match orders continuously. Instead, orders accumulate and are matched every **batch interval** (60 seconds by default). This is configurable per market.
 
 ## Clearing Price
 
@@ -35,4 +35,4 @@ If one side of the book has more volume than the other at the clearing price, th
 
 ## Collateral
 
-All orders are fully collateralized. When you place a bid (buy YES), you lock collateral. When you place an ask (sell YES), you lock YES tokens. There is no leverage or margin.
+All orders are fully collateralized with BNB. When you place a bid (buy YES), you lock BNB collateral proportional to the tick price. When you place an ask (sell YES), you also lock BNB collateral proportional to `(100 - tick)`. Both sides lock BNB -- asks do NOT require pre-existing outcome tokens. There is no leverage or margin.

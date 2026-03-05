@@ -15,7 +15,7 @@ All external state-changing functions use OpenZeppelin's `ReentrancyGuard`. The 
 | `finalizeResolution()` | Anyone (after finality window) |
 | `pruneExpiredOrders()` | Anyone (permissionless) |
 | `claimFills()` / `redeem()` | Token/order holders |
-| `createMarket()` | Admin (initially) |
+| `createMarket()` | Anyone (with sufficient creation bond) |
 | `pause()` / `unpause()` | Owner |
 | `setFeeCollector()` | Owner |
 
@@ -29,14 +29,13 @@ No function iterates over unbounded sets. Segment trees provide O(log N) operati
 
 ### Anti-Spam
 - Minimum lot sizes prevent dust orders
-- Order bonds create economic cost for spam
-- Per-tick order caps bound worst-case clearing gas
+- Full collateral locking creates economic cost for spam (capital locked until fill or cancel)
 
 ## Oracle Security
 
 ### Pyth Integration
 - All price data is **cryptographically verified on-chain** via Wormhole attestations
-- `parsePriceFeedUpdatesUnique` guarantees deterministic settlement (earliest update in window)
+- `parsePriceFeedUpdates` verifies settlement price on-chain (earliest update in window)
 - **Confidence interval check** rejects settlement if price uncertainty exceeds threshold (default 1%)
 - Fallback windows handle rare Pyth publishing delays
 

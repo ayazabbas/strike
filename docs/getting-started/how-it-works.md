@@ -18,7 +18,7 @@ Traders express their view by buying outcome tokens on the orderbook:
 
 2. **Place orders** — Traders submit limit orders at their desired price (0.01–0.99). A YES token priced at 0.70 means "70% chance price is above strike." Deposit collateral or existing outcome tokens to back your orders.
 
-3. **Batches clear** — Every ~3 seconds, all pending orders are matched at a single uniform clearing price. If bids and asks cross, a clearing price is found that maximizes matched volume. The oversubscribed side gets pro-rata partial fills.
+3. **Batches clear** — Every 60 seconds (default), all pending orders are matched at a single uniform clearing price. If bids and asks cross, a clearing price is found that maximizes matched volume. The oversubscribed side gets pro-rata partial fills.
 
 4. **Claim fills** — After a batch clears, traders claim their filled amounts. You receive outcome tokens (if buying) or collateral (if selling).
 

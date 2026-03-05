@@ -11,7 +11,7 @@ Open → Closed → Resolving → Resolved
 
 ### Open
 - Orderbook accepts orders (place, cancel)
-- Batch clearing runs at configured intervals (~3s)
+- Batch clearing runs at configured intervals (60s default)
 - Traders can mint/merge outcome token pairs
 - **Transition:** automatically enters `Closed` when `block.timestamp + batchInterval >= expiryTime`
 
@@ -40,13 +40,13 @@ Open → Closed → Resolving → Resolved
 - All outcome tokens can be burned for collateral refund (1 YES + 1 NO → 1 collateral)
 - Market creation bond returned minus gas costs
 
-## Timeline (5-minute market, 3s batch interval)
+## Timeline (5-minute market, 60s batch interval)
 
 ```
 0:00    Market created, strike price captured from Pyth
-0:00    Orderbook open — batches clear every ~3s
+0:00    Orderbook open — batches clear every 60s
         ...
-4:57    Last batch clears (< 3s remaining → trading halts)
+4:00    Last batch clears (< 60s remaining → trading halts)
 5:00    Expiry timestamp reached — market enters Closed
 5:00+   Resolver submits Pyth update for [T, T+60s] window
         Finality gate (n+2 blocks, ~1.1s)

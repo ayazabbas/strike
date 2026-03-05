@@ -11,17 +11,21 @@ Central limit order book for the Strike binary-outcome protocol. Single deployed
 ### Order Struct
 ```solidity
 struct Order {
-    uint256 id;
-    uint256 marketId;
-    address owner;
-    Side side;           // Bid or Ask
-    OrderType orderType; // GoodTilCancel or GoodTilBatch
-    uint256 tick;        // 1-99
-    uint256 lots;        // remaining lots (each = LOT_SIZE wei)
-    uint256 batchId;     // batch when placed
-    uint256 timestamp;
+    // --- Slot 1 (31 bytes) ---
+    address owner;       // 20 bytes — order placer
+    Side side;           // 1 byte  — Bid or Ask
+    OrderType orderType; // 1 byte  — GTC or GTB
+    uint8 tick;          // 1 byte  — price tick 1-99 (price = tick/100)
+    uint64 lots;         // 8 bytes — remaining lots (each lot = 1e15 wei)
+    // --- Slot 2 (21 bytes) ---
+    uint64 id;           // 8 bytes — unique order ID
+    uint32 marketId;     // 4 bytes — market this order belongs to
+    uint32 batchId;      // 4 bytes — batch ID when order was placed
+    uint40 timestamp;    // 5 bytes — block.timestamp when placed
 }
 ```
+
+The struct is tightly packed into 2 storage slots for gas efficiency.
 
 ## Key Functions
 

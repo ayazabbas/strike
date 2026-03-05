@@ -29,7 +29,7 @@ User can withdraw all funds after a timelock delay. Safety mechanism — admin c
 
 - **OutcomeToken minting:** `deposit → lock → mint pair` flow
 - **OutcomeToken merging:** `burn pair → unlock → available`
-- **Order placement:** `lock collateral` (bids) or `lock outcome tokens` (asks — tracked separately)
+- **Order placement:** `lock BNB collateral` (both bids and asks — asks lock BNB, not outcome tokens)
 - **Fill claims:** `unlock → transfer` based on batch result
 - **Redemption:** `burn winning token → unlock collateral → available`
 

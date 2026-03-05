@@ -7,8 +7,8 @@ Strike markets are resolved exclusively by **Pyth Network** oracle price feeds. 
 Each market has an expiry timestamp `T`. Resolution uses the **earliest Pyth price update with `publishTime` in `[T, T+Δ]`**, where `Δ` is a protocol parameter (default: 60 seconds).
 
 - The resolver fetches signed update data from Pyth's Hermes historical API
-- The contract verifies it on-chain using `parsePriceFeedUpdatesUnique(updateData, priceId, T, T+Δ)`
-- The `Unique` variant guarantees it returns the **first** update in the window, eliminating ambiguity
+- The contract verifies it on-chain using `parsePriceFeedUpdates(updateData, priceId, T, T+Δ)`
+- Pyth returns the update matching the window, and challengers can submit earlier `publishTime` updates to replace it
 - The `price` field is used for settlement (not `ema_price`) — spot price for clean market semantics
 
 ## Confidence Interval Check

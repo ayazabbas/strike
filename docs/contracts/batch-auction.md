@@ -37,9 +37,9 @@ Settlement for a single order after its batch is cleared.
 2. Compute pro-rata fill: `filledLots = (orderLots * matchedLots) / totalSideLots`
 3. Calculate collateral split: filled collateral → market pool, unfilled → returned to owner
 4. Deduct taker fee (BPS-based), send to protocol fee collector
-5. Mint YES+NO outcome token pair, burn the side user doesn't want:
-   - **Bidder** keeps YES, burns NO
-   - **Asker** keeps NO, burns YES
+5. Mint the single outcome token the user wants via `mintSingle()`:
+   - **Bidder** receives YES token
+   - **Asker** receives NO token
 6. Remove order from book, update segment tree
 
 ### Collateral Model (Option A: BNB-only)

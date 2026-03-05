@@ -17,7 +17,7 @@ Frequency Batch Auctions eliminate intra-batch time priority:
 FBA doesn't eliminate all MEV. Open on-chain order submission still leaks intent:
 
 ### Batch-Boundary Strategies
-Sophisticated actors can observe pending orders in the mempool and submit orders just before a batch deadline. Multi-block batches (~3s) reduce this advantage compared to per-block clearing.
+Sophisticated actors can observe pending orders in the mempool and submit orders just before a batch deadline. Multi-block batches (60s default) reduce this advantage compared to per-block clearing.
 
 ### Cancellation Races
 Makers racing to cancel stale quotes before a batch clears. The batch interval gives makers time, The batch interval itself provides the primary protection against front-running.

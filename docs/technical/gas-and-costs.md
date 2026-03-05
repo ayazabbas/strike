@@ -8,7 +8,6 @@ Based on EVM gas primitives and the FBA CLOB feasibility report. **These are est
 |-----------|-----------|---------------|------------|
 | Place order | 180k | 250k | 450k |
 | Cancel order | 60k | 100k | 180k |
-| Modify order | 300k | 350k | 600k |
 | Clear batch | 800k | 1.5M | 3.0M |
 | Claim fill | 80k | 150k | 250k |
 | Pyth verify (1 feed) | 200k | 300k | 600k |

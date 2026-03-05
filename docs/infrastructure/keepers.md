@@ -35,7 +35,7 @@ Cleans up expired orders to reclaim storage.
 
 - Scans for expired/stale orders (via indexed events or contract reads)
 - Calls `pruneExpiredOrders(orderId[])` in batches
-- Claims pruner bounty (order bonds)
+- Returns collateral to expired order owners
 - Runs less frequently (~30s intervals)
 
 ## Deployment

@@ -5,7 +5,7 @@ Handles Pyth oracle integration for deterministic market resolution.
 ## `resolveMarket(marketId, updateData)`
 
 1. Verifies market is in `Closed` state
-2. Calls `parsePriceFeedUpdatesUnique(updateData, priceId, T, T+Δ)` on the Pyth contract
+2. Calls `parsePriceFeedUpdates(updateData, priceId, T, T+Δ)` on the Pyth contract
 3. **Confidence check:** reverts if `conf > confThresholdBps × |price| / 10000`
 4. Sets `pendingResolution` with the parsed price and publish time
 5. Records resolver address for bounty payment
@@ -18,13 +18,9 @@ Handles Pyth oracle integration for deterministic market resolution.
 4. Transitions market to `Resolved`
 5. Pays resolver bounty
 
-## `challengeResolution(marketId, updateData)`
+## Challenges
 
-During the finality window:
-1. Submit alternative Pyth update data
-2. Contract verifies it's valid and has an earlier `publishTime` within `[T, T+Δ]`
-3. If earlier, replaces the pending resolution
-4. Challenger becomes the new resolver (gets bounty)
+Challenges are handled within `resolveMarket()` itself. During the finality window, anyone can call `resolveMarket()` again with alternative Pyth update data that has an earlier `publishTime` within `[T, T+Δ]`. If the new update is earlier, it replaces the pending resolution and the challenger becomes the new resolver (gets bounty). There is no separate `challengeResolution()` function.
 
 ## Configuration
 
