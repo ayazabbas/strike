@@ -417,4 +417,37 @@ contract PythResolverTest is Test {
         vm.expectRevert("PythResolver: zero factory");
         new PythResolver(address(mockPyth), address(0));
     }
+
+    // =========================================================================
+    // Fuzz: price/confidence around strikePrice boundary
+    // =========================================================================
+
+    function testFuzz_Resolution_StrikeBoundary(int64 price, uint64 conf) public {
+        // Bound price to reasonable range around strike (50000_00000000)
+        price = int64(bound(int256(price), 40000_00000000, 60000_00000000));
+        // Bound confidence to always pass check (≤1% of price)
+        conf = uint64(bound(uint64(conf), 0, uint64(uint256(uint64(price)) / 100)));
+
+        _closeMarket();
+
+        uint64 publishTime = uint64(expiryTime + 10);
+        bytes[] memory updateData = _createPriceUpdate(PRICE_ID, price, conf, publishTime);
+
+        vm.prank(resolver1);
+        resolver.resolveMarket{value: 1}(marketId, updateData);
+
+        vm.roll(block.number + 3);
+        resolver.finalizeResolution(marketId);
+
+        (, , , , , MarketState state, bool outcomeYes, int64 settlementPrice, ) = factory.marketMeta(marketId);
+        assertEq(uint256(state), uint256(MarketState.Resolved));
+        assertEq(settlementPrice, price);
+
+        // price >= strikePrice → YES wins, else NO wins
+        if (price >= STRIKE_PRICE) {
+            assertTrue(outcomeYes, "price >= strike should be YES");
+        } else {
+            assertFalse(outcomeYes, "price < strike should be NO");
+        }
+    }
 }

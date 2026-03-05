@@ -77,6 +77,22 @@ contract IntegrationTest is Test {
     // Helpers
     // =========================================================================
 
+    function _createZeroFeeAuction() internal returns (BatchAuction) {
+        vm.startPrank(admin);
+        FeeModel zeroFee = new FeeModel(admin, 0, 0, 0.001 ether, 0.0001 ether, feeCollector);
+        BatchAuction zeroAuction = new BatchAuction(admin, address(book), address(vault), address(zeroFee), address(token));
+        book.grantRole(book.OPERATOR_ROLE(), address(zeroAuction));
+        vault.grantRole(vault.PROTOCOL_ROLE(), address(zeroAuction));
+        token.grantRole(token.MINTER_ROLE(), address(zeroAuction));
+        vm.stopPrank();
+        return zeroAuction;
+    }
+
+    function _getObId(uint256 fmId) internal view returns (uint256) {
+        (, , , , , , , , uint256 obId) = factory.marketMeta(fmId);
+        return obId;
+    }
+
     function _createMarket(uint256 duration) internal returns (uint256) {
         vm.prank(user1);
         return factory.createMarket{value: 0.01 ether}(PRICE_ID, STRIKE_PRICE, duration, 60, 1);
@@ -416,6 +432,247 @@ contract IntegrationTest is Test {
     }
 
     // =========================================================================
+    // NO-wins redemption
+    // =========================================================================
+
+    function test_Redemption_NOWins() public {
+        BatchAuction zeroAuction = _createZeroFeeAuction();
+        uint256 fmId = _createMarket(3600);
+        uint256 obId = _getObId(fmId);
+        (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
+
+        // Place matching orders at tick 60
+        uint256 bidCollateral = (10 * LOT * 60) / 100;
+        uint256 askCollateral = (10 * LOT * 40) / 100;
+
+        vm.prank(user1);
+        vault.deposit{value: bidCollateral}();
+        vm.prank(user1);
+        uint256 bid1 = book.placeOrder(obId, Side.Bid, OrderType.GoodTilCancel, 60, 10);
+
+        vm.prank(user2);
+        vault.deposit{value: askCollateral}();
+        vm.prank(user2);
+        uint256 ask1 = book.placeOrder(obId, Side.Ask, OrderType.GoodTilCancel, 60, 10);
+
+        vm.prank(operator);
+        zeroAuction.clearBatch(obId);
+        zeroAuction.claimFills(bid1);
+        zeroAuction.claimFills(ask1);
+
+        assertEq(vault.marketPool(obId), 10 * LOT);
+        assertEq(token.balanceOf(user2, token.noTokenId(obId)), 10);
+
+        // Resolve with price BELOW strike → NO wins
+        vm.warp(expiry);
+        factory.closeMarket(fmId);
+
+        uint64 publishTime = uint64(expiry + 10);
+        bytes[] memory updateData = _createPriceUpdate(40000_00000000, 100_00000000, publishTime);
+        vm.prank(user3);
+        resolver.resolveMarket{value: 1}(fmId, updateData);
+        vm.roll(block.number + 3);
+        resolver.finalizeResolution(fmId);
+
+        (, , , , , , bool outcomeYes, , ) = factory.marketMeta(fmId);
+        assertFalse(outcomeYes, "NO should win when price < strike");
+
+        // user2 redeems 10 NO tokens for 10 * LOT BNB
+        uint256 user2BalBefore = user2.balance;
+        vm.prank(user2);
+        redemption.redeem(fmId, 10);
+
+        assertEq(user2.balance - user2BalBefore, 10 * LOT);
+        assertEq(vault.marketPool(obId), 0);
+    }
+
+    // =========================================================================
+    // Cancelled market — both YES and NO holders get collateral back
+    // =========================================================================
+
+    function test_Redemption_CancelledMarket_NoRedemption() public {
+        BatchAuction zeroAuction = _createZeroFeeAuction();
+        uint256 fmId = _createMarket(3600);
+        uint256 obId = _getObId(fmId);
+        (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
+
+        // Trade so tokens exist
+        uint256 bid1 = _depositAndPlace(user1, obId, Side.Bid, 60, 5);
+        uint256 ask1 = _depositAndPlace(user2, obId, Side.Ask, 60, 5);
+
+        vm.prank(operator);
+        zeroAuction.clearBatch(obId);
+        zeroAuction.claimFills(bid1);
+        zeroAuction.claimFills(ask1);
+
+        // Close + wait 24h + cancel
+        vm.warp(expiry);
+        factory.closeMarket(fmId);
+        vm.warp(block.timestamp + 24 hours);
+        factory.cancelMarket(fmId);
+
+        assertEq(uint256(factory.getMarketState(fmId)), uint256(MarketState.Cancelled));
+
+        // Redemption should revert on cancelled market
+        vm.expectRevert("Redemption: not resolved");
+        vm.prank(user1);
+        redemption.redeem(fmId, 5);
+    }
+
+    // =========================================================================
+    // payResolverBounty — revert on non-resolved market
+    // =========================================================================
+
+    function test_PayResolverBounty_RevertIfNotResolved() public {
+        uint256 fmId = _createMarket(3600);
+
+        // Market is Open — should revert
+        vm.prank(admin);
+        vm.expectRevert("MarketFactory: not resolved");
+        factory.payResolverBounty(fmId, user1);
+
+        // Close it
+        (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
+        vm.warp(expiry);
+        factory.closeMarket(fmId);
+
+        // Market is Closed — should still revert
+        vm.prank(admin);
+        vm.expectRevert("MarketFactory: not resolved");
+        factory.payResolverBounty(fmId, user1);
+    }
+
+    // =========================================================================
+    // GTC multi-batch partial fill
+    // =========================================================================
+
+    function test_GTC_MultiBatchPartialFill() public {
+        BatchAuction zeroAuction = _createZeroFeeAuction();
+        uint256 fmId = _createMarket(3600);
+        uint256 obId = _getObId(fmId);
+
+        // Place GTC bid for 20 lots at tick 50
+        vm.prank(user1);
+        vault.deposit{value: (20 * LOT * 50) / 100}();
+        vm.prank(user1);
+        uint256 bidId = book.placeOrder(obId, Side.Bid, OrderType.GoodTilCancel, 50, 20);
+
+        // Batch 1: ask for 5 lots at tick 50 → partial fill (5 of 20)
+        vm.prank(user2);
+        vault.deposit{value: (5 * LOT * 50) / 100}();
+        vm.prank(user2);
+        uint256 ask1 = book.placeOrder(obId, Side.Ask, OrderType.GoodTilCancel, 50, 5);
+
+        vm.prank(operator);
+        assertEq(zeroAuction.clearBatch(obId).matchedLots, 5);
+
+        zeroAuction.claimFills(bidId);
+        zeroAuction.claimFills(ask1);
+
+        // Bid should have 15 lots remaining in book
+        (, , , , uint64 remainingLots, , , , ) = book.orders(bidId);
+        assertEq(remainingLots, 15, "GTC order should have 15 lots remaining");
+        assertEq(token.balanceOf(user1, token.yesTokenId(obId)), 5);
+
+        // Batch 2: ask for 15 lots at tick 50 → fills remainder
+        vm.warp(block.timestamp + 60);
+
+        vm.prank(user3);
+        vault.deposit{value: (15 * LOT * 50) / 100}();
+        vm.prank(user3);
+        uint256 ask2 = book.placeOrder(obId, Side.Ask, OrderType.GoodTilCancel, 50, 15);
+
+        vm.prank(operator);
+        assertEq(zeroAuction.clearBatch(obId).matchedLots, 15);
+
+        zeroAuction.claimFills(bidId);
+        zeroAuction.claimFills(ask2);
+
+        // Bid should be fully filled now
+        (, , , , uint64 finalLots, , , , ) = book.orders(bidId);
+        assertEq(finalLots, 0, "GTC order should be fully filled");
+        assertEq(token.balanceOf(user1, token.yesTokenId(obId)), 20);
+    }
+
+    // =========================================================================
+    // PythResolver admin transfer
+    // =========================================================================
+
+    function test_PythResolver_AdminTransfer() public {
+        assertEq(resolver.admin(), admin);
+
+        // Non-admin can't set pending
+        vm.prank(user1);
+        vm.expectRevert("PythResolver: not admin");
+        resolver.setPendingAdmin(user1);
+
+        // Admin sets pending
+        vm.prank(admin);
+        resolver.setPendingAdmin(user2);
+        assertEq(resolver.pendingAdmin(), user2);
+
+        // Wrong person can't accept
+        vm.prank(user1);
+        vm.expectRevert("PythResolver: not pending admin");
+        resolver.acceptAdmin();
+
+        // Pending admin accepts
+        vm.prank(user2);
+        resolver.acceptAdmin();
+        assertEq(resolver.admin(), user2);
+        assertEq(resolver.pendingAdmin(), address(0));
+    }
+
+    // =========================================================================
+    // PythResolver confThreshold validation
+    // =========================================================================
+
+    function test_PythResolver_ConfThresholdValidation() public {
+        vm.prank(admin);
+        vm.expectRevert("PythResolver: bps exceeds 10000");
+        resolver.setConfThreshold(10001);
+
+        // 10000 should be ok
+        vm.prank(admin);
+        resolver.setConfThreshold(10000);
+        assertEq(resolver.confThresholdBps(), 10000);
+    }
+
+    // =========================================================================
+    // MarketFactory minLots validation
+    // =========================================================================
+
+    function test_MarketFactory_MinLotsValidation() public {
+        vm.prank(admin);
+        vm.expectRevert("MarketFactory: zero minLots");
+        factory.setDefaultParams(60, 0);
+    }
+
+    // =========================================================================
+    // ResolverBountyPaid event
+    // =========================================================================
+
+    function test_ResolverBountyPaid_EmitsEvent() public {
+        uint256 fmId = _createMarket(3600);
+        (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
+
+        vm.warp(expiry);
+        factory.closeMarket(fmId);
+
+        uint64 publishTime = uint64(expiry + 10);
+        bytes[] memory updateData = _createPriceUpdate(50000_00000000, 100_00000000, publishTime);
+        vm.prank(user2);
+        resolver.resolveMarket{value: 1}(fmId, updateData);
+
+        vm.roll(block.number + 3);
+
+        vm.expectEmit(true, true, false, true);
+        emit MarketFactory.ResolverBountyPaid(fmId, user2, 0.01 ether);
+
+        resolver.finalizeResolution(fmId);
+    }
+
+    // =========================================================================
     // PythResolver role — resolution fails without ADMIN_ROLE
     // =========================================================================
 
@@ -442,18 +699,12 @@ contract IntegrationTest is Test {
     // =========================================================================
 
     function test_Redemption_E2E() public {
-        // Use a zero-fee model for clean redemption math
-        vm.startPrank(admin);
-        FeeModel zeroFee = new FeeModel(admin, 0, 0, 0.001 ether, 0.0001 ether, feeCollector);
-        BatchAuction zeroAuction = new BatchAuction(admin, address(book), address(vault), address(zeroFee), address(token));
-        book.grantRole(book.OPERATOR_ROLE(), address(zeroAuction));
-        vault.grantRole(vault.PROTOCOL_ROLE(), address(zeroAuction));
-        token.grantRole(token.MINTER_ROLE(), address(zeroAuction));
-        vm.stopPrank();
+        BatchAuction zeroAuction = _createZeroFeeAuction();
 
         // 1. Create market
         uint256 fmId = _createMarket(3600);
-        (, , uint256 expiry, , , , , , uint256 obId) = factory.marketMeta(fmId);
+        uint256 obId = _getObId(fmId);
+        (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
 
         // 2. Place matching orders at tick 60
         uint256 bidCollateral = (10 * LOT * 60) / 100;

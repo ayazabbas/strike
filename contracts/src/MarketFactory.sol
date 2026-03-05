@@ -75,6 +75,7 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
     event DefaultParamsUpdated(uint256 batchInterval, uint128 minLots);
     event CreationBondUpdated(uint256 newBond);
     event FeeCollectorUpdated(address indexed collector);
+    event ResolverBountyPaid(uint256 indexed factoryMarketId, address indexed resolver, uint256 amount);
 
     // -------------------------------------------------------------------------
     // Constructor
@@ -249,6 +250,8 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
         meta.creationBond = 0;
         (bool ok, ) = resolver.call{value: bond}("");
         require(ok, "MarketFactory: bounty transfer failed");
+
+        emit ResolverBountyPaid(factoryMarketId, resolver, bond);
     }
 
     // -------------------------------------------------------------------------
@@ -262,6 +265,7 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
 
     function setDefaultParams(uint256 _batchInterval, uint128 _minLots) external onlyRole(ADMIN_ROLE) {
         require(_batchInterval > 0, "MarketFactory: zero batchInterval");
+        require(_minLots > 0, "MarketFactory: zero minLots");
         defaultBatchInterval = _batchInterval;
         defaultMinLots = _minLots;
         emit DefaultParamsUpdated(_batchInterval, _minLots);

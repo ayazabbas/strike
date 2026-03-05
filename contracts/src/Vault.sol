@@ -251,5 +251,7 @@ contract Vault is ReentrancyGuard, AccessControl {
     // Receive BNB (e.g. from protocol fee distribution)
     // -------------------------------------------------------------------------
 
-    receive() external payable {}
+    receive() external payable {
+        revert("Vault: use deposit()");
+    }
 }

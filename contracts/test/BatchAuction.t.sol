@@ -874,6 +874,38 @@ contract BatchAuctionTest is Test {
         assertEq(token.balanceOf(user1, yesId), 0, "bid should not fill when clearingTick = 0");
     }
 
+    /// @notice Phantom clearing tick: non-overlapping bid/ask survive clearBatch untouched
+    function test_PhantomClearingTick_OrdersSurvive() public {
+        uint256 mId = _setupMarket();
+
+        // Bid at 30, ask at 70 — no overlap
+        uint256 bidId = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilCancel, 30, 10);
+        uint256 askId = _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilCancel, 70, 10);
+
+        uint256 user1LockedBefore = vault.locked(user1);
+        uint256 user2LockedBefore = vault.locked(user2);
+
+        BatchResult memory r = auction.clearBatch(mId);
+
+        // Should have zero fills and clearing tick 0
+        assertEq(r.clearingTick, 0, "clearingTick should be 0 with non-overlapping orders");
+        assertEq(r.matchedLots, 0, "matchedLots should be 0");
+
+        // Claim — no fills, collateral unchanged
+        auction.claimFills(bidId);
+        auction.claimFills(askId);
+
+        // GTC orders should still have their lots (no destruction)
+        (, , , , uint64 bidLots, , , , ) = book.orders(bidId);
+        (, , , , uint64 askLots, , , , ) = book.orders(askId);
+        assertEq(bidLots, 10, "bid order should still have all lots");
+        assertEq(askLots, 10, "ask order should still have all lots");
+
+        // Collateral should still be locked
+        assertEq(vault.locked(user1), user1LockedBefore, "bid collateral should remain locked");
+        assertEq(vault.locked(user2), user2LockedBefore, "ask collateral should remain locked");
+    }
+
     function test_Participates_NoCross_NeitherSideParticipates() public {
         uint256 mId = _setupMarket();
 
@@ -935,5 +967,51 @@ contract BatchAuctionTest is Test {
         (, , , , uint64 lots, , , , ) = book.orders(highAskId);
         assertEq(lots, 0, "non-participating ask should be pruned");
         assertEq(vault.locked(user3), 0, "collateral should be unlocked");
+    }
+
+    // =========================================================================
+    // Fuzz: placeOrder with random tick/lots/side → clearBatch → invariants
+    // =========================================================================
+
+    function testFuzz_PlaceClearClaim_Invariants(
+        uint256 _bidTick,
+        uint256 _askTick,
+        uint256 _bidLots,
+        uint256 _askLots
+    ) public {
+        // Bound inputs to valid ranges
+        uint8 bidTick = uint8(bound(_bidTick, 1, 99));
+        uint8 askTick = uint8(bound(_askTick, 1, 99));
+        uint8 bidLots = uint8(bound(_bidLots, 1, 100));
+        uint8 askLots = uint8(bound(_askLots, 1, 100));
+
+        uint256 mId = _setupMarket();
+
+        uint256 bidId = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, bidTick, bidLots);
+        uint256 askId = _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, askTick, askLots);
+
+        uint256 user1LockedBefore = vault.locked(user1);
+        uint256 user2LockedBefore = vault.locked(user2);
+
+        BatchResult memory r = auction.clearBatch(mId);
+
+        // Invariant: matchedLots <= min(totalBidLots, totalAskLots)
+        if (r.clearingTick > 0) {
+            uint256 minSide = r.totalBidLots < r.totalAskLots ? r.totalBidLots : r.totalAskLots;
+            assertLe(r.matchedLots, minSide, "matchedLots <= min side");
+        }
+
+        // Invariant: clearingTick 0 → matchedLots 0
+        if (r.clearingTick == 0) {
+            assertEq(r.matchedLots, 0, "zero clearing tick means zero matched");
+        }
+
+        // Claim should succeed without revert
+        auction.claimFills(bidId);
+        auction.claimFills(askId);
+
+        // Invariant: user's locked balance should decrease or stay same after claim
+        assertLe(vault.locked(user1), user1LockedBefore, "user1 locked should not increase");
+        assertLe(vault.locked(user2), user2LockedBefore, "user2 locked should not increase");
     }
 }

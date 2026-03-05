@@ -37,6 +37,9 @@ contract PythResolver is ReentrancyGuard {
     /// @notice Admin address for configuration
     address public admin;
 
+    /// @notice Pending admin for two-step transfer
+    address public pendingAdmin;
+
     /// @notice Pending resolution data
     struct PendingResolution {
         int64 price;
@@ -94,7 +97,20 @@ contract PythResolver is ReentrancyGuard {
     }
 
     function setConfThreshold(uint256 newBps) external onlyAdmin {
+        require(newBps <= 10000, "PythResolver: bps exceeds 10000");
         confThresholdBps = newBps;
+    }
+
+    /// @notice Begin two-step admin transfer.
+    function setPendingAdmin(address _pendingAdmin) external onlyAdmin {
+        pendingAdmin = _pendingAdmin;
+    }
+
+    /// @notice Accept admin role (must be called by pendingAdmin).
+    function acceptAdmin() external {
+        require(msg.sender == pendingAdmin, "PythResolver: not pending admin");
+        admin = pendingAdmin;
+        pendingAdmin = address(0);
     }
 
     // -------------------------------------------------------------------------
