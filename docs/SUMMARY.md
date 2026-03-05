@@ -48,3 +48,4 @@
 
 * [Roadmap](project/roadmap.md)
 * [Design Decisions](project/design-decisions.md)
+* [Community Token](project/community-token.md)
