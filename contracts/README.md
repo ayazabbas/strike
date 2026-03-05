@@ -12,7 +12,7 @@ Binary outcome prediction market with Frequent Batch Auctions on BNB Chain.
 | `OutcomeToken.sol` | ERC-1155 YES/NO outcome tokens per market |
 | `FeeModel.sol` | Taker fee / maker rebate calculation, protocol fee collector |
 | `MarketFactory.sol` | Market creation, lifecycle state machine, resolver bounty |
-| `PythResolver.sol` | Pyth Lazer oracle resolution with finality gate + challenge period |
+| `PythResolver.sol` | Pyth Core oracle resolution with finality gate + challenge period |
 | `Redemption.sol` | Post-resolution burn-to-redeem (winning tokens → BNB) |
 | `SegmentTree.sol` | Fixed-size segment tree (99 ticks) for O(log n) clearing |
 
@@ -30,9 +30,9 @@ Open → Closed ──────────────→ Cancelled (no reso
 - **Resolved**: outcome set (YES/NO), redemption open
 - **Cancelled**: no resolution within 24h of expiry, bond refunded
 
-## Resolution (Pyth Lazer)
+## Resolution (Pyth Core)
 
-1. Anyone calls `resolveMarket()` with a Pyth Lazer update containing `(price, confidence)`
+1. Anyone calls `resolveMarket()` with a Pyth Core update containing `(price, confidence)`
 2. Confidence must be within 1% of price; data must be in one of 5 fallback windows post-expiry
 3. Resolution enters 3-block finality gate; challengers can submit earlier `publishTime`
 4. After finality, `finalizeResolution()` sets outcome and pays resolver bounty
@@ -63,7 +63,7 @@ src/
   OutcomeToken.sol    — ERC-1155 YES/NO token pairs
   FeeModel.sol        — fee schedule (BPS-based)
   MarketFactory.sol   — market creation + state machine
-  PythResolver.sol    — Pyth Lazer oracle integration
+  PythResolver.sol    — Pyth Core oracle integration
   Redemption.sol      — post-resolution token redemption
 test/
   BatchAuction.t.sol  — clearing, settlement, prune, pro-rata tests
