@@ -170,7 +170,7 @@ library SegmentTree {
                 matchCur = cb < ca ? cb : ca;
             }
 
-            uint256 bpN = prefixSum(bidTree, nextTick - 1);
+            uint256 bpN = nextTick > 1 ? prefixSum(bidTree, nextTick - 1) : 0;
             uint256 cbN = totalBids >= bpN ? totalBids - bpN : 0;
             uint256 caN = prefixSum(askTree, nextTick);
             uint256 matchNext = cbN < caN ? cbN : caN;

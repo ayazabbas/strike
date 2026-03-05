@@ -18,12 +18,6 @@ contract VaultInvariantTest is Test {
         vault.grantRole(vault.PROTOCOL_ROLE(), address(handler));
         vm.stopPrank();
 
-        // Fund all actors
-        address[] memory actors = handler.getActors();
-        for (uint256 i = 0; i < actors.length; i++) {
-            vm.deal(actors[i], 100 ether);
-        }
-
         targetContract(address(handler));
     }
 
@@ -76,9 +70,9 @@ contract VaultHandler is Test {
     function deposit(uint256 actorIdx, uint256 amount) external {
         address actor = _actors[actorIdx % 5];
         amount = bound(amount, 1 wei, 10 ether);
-        if (actor.balance < amount) return;
 
-        vm.prank(actor);
+        // Fund the actor and deposit via hoax (deal + prank)
+        hoax(actor, amount);
         vault.deposit{value: amount}();
     }
 
