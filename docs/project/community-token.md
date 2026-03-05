@@ -38,3 +38,9 @@ We're focused on delivering the protocol to mainnet. That is the priority. Any d
 If Strike does launch an official token at some point in the future, we recognise that community token holders took an early bet on the project. We would explore ways to acknowledge that, whether through an airdrop, a migration path, or another mechanism.
 
 **This is not a commitment or guarantee.** No terms exist yet, and nothing has been decided. We're simply saying: we see you, and we wouldn't forget it.
+
+## Holder Tracking
+
+We are already tracking community token holder addresses, balances, and holding durations on-chain. This data is being recorded passively and will be incorporated into any future points programme, should one be introduced.
+
+Holding earlier and longer will be reflected in any such programme. No action is required from holders — the data is captured automatically from on-chain state.
