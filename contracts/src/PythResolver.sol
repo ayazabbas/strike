@@ -130,7 +130,8 @@ contract PythResolver is ReentrancyGuard {
 
         // Refund excess
         if (msg.value > fee) {
-            payable(msg.sender).transfer(msg.value - fee);
+            (bool ok, ) = payable(msg.sender).call{value: msg.value - fee}("");
+            require(ok, "PythResolver: refund failed");
         }
 
         PythStructs.Price memory p = feeds[0].price;

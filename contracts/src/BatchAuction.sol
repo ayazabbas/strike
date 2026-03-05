@@ -28,8 +28,8 @@ contract BatchAuction is AccessControl {
     /// @notice marketId => batchId => BatchResult
     mapping(uint256 => mapping(uint256 => BatchResult)) public batchResults;
 
-    /// @notice orderId => true if fills have been claimed for this order
-    mapping(uint256 => bool) public claimed;
+    /// @notice orderId => last batchId for which fills were claimed (0 = never claimed)
+    mapping(uint256 => uint256) public lastClaimedBatch;
 
     /// @notice marketId => timestamp of last batch clear
     mapping(uint256 => uint256) public lastClearTime;
@@ -96,6 +96,12 @@ contract BatchAuction is AccessControl {
             totalBidLots = orderBook.cumulativeBidVolume(marketId, clearingTick);
             totalAskLots = orderBook.cumulativeAskVolume(marketId, clearingTick);
             matchedLots = totalBidLots < totalAskLots ? totalBidLots : totalAskLots;
+
+            // Phantom clearing: segment tree may return a non-zero tick even when
+            // bids and asks don't truly overlap. Reset to 0 if no real match.
+            if (matchedLots == 0) {
+                clearingTick = 0;
+            }
         }
 
         require(totalBidLots <= type(uint64).max, "BatchAuction: totalBidLots overflow");
@@ -187,16 +193,31 @@ contract BatchAuction is AccessControl {
     ///         Pro-rata: if side is oversubscribed, each order gets a proportional fill.
     ///         Filled collateral goes to the market pool; unfilled is returned to owner.
     ///         Bidders receive YES outcome tokens; askers receive NO outcome tokens.
+    ///
+    ///         GTC orders: only filled lots are removed; unfilled lots stay in the book
+    ///         for future batches. Call claimFills again after each subsequent batch.
+    ///         GTB orders: all lots are removed (filled + unfilled collateral returned).
     /// @param orderId The order to claim fills for.
     function claimFills(uint256 orderId) external {
-        require(!claimed[orderId], "BatchAuction: already claimed");
-        claimed[orderId] = true;
-
         OrderInfo memory o = _readOrder(orderId);
 
+        // Determine which batch to claim
+        uint256 batchToClaim;
+        uint256 lastClaimed = lastClaimedBatch[orderId];
+        if (lastClaimed == 0) {
+            batchToClaim = o.batchId; // First claim: use placement batch
+        } else {
+            // Only GTC orders can be claimed across multiple batches
+            require(o.orderType == OrderType.GoodTilCancel, "BatchAuction: already claimed");
+            require(o.lots > 0, "BatchAuction: order fully filled");
+            batchToClaim = lastClaimed + 1;
+        }
+
         // Read batch result into memory once (saves repeated SLOADs on packed struct)
-        BatchResult memory result = batchResults[o.marketId][o.batchId];
+        BatchResult memory result = batchResults[o.marketId][batchToClaim];
         require(result.timestamp != 0, "BatchAuction: batch not cleared");
+
+        lastClaimedBatch[orderId] = batchToClaim;
 
         // Check if order participates in the clearing
         if (!_orderParticipates(o.side, o.tick, result.clearingTick) || o.lots == 0) {
@@ -206,19 +227,34 @@ contract BatchAuction is AccessControl {
 
         SettleAmounts memory s = _settleAmounts(o, result);
 
-        // Remove entire order from the book
-        orderBook.reduceOrderLots(orderId, o.lots);
-        orderBook.updateTreeVolume(o.marketId, o.side, o.tick, -int256(o.lots));
+        if (o.orderType == OrderType.GoodTilCancel && s.filledLots < o.lots) {
+            // GTC partial fill: only remove filled lots, leave unfilled resting
+            orderBook.reduceOrderLots(orderId, s.filledLots);
+            orderBook.updateTreeVolume(o.marketId, o.side, o.tick, -int256(s.filledLots));
 
-        // Settle vault in one call (saves cross-contract overhead)
-        vault.settleFill(o.owner, o.marketId, s.toPool, feeModel.protocolFeeCollector(), s.protocolFee, s.unfilledCollateral);
+            // Settle only the filled portion (unfilled collateral stays locked)
+            vault.settleFill(o.owner, o.marketId, s.toPool, feeModel.protocolFeeCollector(), s.protocolFee, 0);
+        } else {
+            // GTB or GTC full fill: remove entire order from the book
+            orderBook.reduceOrderLots(orderId, o.lots);
+            orderBook.updateTreeVolume(o.marketId, o.side, o.tick, -int256(o.lots));
+
+            // Settle vault in one call (saves cross-contract overhead)
+            vault.settleFill(o.owner, o.marketId, s.toPool, feeModel.protocolFeeCollector(), s.protocolFee, s.unfilledCollateral);
+        }
 
         // Mint only the outcome token the user needs (bid → YES, ask → NO)
         if (s.filledLots > 0) {
             outcomeToken.mintSingle(o.owner, o.marketId, s.filledLots, o.side == Side.Bid);
         }
 
-        emit FillClaimed(orderId, o.owner, s.filledLots, s.unfilledCollateral);
+        uint256 released = (o.orderType == OrderType.GoodTilCancel && s.filledLots < o.lots) ? 0 : s.unfilledCollateral;
+        emit FillClaimed(orderId, o.owner, s.filledLots, released);
+    }
+
+    /// @notice Check if fills have been claimed for an order (backward-compatible view).
+    function claimed(uint256 orderId) external view returns (bool) {
+        return lastClaimedBatch[orderId] > 0;
     }
 
     function _orderParticipates(Side side, uint256 tick, uint256 clearingTick) internal pure returns (bool) {
@@ -258,11 +294,11 @@ contract BatchAuction is AccessControl {
         // If the order participated in clearing, it must be claimed first
         // to ensure filled collateral flows to market pool (prevents settlement bypass)
         if (_orderParticipates(o.side, o.tick, result.clearingTick)) {
-            require(claimed[orderId], "BatchAuction: claim fills first");
+            require(lastClaimedBatch[orderId] >= o.batchId, "BatchAuction: claim fills first");
         }
 
         // Mark as claimed to prevent any future claimFills attempt
-        claimed[orderId] = true;
+        lastClaimedBatch[orderId] = o.batchId;
 
         uint256 collateral = _collateral(o.lots, o.tick, o.side);
 

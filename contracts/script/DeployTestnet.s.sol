@@ -9,6 +9,7 @@ import {OrderBook} from "../src/OrderBook.sol";
 import {BatchAuction} from "../src/BatchAuction.sol";
 import {MarketFactory} from "../src/MarketFactory.sol";
 import {PythResolver} from "../src/PythResolver.sol";
+import {Redemption} from "../src/Redemption.sol";
 
 /// @notice Deploy Strike protocol to BSC testnet or mainnet using real Pyth Core.
 contract DeployTestnetScript is Script {
@@ -27,6 +28,7 @@ contract DeployTestnetScript is Script {
         address batchAuction;
         address factory;
         address pythResolver;
+        address redemption;
         address pyth;
         uint256 testMarketId;
     }
@@ -72,12 +74,17 @@ contract DeployTestnetScript is Script {
         PythResolver pythResolver = new PythResolver(pythAddr, address(factory));
         d.pythResolver = address(pythResolver);
 
+        Redemption redemption = new Redemption(address(factory), address(outcomeToken), address(vault));
+        d.redemption = address(redemption);
+
         // Wire roles
         orderBook.grantRole(orderBook.OPERATOR_ROLE(), address(batchAuction));
         orderBook.grantRole(orderBook.OPERATOR_ROLE(), address(factory));
         vault.grantRole(vault.PROTOCOL_ROLE(), address(orderBook));
         vault.grantRole(vault.PROTOCOL_ROLE(), address(batchAuction));
+        vault.grantRole(vault.PROTOCOL_ROLE(), address(redemption));
         outcomeToken.grantRole(outcomeToken.MINTER_ROLE(), address(batchAuction));
+        outcomeToken.grantRole(outcomeToken.MINTER_ROLE(), address(redemption));
         factory.grantRole(factory.ADMIN_ROLE(), address(pythResolver));
 
         // Create test market: BTC/USD, strike $50k, 1 hour, 12s batches
@@ -102,6 +109,7 @@ contract DeployTestnetScript is Script {
             json,
             '","marketFactory":"', vm.toString(d.factory),
             '","pythResolver":"', vm.toString(d.pythResolver),
+            '","redemption":"', vm.toString(d.redemption),
             '","testMarketFactoryId":"', vm.toString(d.testMarketId),
             '","btcUsdPriceId":"', vm.toString(BTC_USD_PRICE_ID),
             '"}'

@@ -54,6 +54,9 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
     /// @notice Index tracking for efficient removal from activeMarkets
     mapping(uint256 => uint256) internal activeMarketIndex;
 
+    /// @notice Index tracking for efficient removal from closedMarkets
+    mapping(uint256 => uint256) internal closedMarketIndex;
+
     // -------------------------------------------------------------------------
     // Events
     // -------------------------------------------------------------------------
@@ -165,6 +168,7 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
         orderBook.deactivateMarket(meta.orderBookMarketId);
 
         _removeFromActive(factoryMarketId);
+        closedMarketIndex[factoryMarketId] = closedMarkets.length;
         closedMarkets.push(factoryMarketId);
 
         emit MarketClosed(factoryMarketId);
@@ -213,6 +217,9 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
         if (meta.state == MarketState.Open) {
             orderBook.deactivateMarket(meta.orderBookMarketId);
             _removeFromActive(factoryMarketId);
+        } else {
+            // Was Closed — remove from closedMarkets array
+            _removeFromClosed(factoryMarketId);
         }
 
         meta.state = MarketState.Cancelled;
@@ -235,6 +242,7 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
         nonReentrant
     {
         MarketMeta storage meta = marketMeta[factoryMarketId];
+        require(meta.state == MarketState.Resolved, "MarketFactory: not resolved");
         uint256 bond = meta.creationBond;
         require(bond > 0, "MarketFactory: no bond");
 
@@ -305,6 +313,20 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
         }
         activeMarkets.pop();
         delete activeMarketIndex[factoryMarketId];
+    }
+
+    function _removeFromClosed(uint256 factoryMarketId) internal {
+        if (closedMarkets.length == 0) return;
+        uint256 idx = closedMarketIndex[factoryMarketId];
+        uint256 lastIdx = closedMarkets.length - 1;
+
+        if (idx != lastIdx) {
+            uint256 lastId = closedMarkets[lastIdx];
+            closedMarkets[idx] = lastId;
+            closedMarketIndex[lastId] = idx;
+        }
+        closedMarkets.pop();
+        delete closedMarketIndex[factoryMarketId];
     }
 
     // -------------------------------------------------------------------------

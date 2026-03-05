@@ -9,6 +9,7 @@ import {OrderBook} from "../src/OrderBook.sol";
 import {BatchAuction} from "../src/BatchAuction.sol";
 import {MarketFactory} from "../src/MarketFactory.sol";
 import {PythResolver} from "../src/PythResolver.sol";
+import {Redemption} from "../src/Redemption.sol";
 import {MockPyth} from "@pythnetwork/pyth-sdk-solidity/MockPyth.sol";
 
 /// @notice Deploy the full Strike protocol and seed a test market (devnet/anvil).
@@ -87,18 +88,27 @@ contract DeployScript is Script {
             address(factory)
         );
 
-        // 9. Wire roles
+        // 9. Redemption
+        Redemption redemption = new Redemption(
+            address(factory),
+            address(outcomeToken),
+            address(vault)
+        );
+
+        // 10. Wire roles
         orderBook.grantRole(orderBook.OPERATOR_ROLE(), address(batchAuction));
         orderBook.grantRole(orderBook.OPERATOR_ROLE(), address(factory));
 
         vault.grantRole(vault.PROTOCOL_ROLE(), address(orderBook));
         vault.grantRole(vault.PROTOCOL_ROLE(), address(batchAuction));
+        vault.grantRole(vault.PROTOCOL_ROLE(), address(redemption));
 
         outcomeToken.grantRole(outcomeToken.MINTER_ROLE(), address(batchAuction));
+        outcomeToken.grantRole(outcomeToken.MINTER_ROLE(), address(redemption));
 
         factory.grantRole(factory.ADMIN_ROLE(), address(pythResolver));
 
-        // 10. Create test market: BTC/USD, 1 hour, 12s batches
+        // 11. Create test market: BTC/USD, 1 hour, 12s batches
         bytes32 priceId = bytes32(uint256(1));
         int64 strikePrice = int64(5_000_000_000_000); // $50,000 with expo=-8
         uint256 factoryMarketId = factory.createMarket{value: 0.01 ether}(
@@ -111,7 +121,7 @@ contract DeployScript is Script {
 
         vm.stopBroadcast();
 
-        // 11. Print deployed addresses as JSON (grep-able by deploy container)
+        // 12. Print deployed addresses as JSON (grep-able by deploy container)
         string memory json = string.concat(
             '{"feeModel":"', vm.toString(address(feeModel)),
             '","outcomeToken":"', vm.toString(address(outcomeToken)),
@@ -124,6 +134,7 @@ contract DeployScript is Script {
             json,
             '","marketFactory":"', vm.toString(address(factory)),
             '","pythResolver":"', vm.toString(address(pythResolver)),
+            '","redemption":"', vm.toString(address(redemption)),
             '","testMarketFactoryId":"', vm.toString(factoryMarketId),
             '"}'
         );
