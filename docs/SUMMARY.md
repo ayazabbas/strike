@@ -24,6 +24,9 @@
 * [Vault.sol](contracts/vault.md)
 * [PythResolver.sol](contracts/pyth-resolver.md)
 * [MarketFactory.sol](contracts/market-factory.md)
+* [FeeModel.sol](contracts/fee-model.md)
+* [SegmentTree.sol](contracts/segment-tree.md)
+* [Redemption.sol](contracts/redemption.md)
 * [Deployments](contracts/deployments.md)
 
 ## Infrastructure
@@ -37,6 +40,12 @@
 * [Overview](frontend/overview.md)
 * [Trading Interface](frontend/trading.md)
 * [Portfolio](frontend/portfolio.md)
+
+## Guides
+
+* [Deployment Guide](deployment-guide.md)
+* [Developer Integration](developer-integration.md)
+* [Local Devnet Setup](devnet-setup.md)
 
 ## Technical
 

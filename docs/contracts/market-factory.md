@@ -62,3 +62,16 @@ Open → Closed ─────────────→ Cancelled
 - Creator pays `creationBond` on market creation
 - On resolution: bond paid to resolver via `payResolverBounty()`
 - On cancellation: bond refunded to creator
+
+## Events
+
+```solidity
+event MarketCreated(uint256 indexed factoryMarketId, uint256 indexed orderBookMarketId, bytes32 priceId, int64 strikePrice, uint256 expiryTime, address indexed creator);
+event MarketClosed(uint256 indexed factoryMarketId);
+event MarketStateChanged(uint256 indexed factoryMarketId, MarketState newState);
+event FactoryPaused(bool paused);
+event DefaultParamsUpdated(uint256 batchInterval, uint128 minLots);
+event CreationBondUpdated(uint256 newBond);
+event FeeCollectorUpdated(address indexed collector);
+event ResolverBountyPaid(uint256 indexed factoryMarketId, address indexed resolver, uint256 amount);
+```

@@ -49,3 +49,14 @@ The struct is tightly packed into 2 storage slots for gas efficiency.
 ## Access Control
 
 - **OPERATOR_ROLE:** BatchAuction (for `reduceOrderLots`, `updateTreeVolume`, `advanceBatch`) and MarketFactory (for `registerMarket`, `deactivateMarket`)
+
+## Events
+
+```solidity
+event MarketRegistered(uint256 indexed marketId, uint256 minLots);
+event MarketHalted(uint256 indexed marketId);
+event MarketResumed(uint256 indexed marketId);
+event MarketDeactivated(uint256 indexed marketId);
+event OrderPlaced(uint256 indexed orderId, uint256 indexed marketId, address indexed owner, Side side, uint256 tick, uint256 lots, uint256 batchId);
+event OrderCancelled(uint256 indexed orderId, address indexed owner);
+```

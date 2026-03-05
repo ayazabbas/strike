@@ -30,3 +30,15 @@ Challenges are handled within `resolveMarket()` itself. During the finality wind
 | `maxDelta` | 300s (5×Δ) | Maximum fallback window |
 | `confThresholdBps` | 100 (1%) | Max confidence/price ratio |
 | `finalityBlocks` | 3 | Blocks to wait for economic finality |
+
+## Admin Transfer
+
+Two-step admin transfer: `setPendingAdmin(address)` → `acceptAdmin()`. Prevents accidental admin loss.
+
+## Events
+
+```solidity
+event ResolutionSubmitted(uint256 indexed factoryMarketId, int64 price, uint256 publishTime, address indexed resolver);
+event ResolutionChallenged(uint256 indexed factoryMarketId, int64 newPrice, uint256 newPublishTime, address indexed challenger);
+event ResolutionFinalized(uint256 indexed factoryMarketId, int64 price, bool outcomeYes, address indexed finalizer);
+```

@@ -20,3 +20,7 @@ Post-resolution token redemption. Users burn winning outcome tokens 1:1 for BNB 
 - Only winning tokens can be redeemed (losing tokens have no value)
 - Market pool is funded during `claimFills()` in BatchAuction
 - Each outcome token represents 1 lot = LOT_SIZE (1e15 wei = 0.001 BNB)
+
+## Events
+
+- `Redeemed(uint256 indexed factoryMarketId, address indexed user, uint256 amount, bool outcomeYes)`

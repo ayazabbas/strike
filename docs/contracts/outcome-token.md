@@ -26,3 +26,11 @@ Post-resolution only. Burn `amount` winning tokens → receive `amount` collater
 
 - `mintPair` / `burnPair` / `redeem`: restricted to protocol contracts (Vault, OrderBook)
 - Standard ERC-1155 transfers: unrestricted (tokens are freely transferable)
+
+## Events
+
+```solidity
+event PairMinted(address indexed to, uint256 indexed marketId, uint256 amount);
+event PairBurned(address indexed from, uint256 indexed marketId, uint256 amount);
+event Redeemed(address indexed from, uint256 indexed marketId, uint256 amount, bool winningOutcome);
+```

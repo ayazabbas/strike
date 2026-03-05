@@ -38,3 +38,18 @@ User can withdraw all funds after a timelock delay. Safety mechanism — admin c
 - ReentrancyGuard on all external functions
 - Checks-Effects-Interactions pattern
 - No admin access to user funds (admin can only set protocol parameters)
+- `receive()` reverts — use `deposit()` instead
+
+## Events
+
+```solidity
+event Deposited(address indexed user, uint256 amount);
+event Withdrawn(address indexed user, uint256 amount);
+event Locked(address indexed user, uint256 amount);
+event Unlocked(address indexed user, uint256 amount);
+event CollateralTransferred(address indexed from, address indexed to, uint256 amount);
+event AddedToMarketPool(uint256 indexed marketId, uint256 amount);
+event RedeemedFromPool(uint256 indexed marketId, address indexed to, uint256 amount);
+event EmergencyModeActivated(uint256 timestamp);
+event EmergencyWithdrawn(address indexed user, uint256 amount);
+```

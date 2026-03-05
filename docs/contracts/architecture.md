@@ -54,3 +54,69 @@ MarketFactory (singleton)
 **Lazy settlement.** Batch clearing writes only aggregate results (clearing price, fill fractions, total volume). Individual fills are computed and settled when traders call `claimFills()`. This keeps `clearBatch()` gas cost constant regardless of order count.
 
 **Permissionless operations.** Clearing, resolution, and pruning are all callable by anyone. Economic incentives (resolver bounty) ensure they happen without relying on trusted operators.
+
+## Access Control Graph
+
+```
+                   ┌──────────────┐
+                   │   Deployer   │
+                   │ (admin EOA)  │
+                   └──────┬───────┘
+                          │ DEFAULT_ADMIN_ROLE
+          ┌───────────────┼───────────────┐
+          ▼               ▼               ▼
+    ┌──────────┐   ┌──────────┐   ┌──────────┐
+    │ FeeModel │   │  Vault   │   │OrderBook │
+    └──────────┘   └────┬─────┘   └────┬─────┘
+                        │              │
+              PROTOCOL_ │    OPERATOR_ │
+              ROLE      │    ROLE      │
+          ┌─────┬───────┤    ┌────────┤
+          ▼     ▼       ▼    ▼        ▼
+     ┌────────┐ │  ┌────────┐  ┌──────────────┐
+     │Redemp- │ │  │ Batch  │  │MarketFactory │
+     │tion    │ │  │Auction │  └──────┬───────┘
+     └────────┘ │  └────┬───┘    ADMIN│_ROLE
+                │       │             ▼
+     ┌──────────┴──┐    │    ┌──────────────┐
+     │ OutcomeToken │◄───┘    │PythResolver  │
+     └─────────────┘         └──────────────┘
+              ▲  MINTER_ROLE
+              │
+     BatchAuction, Redemption
+```
+
+**Role Summary:**
+- `OPERATOR_ROLE` on OrderBook → granted to BatchAuction + MarketFactory
+- `PROTOCOL_ROLE` on Vault → granted to OrderBook + BatchAuction + Redemption
+- `MINTER_ROLE` on OutcomeToken → granted to BatchAuction + Redemption
+- `ADMIN_ROLE` on MarketFactory → granted to PythResolver
+
+## Sequence: Place Order → Clear → Claim → Redeem
+
+```
+User           Vault         OrderBook      BatchAuction    OutcomeToken   Redemption
+ │               │               │               │               │            │
+ │──deposit()──→│               │               │               │            │
+ │               │               │               │               │            │
+ │──placeOrder()────────────────→│               │               │            │
+ │               │◄──lock()─────│               │               │            │
+ │               │               │──updateTree──→│               │            │
+ │               │               │               │               │            │
+ │  (batch interval elapses)     │               │               │            │
+ │               │               │               │               │            │
+Keeper──────────────────────────────clearBatch()→│               │            │
+ │               │               │◄─findClearing─│               │            │
+ │               │               │               │               │            │
+ │──claimFills()────────────────────────────────→│               │            │
+ │               │◄──settleFill─────────────────│               │            │
+ │               │               │◄─reduceOrder─│               │            │
+ │               │               │               │──mintSingle()→│            │
+ │               │               │               │               │            │
+ │  (market expires + resolved via PythResolver) │               │            │
+ │               │               │               │               │            │
+ │──redeem()─────────────────────────────────────────────────────────────────→│
+ │               │               │               │               │◄─redeem()─│
+ │               │◄──redeemFromPool──────────────────────────────────────────│
+ │◄──BNB payout──│               │               │               │            │
+```
