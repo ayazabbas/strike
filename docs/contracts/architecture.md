@@ -2,7 +2,7 @@
 
 ## Overview
 
-Strike's protocol is composed of six core contracts:
+Strike's protocol is composed of eight core contracts:
 
 ```
 MarketFactory (singleton)
@@ -15,7 +15,7 @@ MarketFactory (singleton)
 ┌──────────────────────────────────────────────────────┐
 │  Singleton Contracts (per-market state via mappings)  │
 │                                                       │
-│  OrderBook ←→ BatchAuction ←→ ClaimSettlement        │
+│  OrderBook ←→ BatchAuction (atomic clearing+settle)  │
 │      │              │                                 │
 │      ▼              ▼                                 │
 │  SegmentTree    BatchResult storage                   │
@@ -24,7 +24,7 @@ MarketFactory (singleton)
        │                    │
        ▼                    ▼
     Vault              OutcomeToken
-  (collateral)        (ERC-1155)
+ (internal escrow)     (ERC-1155)
        │                    │
        ▼                    ▼
   PythResolver ──→ Redemption
@@ -51,7 +51,7 @@ MarketFactory (singleton)
 
 **Bounded iteration.** No contract function iterates over an unbounded set. Segment trees provide O(log N) operations. Claim and prune functions take explicit order ID arrays from the caller.
 
-**Lazy settlement.** Batch clearing writes only aggregate results (clearing price, fill fractions, total volume). Individual fills are computed and settled when traders call `claimFills()`. This keeps `clearBatch()` gas cost constant regardless of order count.
+**Atomic settlement.** `clearBatch(marketId, orderIds[])` clears the batch and settles all provided orders in a single transaction. The keeper passes the order IDs to settle inline — no separate claim step is needed. This simplifies the UX and removes the need for users to submit a second transaction.
 
 **Permissionless operations.** Clearing, resolution, and pruning are all callable by anyone. Economic incentives (resolver bounty) ensure they happen without relying on trusted operators.
 
@@ -97,21 +97,18 @@ MarketFactory (singleton)
 ```
 User           Vault         OrderBook      BatchAuction    OutcomeToken   Redemption
  │               │               │               │               │            │
- │──deposit()──→│               │               │               │            │
- │               │               │               │               │            │
- │──placeOrder()────────────────→│               │               │            │
+ │──placeOrder(){ msg.value }──→│               │               │            │
+ │               │◄─depositFor()─│               │               │            │
  │               │◄──lock()─────│               │               │            │
- │               │               │──updateTree──→│               │            │
  │               │               │               │               │            │
  │  (batch interval elapses)     │               │               │            │
  │               │               │               │               │            │
-Keeper──────────────────────────────clearBatch()→│               │            │
+Keeper─────────────────────clearBatch(mktId, orderIds[])────────→│            │
  │               │               │◄─findClearing─│               │            │
- │               │               │               │               │            │
- │──claimFills()────────────────────────────────→│               │            │
- │               │◄──settleFill─────────────────│               │            │
+ │               │◄──settleFill─────────────────│  (inline)     │            │
  │               │               │◄─reduceOrder─│               │            │
  │               │               │               │──mintSingle()→│            │
+ │◄──BNB refund──│               │               │  (unfilled)  │            │
  │               │               │               │               │            │
  │  (market expires + resolved via PythResolver) │               │            │
  │               │               │               │               │            │

@@ -81,7 +81,7 @@ outcomeToken.grantRole(MINTER_ROLE, address(batchAuction));
 outcomeToken.grantRole(MINTER_ROLE, address(redemption));
 ```
 
-BatchAuction calls `mintSingle` during `claimFills`. Redemption calls `redeem` (burns winning tokens).
+BatchAuction calls `mintSingle` during inline settlement. Redemption calls `redeem` (burns winning tokens).
 
 ### MarketFactory.ADMIN_ROLE
 
@@ -174,8 +174,8 @@ For contracts with complex constructor args, use `cast abi-encode` to produce th
 
 4. **Test market creation** -- call `MarketFactory.createMarket{value: 0.01 ether}(...)` with a known Pyth price ID and verify the market appears in `activeMarkets`.
 
-5. **Test deposit/withdraw cycle** -- deposit BNB into Vault, verify balance, withdraw, verify balance returns to zero.
+5. **Test place/cancel cycle** -- call `OrderBook.placeOrder{value: collateral}(...)` and verify collateral is escrowed in Vault. Cancel the order and verify BNB is returned to wallet.
 
-6. **Keepers configured** -- batch clearing and order pruning keepers (in strike-infra) pointing at correct contract addresses.
+6. **Keepers configured** -- batch-keeper, market-keeper, resolution-keeper, and pruning-keeper (in strike-infra) pointing at correct contract addresses.
 
 7. **Indexer configured** -- indexer (in strike-infra) pointing at correct RPC and contract addresses, listening for all relevant events.

@@ -2,9 +2,9 @@
 
 Handles Frequent Batch Auction clearing and pro-rata settlement.
 
-## `clearBatch(marketId)`
+## `clearBatch(marketId, orderIds[])`
 
-Permissionless. Callable by anyone.
+Permissionless. Callable by anyone. Clears the batch and settles all provided orders atomically in a single transaction.
 
 ### Algorithm
 
@@ -13,36 +13,35 @@ Permissionless. Callable by anyone.
 3. **Compute volumes:** cumulative bid/ask lots at clearing tick, matched = min(bid, ask)
 4. **Store result:** write `BatchResult` and advance batch counter
 5. **Empty batches:** still stored (clearingTick = 0, matchedLots = 0)
+6. **Inline settlement:** iterate `orderIds[]` and settle each order (pro-rata fill, mint tokens, return unfilled collateral to wallet)
 
 ### BatchResult Struct
 ```solidity
 struct BatchResult {
-    uint256 marketId;
-    uint256 batchId;
-    uint256 clearingTick;   // 0 = no cross
-    uint256 matchedLots;
-    uint256 totalBidLots;
-    uint256 totalAskLots;
-    uint256 timestamp;
+    uint32  marketId;
+    uint32  batchId;
+    uint8   clearingTick;   // 0 = no cross
+    uint64  matchedLots;
+    uint64  totalBidLots;
+    uint64  totalAskLots;
+    uint40  timestamp;
 }
 ```
 
-## `claimFills(orderId)`
+### Inline Settlement Flow
 
-Settlement for a single order after its batch is cleared.
+For each order in `orderIds[]`:
 
-### Settlement Flow
-
-1. Verify batch is cleared and order participates (bid tick >= clearing, ask tick <= clearing)
+1. Verify order belongs to the cleared market and batch
 2. Compute pro-rata fill: `filledLots = (orderLots * matchedLots) / totalSideLots`
-3. Calculate collateral split: filled collateral → market pool, unfilled → returned to owner
+3. Calculate collateral split: filled collateral → market pool, unfilled → returned to owner's wallet
 4. Deduct taker fee (BPS-based), send to protocol fee collector
-5. Mint the single outcome token the user wants via `mintSingle()`:
+5. Mint outcome token via `mintSingle()`:
    - **Bidder** receives YES token
    - **Asker** receives NO token
-6. Remove order from book, update segment tree
+6. Remove filled lots from order, update segment tree
 
-### Collateral Model (Option A: BNB-only)
+### Collateral Model (BNB-only)
 
 Both sides lock BNB collateral. Asks do NOT lock outcome tokens.
 - Bid collateral: `lots * LOT_SIZE * tick / 100`
