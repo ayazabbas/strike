@@ -54,6 +54,7 @@ Preserved on the `poc` branch.
 
 ### Phase 4 — Integration, Hardening & Deployment
 - [ ] End-to-end integration tests
+- [ ] **Inline settlement** — fold `claimFills` logic into `clearBatch` so orders are settled atomically when the batch clears. Removes the separate claim step entirely. Users place an order, walk away, and tokens/refunds just appear.
 - [ ] Gas optimization pass
 - [ ] Security hardening (Slither, Mythril)
 - [ ] Private submission support (BEP-322)
