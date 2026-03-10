@@ -137,6 +137,20 @@ contract IntegrationTest is Test {
         );
     }
 
+    // -------------------------------------------------------------------------
+    // Order-ID array helpers
+    // -------------------------------------------------------------------------
+
+    function _noIds() internal pure returns (uint256[] memory) {
+        return new uint256[](0);
+    }
+
+    function _ids(uint256 a, uint256 b) internal pure returns (uint256[] memory arr) {
+        arr = new uint256[](2);
+        arr[0] = a;
+        arr[1] = b;
+    }
+
     // =========================================================================
     // Full lifecycle: create → trade → clear → close → resolve → redeem
     // =========================================================================
@@ -152,7 +166,7 @@ contract IntegrationTest is Test {
 
         // 3. Clear batch
         vm.prank(operator);
-        BatchResult memory result = auction.clearBatch(obId);
+        BatchResult memory result = auction.clearBatch(obId, _noIds());
 
         // Should match at a tick between 50-60
         assertGe(result.clearingTick, 50);
@@ -200,7 +214,7 @@ contract IntegrationTest is Test {
 
         // Clear batch
         vm.prank(operator);
-        BatchResult memory result = auction.clearBatch(obId);
+        BatchResult memory result = auction.clearBatch(obId, _noIds());
 
         assertGt(result.matchedLots, 0);
 
@@ -310,7 +324,7 @@ contract IntegrationTest is Test {
 
         vm.prank(operator);
         uint256 gasBefore = gasleft();
-        auction.clearBatch(obId);
+        auction.clearBatch(obId, _noIds());
         uint256 gasUsed = gasBefore - gasleft();
         emit log_named_uint("clearBatch gas", gasUsed);
     }
@@ -323,7 +337,7 @@ contract IntegrationTest is Test {
         _depositAndPlace(user2, obId, Side.Ask, 50, 10);
 
         vm.prank(operator);
-        auction.clearBatch(obId);
+        auction.clearBatch(obId, _noIds());
 
         uint256 gasBefore = gasleft();
         auction.claimFills(bid1);
@@ -411,7 +425,7 @@ contract IntegrationTest is Test {
         uint256 ask1 = _depositAndPlace(user2, obId, Side.Ask, 50, 10);
 
         vm.prank(operator);
-        auction.clearBatch(obId);
+        auction.clearBatch(obId, _noIds());
 
         auction.claimFills(bid1);
         auction.claimFills(ask1);
@@ -424,7 +438,7 @@ contract IntegrationTest is Test {
         uint256 ask2 = _depositAndPlace(user3, obId, Side.Ask, 45, 5);
 
         vm.prank(operator);
-        BatchResult memory r2 = auction.clearBatch(obId);
+        BatchResult memory r2 = auction.clearBatch(obId, _noIds());
 
         assertGt(r2.matchedLots, 0);
         auction.claimFills(bid2);
@@ -456,7 +470,7 @@ contract IntegrationTest is Test {
         uint256 ask1 = book.placeOrder(obId, Side.Ask, OrderType.GoodTilCancel, 60, 10);
 
         vm.prank(operator);
-        zeroAuction.clearBatch(obId);
+        zeroAuction.clearBatch(obId, _noIds());
         zeroAuction.claimFills(bid1);
         zeroAuction.claimFills(ask1);
 
@@ -501,7 +515,7 @@ contract IntegrationTest is Test {
         uint256 ask1 = _depositAndPlace(user2, obId, Side.Ask, 60, 5);
 
         vm.prank(operator);
-        zeroAuction.clearBatch(obId);
+        zeroAuction.clearBatch(obId, _noIds());
         zeroAuction.claimFills(bid1);
         zeroAuction.claimFills(ask1);
 
@@ -564,7 +578,7 @@ contract IntegrationTest is Test {
         uint256 ask1 = book.placeOrder(obId, Side.Ask, OrderType.GoodTilCancel, 50, 5);
 
         vm.prank(operator);
-        assertEq(zeroAuction.clearBatch(obId).matchedLots, 5);
+        assertEq(zeroAuction.clearBatch(obId, _noIds()).matchedLots, 5);
 
         zeroAuction.claimFills(bidId);
         zeroAuction.claimFills(ask1);
@@ -583,7 +597,7 @@ contract IntegrationTest is Test {
         uint256 ask2 = book.placeOrder(obId, Side.Ask, OrderType.GoodTilCancel, 50, 15);
 
         vm.prank(operator);
-        assertEq(zeroAuction.clearBatch(obId).matchedLots, 15);
+        assertEq(zeroAuction.clearBatch(obId, _noIds()).matchedLots, 15);
 
         zeroAuction.claimFills(bidId);
         zeroAuction.claimFills(ask2);
@@ -722,7 +736,7 @@ contract IntegrationTest is Test {
 
         // 3. Clear batch
         vm.prank(operator);
-        BatchResult memory result = zeroAuction.clearBatch(obId);
+        BatchResult memory result = zeroAuction.clearBatch(obId, _noIds());
         assertEq(result.matchedLots, 10);
 
         // 4. Claim fills — tokens minted, collateral to pool
