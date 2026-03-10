@@ -5,7 +5,7 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 
 /// @title Vault
-/// @notice Holds BNB (native currency) as collateral for the Strike CLOB protocol.
+/// @notice Holds BNB (native currency) as internal escrow for the Strike CLOB protocol.
 ///
 ///         Accounting
 ///         ----------
@@ -15,8 +15,8 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 ///
 ///         Access control
 ///         --------------
-///         PROTOCOL_ROLE  — granted to OrderBook / BatchAuction contracts
-///                          Can call lock(), unlock(), transferCollateral()
+///         PROTOCOL_ROLE  — granted to OrderBook / BatchAuction / Redemption contracts
+///                          Can call depositFor(), withdrawTo(), lock(), unlock(), etc.
 ///
 ///         Emergency mode
 ///         --------------
@@ -63,29 +63,33 @@ contract Vault is ReentrancyGuard, AccessControl {
     }
 
     // -------------------------------------------------------------------------
-    // Deposit / Withdraw
+    // Deposit / Withdraw (protocol only — direct-from-wallet UX)
     // -------------------------------------------------------------------------
 
-    /// @notice Deposit BNB into the vault. Credits msg.value to msg.sender's balance.
-    function deposit() external payable {
+    /// @notice Deposit BNB on behalf of a user. Credits msg.value to their balance.
+    ///         Called by OrderBook.placeOrder to escrow collateral from the user's wallet.
+    /// @param user The user to credit.
+    function depositFor(address user) external payable onlyRole(PROTOCOL_ROLE) {
         require(msg.value > 0, "Vault: zero deposit");
-        balance[msg.sender] += msg.value;
-        emit Deposited(msg.sender, msg.value);
+        balance[user] += msg.value;
+        emit Deposited(user, msg.value);
     }
 
-    /// @notice Withdraw `amount` of available (unlocked) BNB.
+    /// @notice Send BNB from a user's available balance directly to their wallet.
+    ///         Called by OrderBook/BatchAuction/Redemption to return collateral.
+    /// @param user   The user whose balance to debit and send BNB to.
     /// @param amount Amount to withdraw in wei.
-    function withdraw(uint256 amount) external nonReentrant {
+    function withdrawTo(address user, uint256 amount) external onlyRole(PROTOCOL_ROLE) nonReentrant {
         require(amount > 0, "Vault: zero amount");
-        uint256 avail = available(msg.sender);
+        uint256 avail = available(user);
         require(avail >= amount, "Vault: insufficient available balance");
 
-        balance[msg.sender] -= amount;
+        balance[user] -= amount;
 
-        (bool ok,) = msg.sender.call{value: amount}("");
+        (bool ok,) = user.call{value: amount}("");
         require(ok, "Vault: transfer failed");
 
-        emit Withdrawn(msg.sender, amount);
+        emit Withdrawn(user, amount);
     }
 
     // -------------------------------------------------------------------------
@@ -132,22 +136,24 @@ contract Vault is ReentrancyGuard, AccessControl {
     // Settlement (combined operation for gas efficiency)
     // -------------------------------------------------------------------------
 
-    /// @notice Combined settlement for BatchAuction.claimFills().
+    /// @notice Combined settlement for BatchAuction inline settlement / claimFills().
     ///         Moves filled collateral to market pool, protocol fee to collector,
-    ///         and unlocks unfilled collateral — all in a single call.
+    ///         unlocks unfilled collateral, and optionally withdraws unfilled to user's wallet.
     /// @param user          The order owner.
     /// @param marketId      Market pool to credit.
     /// @param toPool        Amount going to market pool.
     /// @param feeCollector  Protocol fee recipient.
     /// @param protocolFee   Amount going to fee collector.
     /// @param unlockAmount  Amount to unlock (unfilled collateral).
+    /// @param withdrawUser  If true, send unlockAmount to user's wallet via withdrawTo.
     function settleFill(
         address user,
         uint256 marketId,
         uint256 toPool,
         address feeCollector,
         uint256 protocolFee,
-        uint256 unlockAmount
+        uint256 unlockAmount,
+        bool withdrawUser
     ) external onlyRole(PROTOCOL_ROLE) {
         uint256 totalDeduct = toPool + protocolFee + unlockAmount;
         require(locked[user] >= totalDeduct, "Vault: insufficient locked balance");
@@ -169,6 +175,13 @@ contract Vault is ReentrancyGuard, AccessControl {
 
         if (unlockAmount > 0) {
             emit Unlocked(user, unlockAmount);
+
+            if (withdrawUser) {
+                balance[user] -= unlockAmount;
+                (bool ok,) = user.call{value: unlockAmount}("");
+                require(ok, "Vault: transfer failed");
+                emit Withdrawn(user, unlockAmount);
+            }
         }
     }
 
@@ -252,6 +265,6 @@ contract Vault is ReentrancyGuard, AccessControl {
     // -------------------------------------------------------------------------
 
     receive() external payable {
-        revert("Vault: use deposit()");
+        revert("Vault: use depositFor()");
     }
 }

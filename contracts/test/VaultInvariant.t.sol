@@ -71,9 +71,9 @@ contract VaultHandler is Test {
         address actor = _actors[actorIdx % 5];
         amount = bound(amount, 1 wei, 10 ether);
 
-        // Fund the actor and deposit via hoax (deal + prank)
-        hoax(actor, amount);
-        vault.deposit{value: amount}();
+        // Fund the handler and deposit via depositFor (protocol role)
+        vm.deal(address(this), amount);
+        vault.depositFor{value: amount}(actor);
     }
 
     function withdraw(uint256 actorIdx, uint256 amount) external {
@@ -82,8 +82,7 @@ contract VaultHandler is Test {
         if (avail == 0) return;
         amount = bound(amount, 1, avail);
 
-        vm.prank(actor);
-        vault.withdraw(amount);
+        vault.withdrawTo(actor, amount);
     }
 
     function lock(uint256 actorIdx, uint256 amount) external {

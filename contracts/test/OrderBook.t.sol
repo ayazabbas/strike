@@ -23,7 +23,7 @@ contract OrderBookTest is Test {
         vault = new Vault(admin);
         book = new OrderBook(admin, address(vault));
         book.grantRole(book.OPERATOR_ROLE(), operator);
-        // Grant OrderBook the PROTOCOL_ROLE on Vault so it can lock/unlock
+        // Grant OrderBook the PROTOCOL_ROLE on Vault so it can lock/unlock/depositFor/withdrawTo
         vault.grantRole(vault.PROTOCOL_ROLE(), address(book));
         vm.stopPrank();
 
@@ -184,7 +184,7 @@ contract OrderBookTest is Test {
     }
 
     // =========================================================================
-    // placeOrder — basic
+    // placeOrder — basic (direct-from-wallet: send BNB as msg.value)
     // =========================================================================
 
     function _setupMarket() internal returns (uint256 marketId) {
@@ -192,31 +192,29 @@ contract OrderBookTest is Test {
         marketId = book.registerMarket(1, 3, block.timestamp + 3600); // minLots = 1
     }
 
-    function _depositAndPlace(
+    function _calcCollateral(Side side, uint256 tick, uint256 lots) internal pure returns (uint256) {
+        if (side == Side.Bid) {
+            return (lots * LOT * tick) / 100;
+        } else {
+            return (lots * LOT * (100 - tick)) / 100;
+        }
+    }
+
+    function _placeOrder(
         address user,
         uint256 marketId,
         Side side,
         uint256 tick,
         uint256 lots
     ) internal returns (uint256 orderId) {
-        // Calculate collateral needed
-        uint256 collateral;
-        if (side == Side.Bid) {
-            collateral = (lots * LOT * tick) / 100;
-        } else {
-            collateral = (lots * LOT * (100 - tick)) / 100;
-        }
-
+        uint256 collateral = _calcCollateral(side, tick, lots);
         vm.prank(user);
-        vault.deposit{value: collateral}();
-
-        vm.prank(user);
-        orderId = book.placeOrder(marketId, side, OrderType.GoodTilCancel, tick, lots);
+        orderId = book.placeOrder{value: collateral}(marketId, side, OrderType.GoodTilCancel, tick, lots);
     }
 
     function test_PlaceOrder_BidBasic() public {
         uint256 mId = _setupMarket();
-        uint256 orderId = _depositAndPlace(user1, mId, Side.Bid, 50, 10);
+        uint256 orderId = _placeOrder(user1, mId, Side.Bid, 50, 10);
 
         (
             address owner,
@@ -240,7 +238,7 @@ contract OrderBookTest is Test {
 
     function test_PlaceOrder_AskBasic() public {
         uint256 mId = _setupMarket();
-        uint256 orderId = _depositAndPlace(user1, mId, Side.Ask, 60, 5);
+        uint256 orderId = _placeOrder(user1, mId, Side.Ask, 60, 5);
 
         (, Side side, , uint8 tick, uint64 lots, , , , ) = book.orders(orderId);
         assertTrue(side == Side.Ask);
@@ -252,14 +250,11 @@ contract OrderBookTest is Test {
         uint256 mId = _setupMarket();
         uint256 collateral = (10 * LOT * 50) / 100;
 
-        vm.prank(user1);
-        vault.deposit{value: collateral}();
-
         vm.expectEmit(true, true, true, true);
         emit OrderBook.OrderPlaced(1, mId, user1, Side.Bid, 50, 10, 1);
 
         vm.prank(user1);
-        book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 50, 10);
+        book.placeOrder{value: collateral}(mId, Side.Bid, OrderType.GoodTilCancel, 50, 10);
     }
 
     function test_PlaceOrder_LocksCollateral_Bid() public {
@@ -267,10 +262,7 @@ contract OrderBookTest is Test {
         uint256 collateral = (10 * LOT * 50) / 100; // 50% of 10 lots
 
         vm.prank(user1);
-        vault.deposit{value: collateral}();
-
-        vm.prank(user1);
-        book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 50, 10);
+        book.placeOrder{value: collateral}(mId, Side.Bid, OrderType.GoodTilCancel, 50, 10);
 
         assertEq(vault.locked(user1), collateral);
         assertEq(vault.available(user1), 0);
@@ -282,18 +274,15 @@ contract OrderBookTest is Test {
         uint256 collateral = (10 * LOT * 40) / 100;
 
         vm.prank(user1);
-        vault.deposit{value: collateral}();
-
-        vm.prank(user1);
-        book.placeOrder(mId, Side.Ask, OrderType.GoodTilCancel, 60, 10);
+        book.placeOrder{value: collateral}(mId, Side.Ask, OrderType.GoodTilCancel, 60, 10);
 
         assertEq(vault.locked(user1), collateral);
     }
 
     function test_PlaceOrder_UpdatesSegmentTree() public {
         uint256 mId = _setupMarket();
-        _depositAndPlace(user1, mId, Side.Bid, 50, 10);
-        _depositAndPlace(user2, mId, Side.Bid, 50, 5);
+        _placeOrder(user1, mId, Side.Bid, 50, 10);
+        _placeOrder(user2, mId, Side.Bid, 50, 5);
 
         assertEq(book.bidVolumeAt(mId, 50), 15);
         assertEq(book.totalBidVolume(mId), 15);
@@ -301,7 +290,7 @@ contract OrderBookTest is Test {
 
     function test_PlaceOrder_UpdatesAskTree() public {
         uint256 mId = _setupMarket();
-        _depositAndPlace(user1, mId, Side.Ask, 30, 7);
+        _placeOrder(user1, mId, Side.Ask, 30, 7);
 
         assertEq(book.askVolumeAt(mId, 30), 7);
         assertEq(book.totalAskVolume(mId), 7);
@@ -319,7 +308,7 @@ contract OrderBookTest is Test {
 
         vm.expectRevert("OrderBook: market not active");
         vm.prank(user1);
-        book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 50, 10);
+        book.placeOrder{value: 1 ether}(mId, Side.Bid, OrderType.GoodTilCancel, 50, 10);
     }
 
     function test_PlaceOrder_RevertIfMarketHalted() public {
@@ -330,7 +319,7 @@ contract OrderBookTest is Test {
 
         vm.expectRevert("OrderBook: market halted");
         vm.prank(user1);
-        book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 50, 10);
+        book.placeOrder{value: 1 ether}(mId, Side.Bid, OrderType.GoodTilCancel, 50, 10);
     }
 
     function test_PlaceOrder_RevertIfTickZero() public {
@@ -366,14 +355,19 @@ contract OrderBookTest is Test {
         book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 50, 3);
     }
 
-    function test_PlaceOrder_RevertIfInsufficientCollateral() public {
+    function test_PlaceOrder_RevertIfWrongMsgValue() public {
         uint256 mId = _setupMarket();
 
-        // Deposit only 1 wei — not enough for a bid at tick 50
+        // Send 1 wei — not matching the required collateral for a bid at tick 50, 10 lots
+        vm.expectRevert("OrderBook: wrong msg.value");
         vm.prank(user1);
-        vault.deposit{value: 1 wei}();
+        book.placeOrder{value: 1 wei}(mId, Side.Bid, OrderType.GoodTilCancel, 50, 10);
+    }
 
-        vm.expectRevert("Vault: insufficient available balance");
+    function test_PlaceOrder_RevertIfZeroMsgValue() public {
+        uint256 mId = _setupMarket();
+
+        vm.expectRevert("OrderBook: wrong msg.value");
         vm.prank(user1);
         book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 50, 10);
     }
@@ -386,19 +380,14 @@ contract OrderBookTest is Test {
         // At t=0: block.timestamp + 3 < block.timestamp + 5 → OK
         uint256 collateral = (1 * LOT * 50) / 100;
         vm.prank(user1);
-        vault.deposit{value: collateral}();
-        vm.prank(user1);
-        book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 50, 1);
+        book.placeOrder{value: collateral}(mId, Side.Bid, OrderType.GoodTilCancel, 50, 1);
 
         // Warp to t=2: block.timestamp + 3 = t+2+3 = t+5 = expiryTime → NOT strictly less → revert
         vm.warp(block.timestamp + 2);
 
-        vm.prank(user1);
-        vault.deposit{value: collateral}();
-
         vm.expectRevert("OrderBook: trading halted");
         vm.prank(user1);
-        book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 50, 1);
+        book.placeOrder{value: collateral}(mId, Side.Bid, OrderType.GoodTilCancel, 50, 1);
     }
 
     function test_PlaceOrder_Tick1And99() public {
@@ -407,44 +396,41 @@ contract OrderBookTest is Test {
         // Bid at tick 1: collateral = lots * LOT * 1 / 100 = minimal
         uint256 collateralBid = (1 * LOT * 1) / 100;
         vm.prank(user1);
-        vault.deposit{value: collateralBid}();
-        vm.prank(user1);
-        uint256 oid1 = book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 1, 1);
+        uint256 oid1 = book.placeOrder{value: collateralBid}(mId, Side.Bid, OrderType.GoodTilCancel, 1, 1);
         (, , , , uint64 lots1, , , , ) = book.orders(oid1);
         assertEq(lots1, 1);
 
         // Ask at tick 99: collateral = lots * LOT * 1 / 100 = minimal
         uint256 collateralAsk = (1 * LOT * 1) / 100;
         vm.prank(user2);
-        vault.deposit{value: collateralAsk}();
-        vm.prank(user2);
-        uint256 oid2 = book.placeOrder(mId, Side.Ask, OrderType.GoodTilCancel, 99, 1);
+        uint256 oid2 = book.placeOrder{value: collateralAsk}(mId, Side.Ask, OrderType.GoodTilCancel, 99, 1);
         (, , , , uint64 lots2, , , , ) = book.orders(oid2);
         assertEq(lots2, 1);
     }
 
     // =========================================================================
-    // cancelOrder
+    // cancelOrder — returns BNB directly to wallet
     // =========================================================================
 
     function test_CancelOrder_Basic() public {
         uint256 mId = _setupMarket();
-        uint256 orderId = _depositAndPlace(user1, mId, Side.Bid, 50, 10);
-
         uint256 collateral = (10 * LOT * 50) / 100;
+        uint256 orderId = _placeOrder(user1, mId, Side.Bid, 50, 10);
 
+        uint256 walletBefore = user1.balance;
         vm.prank(user1);
         book.cancelOrder(orderId);
 
         (, , , , uint64 lots, , , , ) = book.orders(orderId);
         assertEq(lots, 0);
         assertEq(vault.locked(user1), 0);
-        assertEq(vault.available(user1), collateral);
+        assertEq(vault.balance(user1), 0); // balance also zeroed (withdrawn)
+        assertEq(user1.balance, walletBefore + collateral); // BNB returned to wallet
     }
 
     function test_CancelOrder_EmitsEvent() public {
         uint256 mId = _setupMarket();
-        uint256 orderId = _depositAndPlace(user1, mId, Side.Bid, 50, 10);
+        uint256 orderId = _placeOrder(user1, mId, Side.Bid, 50, 10);
 
         vm.expectEmit(true, true, false, false);
         emit OrderBook.OrderCancelled(orderId, user1);
@@ -455,7 +441,7 @@ contract OrderBookTest is Test {
 
     function test_CancelOrder_UpdatesTree() public {
         uint256 mId = _setupMarket();
-        uint256 orderId = _depositAndPlace(user1, mId, Side.Bid, 50, 10);
+        uint256 orderId = _placeOrder(user1, mId, Side.Bid, 50, 10);
 
         assertEq(book.bidVolumeAt(mId, 50), 10);
 
@@ -466,22 +452,23 @@ contract OrderBookTest is Test {
         assertEq(book.totalBidVolume(mId), 0);
     }
 
-    function test_CancelOrder_AskUnlocksCorrectly() public {
+    function test_CancelOrder_AskReturnsBNB() public {
         uint256 mId = _setupMarket();
-        uint256 orderId = _depositAndPlace(user1, mId, Side.Ask, 40, 10);
-
         uint256 collateral = (10 * LOT * 60) / 100; // 100 - 40 = 60
+        uint256 orderId = _placeOrder(user1, mId, Side.Ask, 40, 10);
 
+        uint256 walletBefore = user1.balance;
         vm.prank(user1);
         book.cancelOrder(orderId);
 
         assertEq(vault.locked(user1), 0);
-        assertEq(vault.available(user1), collateral);
+        assertEq(vault.balance(user1), 0);
+        assertEq(user1.balance, walletBefore + collateral);
     }
 
     function test_CancelOrder_RevertIfNotOwner() public {
         uint256 mId = _setupMarket();
-        uint256 orderId = _depositAndPlace(user1, mId, Side.Bid, 50, 10);
+        uint256 orderId = _placeOrder(user1, mId, Side.Bid, 50, 10);
 
         vm.expectRevert("OrderBook: not owner");
         vm.prank(user2);
@@ -490,7 +477,7 @@ contract OrderBookTest is Test {
 
     function test_CancelOrder_RevertIfAlreadyCancelled() public {
         uint256 mId = _setupMarket();
-        uint256 orderId = _depositAndPlace(user1, mId, Side.Bid, 50, 10);
+        uint256 orderId = _placeOrder(user1, mId, Side.Bid, 50, 10);
 
         vm.prank(user1);
         book.cancelOrder(orderId);
@@ -507,8 +494,8 @@ contract OrderBookTest is Test {
     function test_FindClearingTick_WithCross() public {
         uint256 mId = _setupMarket();
         // Bid at 60, Ask at 40 → should cross
-        _depositAndPlace(user1, mId, Side.Bid, 60, 10);
-        _depositAndPlace(user2, mId, Side.Ask, 40, 10);
+        _placeOrder(user1, mId, Side.Bid, 60, 10);
+        _placeOrder(user2, mId, Side.Ask, 40, 10);
 
         uint256 ct = book.findClearingTick(mId);
         // Clearing tick should be between 40 and 60 (highest where cumBid >= cumAsk)
@@ -519,7 +506,7 @@ contract OrderBookTest is Test {
     function test_FindClearingTick_NoCross() public {
         uint256 mId = _setupMarket();
         // Only bids, no asks → no clearing tick
-        _depositAndPlace(user1, mId, Side.Bid, 30, 10);
+        _placeOrder(user1, mId, Side.Bid, 30, 10);
 
         uint256 ct = book.findClearingTick(mId);
         assertEq(ct, 0);
@@ -527,18 +514,10 @@ contract OrderBookTest is Test {
 
     function test_FindClearingTick_BidBelowAsk() public {
         uint256 mId = _setupMarket();
-        // Bid at 30, Ask at 70
-        // cumBid >= cumAsk holds for ticks 1-69 (since cumAsk is 0 until tick 70,
-        // and cumBid is 10 for ticks 1-30 then 0 for 31+).
-        // Highest tick where cumBid(p) >= cumAsk(p):
-        // At p=69: cumBid=0, cumAsk=0 → 0>=0 holds → clearing tick = 69
-        _depositAndPlace(user1, mId, Side.Bid, 30, 10);
-        _depositAndPlace(user2, mId, Side.Ask, 70, 10);
+        _placeOrder(user1, mId, Side.Bid, 30, 10);
+        _placeOrder(user2, mId, Side.Ask, 70, 10);
 
         uint256 ct = book.findClearingTick(mId);
-        // Both sides have volume but don't truly cross.
-        // The algorithm returns the highest tick where cumBid >= cumAsk.
-        // For ticks 31-69: cumBid=0, cumAsk=0, so 0>=0 holds.
         assertEq(ct, 69);
     }
 
@@ -550,8 +529,8 @@ contract OrderBookTest is Test {
 
     function test_CumulativeVolumes() public {
         uint256 mId = _setupMarket();
-        _depositAndPlace(user1, mId, Side.Bid, 50, 10);
-        _depositAndPlace(user1, mId, Side.Bid, 60, 5);
+        _placeOrder(user1, mId, Side.Bid, 50, 10);
+        _placeOrder(user1, mId, Side.Bid, 60, 5);
 
         // cumBid at 50 = bids at >= 50 = 10 + 5 = 15
         assertEq(book.cumulativeBidVolume(mId, 50), 15);
@@ -572,24 +551,27 @@ contract OrderBookTest is Test {
         uint256 collateral = (l * LOT * t) / 100;
         vm.deal(user1, collateral);
         vm.prank(user1);
-        vault.deposit{value: collateral}();
-
-        vm.prank(user1);
-        book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, t, l);
+        book.placeOrder{value: collateral}(mId, Side.Bid, OrderType.GoodTilCancel, t, l);
 
         assertEq(vault.locked(user1), collateral);
     }
 
-    function testFuzz_CancelOrder_UnlocksAll(uint8 tick, uint8 lotsRaw) public {
+    function testFuzz_CancelOrder_ReturnsBNB(uint8 tick, uint8 lotsRaw) public {
         uint256 t = (uint256(tick) % 99) + 1;
         uint256 l = (uint256(lotsRaw) % 100) + 1;
 
         uint256 mId = _setupMarket();
-        uint256 orderId = _depositAndPlace(user1, mId, Side.Bid, t, l);
+        uint256 collateral = _calcCollateral(Side.Bid, t, l);
+        vm.deal(user1, collateral);
 
+        vm.prank(user1);
+        uint256 orderId = book.placeOrder{value: collateral}(mId, Side.Bid, OrderType.GoodTilCancel, t, l);
+
+        uint256 walletBefore = user1.balance;
         vm.prank(user1);
         book.cancelOrder(orderId);
 
         assertEq(vault.locked(user1), 0);
+        assertEq(user1.balance, walletBefore + collateral);
     }
 }

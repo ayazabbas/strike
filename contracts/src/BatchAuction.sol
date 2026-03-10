@@ -225,12 +225,13 @@ contract BatchAuction is AccessControl {
             // GTC partial fill: only remove filled lots, leave unfilled resting
             orderBook.reduceOrderLots(orderId, s.filledLots);
             orderBook.updateTreeVolume(o.marketId, o.side, o.tick, -int256(s.filledLots));
-            vault.settleFill(o.owner, o.marketId, s.toPool, feeModel.protocolFeeCollector(), s.protocolFee, 0);
+            vault.settleFill(o.owner, o.marketId, s.toPool, feeModel.protocolFeeCollector(), s.protocolFee, 0, false);
         } else {
             // GTB or GTC full fill: remove entire order from the book
+            // Unfilled collateral is returned directly to user's wallet
             orderBook.reduceOrderLots(orderId, o.lots);
             orderBook.updateTreeVolume(o.marketId, o.side, o.tick, -int256(o.lots));
-            vault.settleFill(o.owner, o.marketId, s.toPool, feeModel.protocolFeeCollector(), s.protocolFee, s.unfilledCollateral);
+            vault.settleFill(o.owner, o.marketId, s.toPool, feeModel.protocolFeeCollector(), s.protocolFee, s.unfilledCollateral, true);
         }
 
         if (s.filledLots > 0) {
@@ -324,6 +325,7 @@ contract BatchAuction is AccessControl {
 
         if (collateral > 0) {
             vault.unlock(o.owner, collateral);
+            vault.withdrawTo(o.owner, collateral);
         }
 
         emit OrderPruned(orderId, msg.sender);

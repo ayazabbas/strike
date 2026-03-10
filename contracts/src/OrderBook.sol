@@ -134,7 +134,7 @@ contract OrderBook is AccessControl, ReentrancyGuard {
     // Place order
     // -------------------------------------------------------------------------
 
-    /// @notice Place an order in the book.
+    /// @notice Place an order in the book. Send exact collateral as msg.value.
     /// @param marketId  Market to trade in.
     /// @param side      Bid or Ask.
     /// @param orderType GoodTilBatch or GoodTilCancel.
@@ -147,7 +147,7 @@ contract OrderBook is AccessControl, ReentrancyGuard {
         OrderType orderType,
         uint256 tick,
         uint256 lots
-    ) external nonReentrant returns (uint256 orderId) {
+    ) external payable nonReentrant returns (uint256 orderId) {
         Market storage m = markets[marketId];
         require(m.active, "OrderBook: market not active");
         require(!m.halted, "OrderBook: market halted");
@@ -167,6 +167,8 @@ contract OrderBook is AccessControl, ReentrancyGuard {
         } else {
             collateral = (lots * LOT_SIZE * (100 - tick)) / 100;
         }
+
+        require(msg.value == collateral, "OrderBook: wrong msg.value");
 
         // Create order (packed into 2 storage slots) — effects before interaction (CEI)
         uint64 oid = nextOrderId++;
@@ -190,7 +192,8 @@ contract OrderBook is AccessControl, ReentrancyGuard {
             askTrees[marketId].update(tick, int256(lots));
         }
 
-        // Lock collateral in vault — interaction last (CEI)
+        // Deposit collateral into vault and lock it
+        vault.depositFor{value: msg.value}(msg.sender);
         vault.lock(msg.sender, collateral);
 
         emit OrderPlaced(orderId, marketId, msg.sender, side, tick, lots, m.currentBatchId);
@@ -230,8 +233,9 @@ contract OrderBook is AccessControl, ReentrancyGuard {
             askTrees[marketId].update(tick, -int256(lots));
         }
 
-        // Unlock collateral
+        // Unlock collateral and return BNB to user's wallet
         vault.unlock(msg.sender, collateral);
+        vault.withdrawTo(msg.sender, collateral);
 
         emit OrderCancelled(orderId, msg.sender);
     }

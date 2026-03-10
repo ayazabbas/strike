@@ -56,9 +56,12 @@ contract BatchAuctionTest is Test {
         return book.registerMarket(1, 3, block.timestamp + 3600);
     }
 
-    function _deposit(address user, uint256 amount) internal {
-        vm.prank(user);
-        vault.deposit{value: amount}();
+    function _calcCollateral(Side side, uint256 tick, uint256 lots) internal pure returns (uint256) {
+        if (side == Side.Bid) {
+            return (lots * LOT * tick) / 100;
+        } else {
+            return (lots * LOT * (100 - tick)) / 100;
+        }
     }
 
     function _placeOrder(
@@ -69,16 +72,9 @@ contract BatchAuctionTest is Test {
         uint256 tick,
         uint256 lots
     ) internal returns (uint256) {
-        uint256 collateral;
-        if (side == Side.Bid) {
-            collateral = (lots * LOT * tick) / 100;
-        } else {
-            collateral = (lots * LOT * (100 - tick)) / 100;
-        }
-
-        _deposit(user, collateral);
+        uint256 collateral = _calcCollateral(side, tick, lots);
         vm.prank(user);
-        return book.placeOrder(marketId, side, ot, tick, lots);
+        return book.placeOrder{value: collateral}(marketId, side, ot, tick, lots);
     }
 
     // -------------------------------------------------------------------------
@@ -164,7 +160,6 @@ contract BatchAuctionTest is Test {
     function test_ClearBatch_PerfectMatch() public {
         uint256 mId = _setupMarket();
 
-        // Bid at 50 for 10 lots, Ask at 50 for 10 lots → perfect match
         _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
         _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 50, 10);
 
@@ -179,13 +174,11 @@ contract BatchAuctionTest is Test {
     function test_ClearBatch_BidAboveAsk() public {
         uint256 mId = _setupMarket();
 
-        // Bid at 60, Ask at 40 → cross somewhere in between
         _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 60, 10);
         _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 40, 10);
 
         BatchResult memory r = auction.clearBatch(mId, _noIds());
 
-        // Should find a clearing tick in [40, 60]
         assertGe(r.clearingTick, 40);
         assertLe(r.clearingTick, 60);
         assertEq(r.matchedLots, 10);
@@ -194,7 +187,6 @@ contract BatchAuctionTest is Test {
     function test_ClearBatch_AsymmetricVolume() public {
         uint256 mId = _setupMarket();
 
-        // 20 lots bid, 10 lots ask at same tick → matched = 10
         _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 20);
         _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 50, 10);
 
@@ -215,10 +207,8 @@ contract BatchAuctionTest is Test {
         BatchResult memory r1 = auction.clearBatch(mId, _noIds());
         assertEq(r1.batchId, 1);
 
-        // Advance past batch interval (3s) before second clear
         vm.warp(block.timestamp + 3);
 
-        // Second batch (same GTC orders still in book)
         BatchResult memory r2 = auction.clearBatch(mId, _noIds());
         assertEq(r2.batchId, 2);
     }
@@ -264,14 +254,11 @@ contract BatchAuctionTest is Test {
 
         auction.clearBatch(mId, _noIds());
 
-        // Claim bid fill
         auction.claimFills(bidId);
 
-        // Order should be zeroed out
         (, , , , uint64 bidLots, , , , ) = book.orders(bidId);
         assertEq(bidLots, 0);
 
-        // Claim ask fill
         auction.claimFills(askId);
 
         (, , , , uint64 askLots, , , , ) = book.orders(askId);
@@ -286,7 +273,6 @@ contract BatchAuctionTest is Test {
 
         auction.clearBatch(mId, _noIds());
 
-        // Full fill → unfilledCollateral = 0
         vm.expectEmit(true, true, false, true);
         emit BatchAuction.FillClaimed(bidId, user1, 10, 0);
 
@@ -306,19 +292,16 @@ contract BatchAuctionTest is Test {
 
         auction.claimFills(bidId);
 
-        // All collateral should be unlocked after claim
         assertEq(vault.locked(user1), 0);
     }
 
     function test_ClaimFills_NoCross_NoFill() public {
         uint256 mId = _setupMarket();
 
-        // Only bids, no asks → no cross
         uint256 bidId = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
 
         auction.clearBatch(mId, _noIds());
 
-        // Claim should succeed but with 0 fill
         vm.expectEmit(true, true, false, true);
         emit BatchAuction.FillClaimed(bidId, user1, 0, 0);
 
@@ -328,20 +311,16 @@ contract BatchAuctionTest is Test {
     function test_ClaimFills_NonParticipatingOrder() public {
         uint256 mId = _setupMarket();
 
-        // Bid at 30 (below clearing), Ask at 50, Bid at 50
         _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
         _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 50, 10);
 
-        // Extra bid at tick 30 — below clearing tick of 50
         uint256 lowBidId = _placeOrder(user3, mId, Side.Bid, OrderType.GoodTilBatch, 30, 5);
 
         BatchResult memory r = auction.clearBatch(mId, _noIds());
         assertEq(r.clearingTick, 50);
 
-        // Low bid doesn't participate (tick 30 < clearing 50)
         auction.claimFills(lowBidId);
 
-        // Should not change the order lots (no fill, but claim marks it)
         assertTrue(auction.claimed(lowBidId));
     }
 
@@ -352,7 +331,6 @@ contract BatchAuctionTest is Test {
     function test_ClaimFills_ProRata_BidOversubscribed() public {
         uint256 mId = _setupMarket();
 
-        // 20 lots bid, 10 lots ask → bids oversubscribed 2:1
         uint256 bid1 = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
         uint256 bid2 = _placeOrder(user2, mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
         _placeOrder(user3, mId, Side.Ask, OrderType.GoodTilBatch, 50, 10);
@@ -361,11 +339,9 @@ contract BatchAuctionTest is Test {
         assertEq(r.matchedLots, 10);
         assertEq(r.totalBidLots, 20);
 
-        // Each bid should get 50% fill (5 lots each)
         auction.claimFills(bid1);
         auction.claimFills(bid2);
 
-        // Both orders should be fully removed from book
         (, , , , uint64 lots1, , , , ) = book.orders(bid1);
         (, , , , uint64 lots2, , , , ) = book.orders(bid2);
         assertEq(lots1, 0);
@@ -375,7 +351,6 @@ contract BatchAuctionTest is Test {
     function test_ClaimFills_ProRata_AskOversubscribed() public {
         uint256 mId = _setupMarket();
 
-        // 10 lots bid, 20 lots ask → asks oversubscribed 2:1
         _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
         uint256 ask1 = _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 50, 10);
         uint256 ask2 = _placeOrder(user3, mId, Side.Ask, OrderType.GoodTilBatch, 50, 10);
@@ -387,7 +362,6 @@ contract BatchAuctionTest is Test {
         auction.claimFills(ask1);
         auction.claimFills(ask2);
 
-        // Both orders should be fully removed
         (, , , , uint64 lots1, , , , ) = book.orders(ask1);
         (, , , , uint64 lots2, , , , ) = book.orders(ask2);
         assertEq(lots1, 0);
@@ -416,33 +390,31 @@ contract BatchAuctionTest is Test {
         uint256 mId = _setupMarket();
         uint256 bidId = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
 
-        // Don't clear the batch
         vm.expectRevert("BatchAuction: batch not cleared");
         auction.claimFills(bidId);
     }
 
     // =========================================================================
-    // pruneExpiredOrder
+    // pruneExpiredOrder — returns BNB to wallet
     // =========================================================================
 
     function test_PruneExpired_Basic() public {
         uint256 mId = _setupMarket();
 
         uint256 orderId = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
+        uint256 collateral = _calcCollateral(Side.Bid, 50, 10);
 
-        // Clear batch to advance it
         auction.clearBatch(mId, _noIds());
 
-        // Now the GTB order is expired (batch advanced)
+        uint256 walletBefore = user1.balance;
         vm.prank(pruner);
         auction.pruneExpiredOrder(orderId);
 
-        // Order should be zeroed out
         (, , , , uint64 lots, , , , ) = book.orders(orderId);
         assertEq(lots, 0);
-
-        // Collateral should be unlocked
         assertEq(vault.locked(user1), 0);
+        assertEq(vault.balance(user1), 0); // withdrawn from vault
+        assertEq(user1.balance, walletBefore + collateral); // BNB returned to wallet
     }
 
     function test_PruneExpired_EmitsEvent() public {
@@ -467,11 +439,13 @@ contract BatchAuctionTest is Test {
 
         auction.clearBatch(mId, _noIds());
 
+        uint256 walletBefore = user1.balance;
         vm.prank(pruner);
         auction.pruneExpiredOrder(orderId);
 
         assertEq(vault.locked(user1), 0);
-        assertEq(vault.available(user1), expectedCollateral);
+        assertEq(vault.balance(user1), 0);
+        assertEq(user1.balance, walletBefore + expectedCollateral);
     }
 
     function test_PruneExpired_RevertIfNotGTB() public {
@@ -491,7 +465,6 @@ contract BatchAuctionTest is Test {
 
         uint256 orderId = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
 
-        // Don't clear batch
         vm.expectRevert("BatchAuction: batch not yet advanced");
         vm.prank(pruner);
         auction.pruneExpiredOrder(orderId);
@@ -504,11 +477,9 @@ contract BatchAuctionTest is Test {
 
         auction.clearBatch(mId, _noIds());
 
-        // Prune once
         vm.prank(pruner);
         auction.pruneExpiredOrder(orderId);
 
-        // Prune again — should fail
         vm.expectRevert("BatchAuction: order already empty");
         vm.prank(pruner);
         auction.pruneExpiredOrder(orderId);
@@ -527,7 +498,6 @@ contract BatchAuctionTest is Test {
         vm.prank(pruner);
         auction.pruneExpiredOrder(orderId2);
 
-        // Only orderId2 (5 lots) pruned from 15
         assertEq(book.bidVolumeAt(mId, 50), 10);
     }
 
@@ -558,26 +528,21 @@ contract BatchAuctionTest is Test {
     function test_FullLifecycle_PlaceClearClaim() public {
         uint256 mId = _setupMarket();
 
-        // Place matching orders
         uint256 bidId = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
         uint256 askId = _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 50, 10);
 
-        // Verify collateral locked
         uint256 bidCollateral = (10 * LOT * 50) / 100;
         uint256 askCollateral = (10 * LOT * 50) / 100;
         assertEq(vault.locked(user1), bidCollateral);
         assertEq(vault.locked(user2), askCollateral);
 
-        // Clear batch
         BatchResult memory r = auction.clearBatch(mId, _noIds());
         assertEq(r.clearingTick, 50);
         assertEq(r.matchedLots, 10);
 
-        // Claim fills
         auction.claimFills(bidId);
         auction.claimFills(askId);
 
-        // All collateral unlocked
         assertEq(vault.locked(user1), 0);
         assertEq(vault.locked(user2), 0);
     }
@@ -585,21 +550,17 @@ contract BatchAuctionTest is Test {
     function test_FullLifecycle_MultiTickCross() public {
         uint256 mId = _setupMarket();
 
-        // Bids at different ticks
         uint256 bid60 = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 60, 10);
         uint256 bid55 = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 55, 5);
 
-        // Asks at different ticks
         uint256 ask40 = _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 40, 8);
         uint256 ask50 = _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 50, 7);
 
         BatchResult memory r = auction.clearBatch(mId, _noIds());
 
-        // Should find a clearing tick
         assertGt(r.clearingTick, 0);
         assertGt(r.matchedLots, 0);
 
-        // Claim all
         auction.claimFills(bid60);
         auction.claimFills(bid55);
         auction.claimFills(ask40);
@@ -609,14 +570,15 @@ contract BatchAuctionTest is Test {
     function test_FullLifecycle_CancelBeforeClear() public {
         uint256 mId = _setupMarket();
 
+        uint256 collateral = _calcCollateral(Side.Bid, 50, 10);
         uint256 bidId = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilCancel, 50, 10);
 
-        // Cancel before clearing
+        uint256 walletBefore = user1.balance;
         vm.prank(user1);
         book.cancelOrder(bidId);
 
-        // Verify collateral unlocked
         assertEq(vault.locked(user1), 0);
+        assertEq(user1.balance, walletBefore + collateral);
     }
 
     // =========================================================================
@@ -663,21 +625,14 @@ contract BatchAuctionTest is Test {
     function test_PruneAfterClaimFills() public {
         uint256 mId = _setupMarket();
 
-        // Place GTB bid — no matching ask, so won't fill
         uint256 orderId = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
 
-        // Clear batch (no cross)
         auction.clearBatch(mId, _noIds());
-
-        // Claim fills (0 fill since no cross)
         auction.claimFills(orderId);
 
-        // Order still has lots since it got 0 fill but claim didn't remove non-participating orders
-        // Actually our claimFills removes 0 lots for non-participating
         (, , , , uint64 lots, , , , ) = book.orders(orderId);
-        assertEq(lots, 10); // Still has lots
+        assertEq(lots, 10);
 
-        // Now prune
         vm.prank(pruner);
         auction.pruneExpiredOrder(orderId);
 
@@ -698,11 +653,9 @@ contract BatchAuctionTest is Test {
         auction.clearBatch(mId, _noIds());
         auction.claimFills(bidId);
 
-        // Bidder should have 10 YES tokens
         uint256 yesId = token.yesTokenId(mId);
         assertEq(token.balanceOf(user1, yesId), 10);
 
-        // Bidder should NOT have NO tokens (burned during claim)
         uint256 noId = token.noTokenId(mId);
         assertEq(token.balanceOf(user1, noId), 0);
     }
@@ -716,11 +669,9 @@ contract BatchAuctionTest is Test {
         auction.clearBatch(mId, _noIds());
         auction.claimFills(askId);
 
-        // Asker should have 10 NO tokens
         uint256 noId = token.noTokenId(mId);
         assertEq(token.balanceOf(user2, noId), 10);
 
-        // Asker should NOT have YES tokens (burned during claim)
         uint256 yesId = token.yesTokenId(mId);
         assertEq(token.balanceOf(user2, yesId), 0);
     }
@@ -740,7 +691,6 @@ contract BatchAuctionTest is Test {
         uint256 collectorBefore = vault.balance(admin); // admin is fee collector
         auction.claimFills(bidId);
 
-        // Filled collateral = 10 * LOT * 50 / 100 = 5e15
         uint256 filledCollateral = (10 * LOT * 50) / 100;
         uint256 expectedFee = (filledCollateral * 30) / 10000; // 30 bps
         assertEq(vault.balance(admin) - collectorBefore, expectedFee);
@@ -766,24 +716,21 @@ contract BatchAuctionTest is Test {
     // =========================================================================
 
     function test_ClearBatch_RevertIfTooSoon() public {
-        uint256 mId = _setupMarket(); // batchInterval = 3
+        uint256 mId = _setupMarket();
 
         auction.clearBatch(mId, _noIds());
 
-        // Attempt second clear immediately — should revert
         vm.expectRevert("BatchAuction: too soon");
         auction.clearBatch(mId, _noIds());
     }
 
     function test_ClearBatch_SucceedsAfterInterval() public {
-        uint256 mId = _setupMarket(); // batchInterval = 3
+        uint256 mId = _setupMarket();
 
         auction.clearBatch(mId, _noIds());
 
-        // Advance past interval
         vm.warp(block.timestamp + 3);
 
-        // Should succeed
         BatchResult memory r = auction.clearBatch(mId, _noIds());
         assertEq(r.batchId, 2);
     }
@@ -795,14 +742,12 @@ contract BatchAuctionTest is Test {
     function test_Participates_BidAtClearingTick() public {
         uint256 mId = _setupMarket();
 
-        // Clearing tick will be 50
         uint256 bidId = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 5);
         _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 50, 5);
 
         auction.clearBatch(mId, _noIds());
         auction.claimFills(bidId);
 
-        // Bid at clearing tick participates — should get fill
         uint256 yesId = token.yesTokenId(mId);
         assertEq(token.balanceOf(user1, yesId), 5, "bid at clearing tick should fill");
     }
@@ -810,7 +755,6 @@ contract BatchAuctionTest is Test {
     function test_Participates_BidAboveClearingTick() public {
         uint256 mId = _setupMarket();
 
-        // Bid at 60, ask at 50 → clearing at 50 (or somewhere ≤60)
         uint256 bidId = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 60, 5);
         _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 50, 5);
 
@@ -819,7 +763,6 @@ contract BatchAuctionTest is Test {
 
         auction.claimFills(bidId);
 
-        // Bid above clearing tick participates
         uint256 yesId = token.yesTokenId(mId);
         assertEq(token.balanceOf(user1, yesId), 5, "bid above clearing tick should fill");
     }
@@ -827,7 +770,6 @@ contract BatchAuctionTest is Test {
     function test_Participates_BidBelowClearingTick() public {
         uint256 mId = _setupMarket();
 
-        // Create crossing at tick 50, place a bid at 30 (below clearing)
         _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 5);
         _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 50, 5);
         uint256 lowBidId = _placeOrder(user3, mId, Side.Bid, OrderType.GoodTilBatch, 30, 5);
@@ -837,7 +779,6 @@ contract BatchAuctionTest is Test {
 
         auction.claimFills(lowBidId);
 
-        // Bid below clearing tick does NOT participate — 0 tokens
         uint256 yesId = token.yesTokenId(mId);
         assertEq(token.balanceOf(user3, yesId), 0, "bid below clearing tick should NOT fill");
     }
@@ -851,7 +792,6 @@ contract BatchAuctionTest is Test {
         auction.clearBatch(mId, _noIds());
         auction.claimFills(askId);
 
-        // Ask at clearing tick participates
         uint256 noId = token.noTokenId(mId);
         assertEq(token.balanceOf(user2, noId), 5, "ask at clearing tick should fill");
     }
@@ -859,7 +799,6 @@ contract BatchAuctionTest is Test {
     function test_Participates_AskBelowClearingTick() public {
         uint256 mId = _setupMarket();
 
-        // Bid at 50, ask at 40 → clearing at some tick in [40,50]; ask at 40 is below or at clearing
         uint256 askId = _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 40, 5);
         _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 5);
 
@@ -868,7 +807,6 @@ contract BatchAuctionTest is Test {
 
         auction.claimFills(askId);
 
-        // Ask below clearing tick participates
         uint256 noId = token.noTokenId(mId);
         assertEq(token.balanceOf(user2, noId), 5, "ask below clearing tick should fill");
     }
@@ -876,7 +814,6 @@ contract BatchAuctionTest is Test {
     function test_Participates_AskAboveClearingTick() public {
         uint256 mId = _setupMarket();
 
-        // Create crossing at tick 50, place an ask at 70 (above clearing)
         _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 5);
         _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 50, 5);
         uint256 highAskId = _placeOrder(user3, mId, Side.Ask, OrderType.GoodTilBatch, 70, 5);
@@ -886,7 +823,6 @@ contract BatchAuctionTest is Test {
 
         auction.claimFills(highAskId);
 
-        // Ask above clearing tick does NOT participate — 0 tokens
         uint256 noId = token.noTokenId(mId);
         assertEq(token.balanceOf(user3, noId), 0, "ask above clearing tick should NOT fill");
     }
@@ -894,25 +830,21 @@ contract BatchAuctionTest is Test {
     function test_Participates_NoCross_ClearingTickZero() public {
         uint256 mId = _setupMarket();
 
-        // Only bids, no asks → clearingTick = 0
         uint256 bidId = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 5);
 
         BatchResult memory r = auction.clearBatch(mId, _noIds());
         assertEq(r.clearingTick, 0, "one-sided book should have clearingTick = 0");
         assertEq(r.matchedLots, 0);
 
-        // Bid gets 0 fill when clearingTick == 0
         auction.claimFills(bidId);
 
         uint256 yesId = token.yesTokenId(mId);
         assertEq(token.balanceOf(user1, yesId), 0, "bid should not fill when clearingTick = 0");
     }
 
-    /// @notice Phantom clearing tick: non-overlapping bid/ask survive clearBatch untouched
     function test_PhantomClearingTick_OrdersSurvive() public {
         uint256 mId = _setupMarket();
 
-        // Bid at 30, ask at 70 — no overlap
         uint256 bidId = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilCancel, 30, 10);
         uint256 askId = _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilCancel, 70, 10);
 
@@ -921,21 +853,17 @@ contract BatchAuctionTest is Test {
 
         BatchResult memory r = auction.clearBatch(mId, _noIds());
 
-        // Should have zero fills and clearing tick 0
         assertEq(r.clearingTick, 0, "clearingTick should be 0 with non-overlapping orders");
         assertEq(r.matchedLots, 0, "matchedLots should be 0");
 
-        // Claim — no fills, collateral unchanged
         auction.claimFills(bidId);
         auction.claimFills(askId);
 
-        // GTC orders should still have their lots (no destruction)
         (, , , , uint64 bidLots, , , , ) = book.orders(bidId);
         (, , , , uint64 askLots, , , , ) = book.orders(askId);
         assertEq(bidLots, 10, "bid order should still have all lots");
         assertEq(askLots, 10, "ask order should still have all lots");
 
-        // Collateral should still be locked
         assertEq(vault.locked(user1), user1LockedBefore, "bid collateral should remain locked");
         assertEq(vault.locked(user2), user2LockedBefore, "ask collateral should remain locked");
     }
@@ -943,16 +871,12 @@ contract BatchAuctionTest is Test {
     function test_Participates_NoCross_NeitherSideParticipates() public {
         uint256 mId = _setupMarket();
 
-        // Bid far below ask — segment tree may find a non-zero clearing tick
-        // but neither order participates because bid < clearing and ask > clearing
         uint256 bidId = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 30, 5);
         uint256 askId = _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 70, 5);
 
         BatchResult memory r = auction.clearBatch(mId, _noIds());
-        // matchedLots should be 0 regardless of clearing tick
         assertEq(r.matchedLots, 0, "no real cross means 0 matched lots");
 
-        // Neither side gets tokens
         auction.claimFills(bidId);
         auction.claimFills(askId);
 
@@ -969,15 +893,12 @@ contract BatchAuctionTest is Test {
     function test_PruneExpired_AskBelowClearing_RequiresClaimFirst() public {
         uint256 mId = _setupMarket();
 
-        // Ask at tick 40, bid at tick 50 → clearing at some tick >= 40
-        // Ask participates (tick <= clearingTick)
         uint256 askId = _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 40, 5);
         _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 5);
 
         BatchResult memory r = auction.clearBatch(mId, _noIds());
         assertGe(r.clearingTick, 40, "clearing tick should be >= 40");
 
-        // Try to prune without claiming — should revert because the ask participated
         vm.expectRevert("BatchAuction: claim fills first");
         vm.prank(pruner);
         auction.pruneExpiredOrder(askId);
@@ -986,7 +907,6 @@ contract BatchAuctionTest is Test {
     function test_PruneExpired_AskAboveClearing_PrunesDirectly() public {
         uint256 mId = _setupMarket();
 
-        // Ask at tick 70 (above clearing of 50), does NOT participate
         uint256 highAskId = _placeOrder(user3, mId, Side.Ask, OrderType.GoodTilBatch, 70, 5);
         _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 5);
         _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 50, 5);
@@ -994,7 +914,6 @@ contract BatchAuctionTest is Test {
         BatchResult memory r = auction.clearBatch(mId, _noIds());
         assertEq(r.clearingTick, 50);
 
-        // High ask didn't participate — can be pruned directly without claiming
         vm.prank(pruner);
         auction.pruneExpiredOrder(highAskId);
 
@@ -1013,7 +932,6 @@ contract BatchAuctionTest is Test {
         uint256 _bidLots,
         uint256 _askLots
     ) public {
-        // Bound inputs to valid ranges
         uint8 bidTick = uint8(bound(_bidTick, 1, 99));
         uint8 askTick = uint8(bound(_askTick, 1, 99));
         uint8 bidLots = uint8(bound(_bidLots, 1, 100));
@@ -1029,28 +947,24 @@ contract BatchAuctionTest is Test {
 
         BatchResult memory r = auction.clearBatch(mId, _noIds());
 
-        // Invariant: matchedLots <= min(totalBidLots, totalAskLots)
         if (r.clearingTick > 0) {
             uint256 minSide = r.totalBidLots < r.totalAskLots ? r.totalBidLots : r.totalAskLots;
             assertLe(r.matchedLots, minSide, "matchedLots <= min side");
         }
 
-        // Invariant: clearingTick 0 → matchedLots 0
         if (r.clearingTick == 0) {
             assertEq(r.matchedLots, 0, "zero clearing tick means zero matched");
         }
 
-        // Claim should succeed without revert
         auction.claimFills(bidId);
         auction.claimFills(askId);
 
-        // Invariant: user's locked balance should decrease or stay same after claim
         assertLe(vault.locked(user1), user1LockedBefore, "user1 locked should not increase");
         assertLe(vault.locked(user2), user2LockedBefore, "user2 locked should not increase");
     }
 
     // =========================================================================
-    // Inline settlement — new tests
+    // Inline settlement
     // =========================================================================
 
     function test_InlineSettlement_VerifiesBalances() public {
@@ -1059,26 +973,21 @@ contract BatchAuctionTest is Test {
         uint256 bidId = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
         uint256 askId = _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 50, 10);
 
-        // Clear with inline settlement
         BatchResult memory r = auction.clearBatch(mId, _ids(bidId, askId));
         assertEq(r.clearingTick, 50);
         assertEq(r.matchedLots, 10);
 
-        // Orders should be zeroed out (settled inline)
         (, , , , uint64 bidLots, , , , ) = book.orders(bidId);
         (, , , , uint64 askLots, , , , ) = book.orders(askId);
         assertEq(bidLots, 0, "bid should be settled inline");
         assertEq(askLots, 0, "ask should be settled inline");
 
-        // Tokens minted
         assertEq(token.balanceOf(user1, token.yesTokenId(mId)), 10, "bidder should have YES tokens");
         assertEq(token.balanceOf(user2, token.noTokenId(mId)), 10, "asker should have NO tokens");
 
-        // Collateral unlocked
         assertEq(vault.locked(user1), 0, "bid collateral should be unlocked");
         assertEq(vault.locked(user2), 0, "ask collateral should be unlocked");
 
-        // Marked as claimed
         assertTrue(auction.claimed(bidId));
         assertTrue(auction.claimed(askId));
     }
@@ -1089,12 +998,10 @@ contract BatchAuctionTest is Test {
         _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
         _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 50, 10);
 
-        // Clear with empty orderIds — batch clears, no settlement
         BatchResult memory r = auction.clearBatch(mId, _noIds());
         assertEq(r.clearingTick, 50);
         assertEq(r.matchedLots, 10);
 
-        // Collateral still locked (not settled)
         assertGt(vault.locked(user1), 0, "bid collateral still locked");
         assertGt(vault.locked(user2), 0, "ask collateral still locked");
     }
@@ -1102,18 +1009,14 @@ contract BatchAuctionTest is Test {
     function test_InlineSettlement_WrongMarket() public {
         uint256 mId1 = _setupMarket();
 
-        // Create a second market
         vm.prank(operator);
         uint256 mId2 = book.registerMarket(1, 3, block.timestamp + 3600);
 
-        // Place order in market 2
         uint256 orderId = _placeOrder(user1, mId2, Side.Bid, OrderType.GoodTilBatch, 50, 10);
 
-        // Place crossing orders in market 1 so clearBatch has something to clear
         _placeOrder(user1, mId1, Side.Bid, OrderType.GoodTilBatch, 50, 10);
         _placeOrder(user2, mId1, Side.Ask, OrderType.GoodTilBatch, 50, 10);
 
-        // Try to settle market-2 order in market-1 batch
         vm.expectRevert("BatchAuction: wrong market");
         auction.clearBatch(mId1, _ids(orderId));
     }
@@ -1121,19 +1024,14 @@ contract BatchAuctionTest is Test {
     function test_InlineSettlement_WrongBatch() public {
         uint256 mId = _setupMarket();
 
-        // Clear batch 1 (empty)
         auction.clearBatch(mId, _noIds());
 
-        // Advance time past batch interval
         vm.warp(block.timestamp + 3);
 
-        // Place order in batch 2
         uint256 orderId = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
 
-        // Clear batch 2 — order was placed in batch 2 so it should work
         auction.clearBatch(mId, _ids(orderId));
 
-        // Verify it was settled
         assertTrue(auction.claimed(orderId));
     }
 
@@ -1143,19 +1041,15 @@ contract BatchAuctionTest is Test {
         uint256 bidId = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
         uint256 askId = _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 50, 10);
 
-        // Clear with only bid settled inline; ask not included
         auction.clearBatch(mId, _ids(bidId));
 
-        // Bid was settled inline
         assertTrue(auction.claimed(bidId), "bid should be claimed inline");
         assertEq(token.balanceOf(user1, token.yesTokenId(mId)), 10);
 
-        // Ask not settled yet — use fallback claimFills
         assertFalse(auction.claimed(askId), "ask should not be claimed yet");
 
         auction.claimFills(askId);
 
-        // Now ask is settled
         assertTrue(auction.claimed(askId), "ask should be claimed via fallback");
         assertEq(token.balanceOf(user2, token.noTokenId(mId)), 10);
     }
@@ -1166,11 +1060,31 @@ contract BatchAuctionTest is Test {
         uint256 bidId = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
         _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 50, 10);
 
-        // Settle bid inline
         auction.clearBatch(mId, _ids(bidId));
 
-        // Fallback claimFills on already-settled order should revert
         vm.expectRevert("BatchAuction: already claimed");
         auction.claimFills(bidId);
+    }
+
+    // =========================================================================
+    // Direct-from-wallet: claimFills returns unfilled BNB to wallet
+    // =========================================================================
+
+    function test_ClaimFills_UnfilledBNBReturnsToWallet() public {
+        uint256 mId = _setupMarket();
+
+        // 20 lots bid at 50, only 10 lots ask — 10 lots unfilled
+        uint256 bidId = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 20);
+        _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 50, 10);
+
+        BatchResult memory r = auction.clearBatch(mId, _noIds());
+        assertEq(r.matchedLots, 10);
+
+        uint256 walletBefore = user1.balance;
+        auction.claimFills(bidId);
+
+        // Unfilled collateral = 10 lots * LOT * 50 / 100
+        uint256 unfilledCollateral = (10 * LOT * 50) / 100;
+        assertEq(user1.balance - walletBefore, unfilledCollateral, "unfilled BNB should return to wallet");
     }
 }

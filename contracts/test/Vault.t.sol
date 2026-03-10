@@ -4,27 +4,6 @@ pragma solidity ^0.8.25;
 import "forge-std/Test.sol";
 import "../src/Vault.sol";
 
-/// @dev A contract that tries to reenter the Vault during withdrawal.
-contract ReentrancyAttacker {
-    Vault public vault;
-    uint256 public attackCount;
-
-    constructor(address payable _vault) {
-        vault = Vault(_vault);
-    }
-
-    receive() external payable {
-        if (attackCount < 3 && address(vault).balance > 0) {
-            attackCount++;
-            vault.withdraw(1 ether);
-        }
-    }
-
-    function attack() external {
-        vault.withdraw(1 ether);
-    }
-}
-
 contract VaultTest is Test {
     Vault public vault;
 
@@ -46,123 +25,147 @@ contract VaultTest is Test {
     }
 
     // -------------------------------------------------------------------------
-    // Deposit
+    // depositFor (protocol only)
     // -------------------------------------------------------------------------
 
-    function test_Deposit_Basic() public {
-        vm.prank(user1);
-        vault.deposit{value: 1 ether}();
+    function test_DepositFor_Basic() public {
+        vm.deal(protocol, 10 ether);
+        vm.prank(protocol);
+        vault.depositFor{value: 1 ether}(user1);
 
         assertEq(vault.balance(user1), 1 ether);
         assertEq(vault.available(user1), 1 ether);
     }
 
-    function test_Deposit_EmitsEvent() public {
+    function test_DepositFor_EmitsEvent() public {
+        vm.deal(protocol, 10 ether);
+
         vm.expectEmit(true, false, false, true);
         emit Vault.Deposited(user1, 1 ether);
 
-        vm.prank(user1);
-        vault.deposit{value: 1 ether}();
+        vm.prank(protocol);
+        vault.depositFor{value: 1 ether}(user1);
     }
 
-    function test_Deposit_Accumulates() public {
-        vm.startPrank(user1);
-        vault.deposit{value: 1 ether}();
-        vault.deposit{value: 2 ether}();
+    function test_DepositFor_Accumulates() public {
+        vm.deal(protocol, 10 ether);
+        vm.startPrank(protocol);
+        vault.depositFor{value: 1 ether}(user1);
+        vault.depositFor{value: 2 ether}(user1);
         vm.stopPrank();
 
         assertEq(vault.balance(user1), 3 ether);
     }
 
-    function test_Deposit_MultipleUsers() public {
-        vm.prank(user1);
-        vault.deposit{value: 1 ether}();
-
-        vm.prank(user2);
-        vault.deposit{value: 5 ether}();
+    function test_DepositFor_MultipleUsers() public {
+        vm.deal(protocol, 10 ether);
+        vm.startPrank(protocol);
+        vault.depositFor{value: 1 ether}(user1);
+        vault.depositFor{value: 5 ether}(user2);
+        vm.stopPrank();
 
         assertEq(vault.balance(user1), 1 ether);
         assertEq(vault.balance(user2), 5 ether);
     }
 
-    function test_Deposit_RevertOnZero() public {
+    function test_DepositFor_RevertOnZero() public {
         vm.expectRevert("Vault: zero deposit");
-        vm.prank(user1);
-        vault.deposit{value: 0}();
+        vm.prank(protocol);
+        vault.depositFor{value: 0}(user1);
     }
 
-    function test_Deposit_VaultHoldsBNB() public {
-        vm.prank(user1);
-        vault.deposit{value: 3 ether}();
+    function test_DepositFor_VaultHoldsBNB() public {
+        vm.deal(protocol, 10 ether);
+        vm.prank(protocol);
+        vault.depositFor{value: 3 ether}(user1);
 
         assertEq(address(vault).balance, 3 ether);
     }
 
+    function test_DepositFor_RevertIfNotProtocol() public {
+        vm.deal(unauthorized, 10 ether);
+        vm.expectRevert();
+        vm.prank(unauthorized);
+        vault.depositFor{value: 1 ether}(user1);
+    }
+
     // -------------------------------------------------------------------------
-    // Withdraw
+    // withdrawTo (protocol only)
     // -------------------------------------------------------------------------
 
-    function test_Withdraw_Basic() public {
-        vm.prank(user1);
-        vault.deposit{value: 5 ether}();
+    function test_WithdrawTo_Basic() public {
+        vm.deal(protocol, 10 ether);
+        vm.prank(protocol);
+        vault.depositFor{value: 5 ether}(user1);
 
         uint256 before = user1.balance;
-        vm.prank(user1);
-        vault.withdraw(2 ether);
+        vm.prank(protocol);
+        vault.withdrawTo(user1, 2 ether);
 
         assertEq(vault.balance(user1), 3 ether);
         assertEq(user1.balance, before + 2 ether);
     }
 
-    function test_Withdraw_Full() public {
-        vm.prank(user1);
-        vault.deposit{value: 1 ether}();
+    function test_WithdrawTo_Full() public {
+        vm.deal(protocol, 10 ether);
+        vm.prank(protocol);
+        vault.depositFor{value: 1 ether}(user1);
 
-        vm.prank(user1);
-        vault.withdraw(1 ether);
+        vm.prank(protocol);
+        vault.withdrawTo(user1, 1 ether);
 
         assertEq(vault.balance(user1), 0);
     }
 
-    function test_Withdraw_EmitsEvent() public {
-        vm.prank(user1);
-        vault.deposit{value: 2 ether}();
+    function test_WithdrawTo_EmitsEvent() public {
+        vm.deal(protocol, 10 ether);
+        vm.prank(protocol);
+        vault.depositFor{value: 2 ether}(user1);
 
         vm.expectEmit(true, false, false, true);
         emit Vault.Withdrawn(user1, 1 ether);
 
-        vm.prank(user1);
-        vault.withdraw(1 ether);
+        vm.prank(protocol);
+        vault.withdrawTo(user1, 1 ether);
     }
 
-    function test_Withdraw_RevertOnZeroAmount() public {
-        vm.prank(user1);
-        vault.deposit{value: 1 ether}();
+    function test_WithdrawTo_RevertOnZeroAmount() public {
+        vm.deal(protocol, 10 ether);
+        vm.prank(protocol);
+        vault.depositFor{value: 1 ether}(user1);
 
         vm.expectRevert("Vault: zero amount");
-        vm.prank(user1);
-        vault.withdraw(0);
+        vm.prank(protocol);
+        vault.withdrawTo(user1, 0);
     }
 
-    function test_Withdraw_RevertIfInsufficientAvailable() public {
-        vm.prank(user1);
-        vault.deposit{value: 1 ether}();
+    function test_WithdrawTo_RevertIfInsufficientAvailable() public {
+        vm.deal(protocol, 10 ether);
+        vm.prank(protocol);
+        vault.depositFor{value: 1 ether}(user1);
 
         vm.expectRevert("Vault: insufficient available balance");
-        vm.prank(user1);
-        vault.withdraw(2 ether);
+        vm.prank(protocol);
+        vault.withdrawTo(user1, 2 ether);
     }
 
-    function test_Withdraw_RevertIfAllLocked() public {
-        vm.prank(user1);
-        vault.deposit{value: 1 ether}();
+    function test_WithdrawTo_RevertIfAllLocked() public {
+        vm.deal(protocol, 10 ether);
+        vm.prank(protocol);
+        vault.depositFor{value: 1 ether}(user1);
 
         vm.prank(protocol);
         vault.lock(user1, 1 ether);
 
         vm.expectRevert("Vault: insufficient available balance");
-        vm.prank(user1);
-        vault.withdraw(1 wei);
+        vm.prank(protocol);
+        vault.withdrawTo(user1, 1 wei);
+    }
+
+    function test_WithdrawTo_RevertIfNotProtocol() public {
+        vm.expectRevert();
+        vm.prank(unauthorized);
+        vault.withdrawTo(user1, 1 ether);
     }
 
     // -------------------------------------------------------------------------
@@ -170,8 +173,9 @@ contract VaultTest is Test {
     // -------------------------------------------------------------------------
 
     function test_Lock_Basic() public {
-        vm.prank(user1);
-        vault.deposit{value: 5 ether}();
+        vm.deal(protocol, 10 ether);
+        vm.prank(protocol);
+        vault.depositFor{value: 5 ether}(user1);
 
         vm.prank(protocol);
         vault.lock(user1, 3 ether);
@@ -182,8 +186,9 @@ contract VaultTest is Test {
     }
 
     function test_Lock_EmitsEvent() public {
-        vm.prank(user1);
-        vault.deposit{value: 2 ether}();
+        vm.deal(protocol, 10 ether);
+        vm.prank(protocol);
+        vault.depositFor{value: 2 ether}(user1);
 
         vm.expectEmit(true, false, false, true);
         emit Vault.Locked(user1, 1 ether);
@@ -193,8 +198,9 @@ contract VaultTest is Test {
     }
 
     function test_Lock_Accumulates() public {
-        vm.prank(user1);
-        vault.deposit{value: 10 ether}();
+        vm.deal(protocol, 20 ether);
+        vm.prank(protocol);
+        vault.depositFor{value: 10 ether}(user1);
 
         vm.startPrank(protocol);
         vault.lock(user1, 3 ether);
@@ -206,8 +212,9 @@ contract VaultTest is Test {
     }
 
     function test_Lock_RevertOnZeroAmount() public {
-        vm.prank(user1);
-        vault.deposit{value: 1 ether}();
+        vm.deal(protocol, 10 ether);
+        vm.prank(protocol);
+        vault.depositFor{value: 1 ether}(user1);
 
         vm.expectRevert("Vault: zero amount");
         vm.prank(protocol);
@@ -215,8 +222,9 @@ contract VaultTest is Test {
     }
 
     function test_Lock_RevertIfInsufficientAvailable() public {
-        vm.prank(user1);
-        vault.deposit{value: 1 ether}();
+        vm.deal(protocol, 10 ether);
+        vm.prank(protocol);
+        vault.depositFor{value: 1 ether}(user1);
 
         vm.expectRevert("Vault: insufficient available balance");
         vm.prank(protocol);
@@ -224,8 +232,9 @@ contract VaultTest is Test {
     }
 
     function test_Lock_RevertIfNotProtocol() public {
-        vm.prank(user1);
-        vault.deposit{value: 1 ether}();
+        vm.deal(protocol, 10 ether);
+        vm.prank(protocol);
+        vault.depositFor{value: 1 ether}(user1);
 
         vm.expectRevert();
         vm.prank(unauthorized);
@@ -237,8 +246,9 @@ contract VaultTest is Test {
     // -------------------------------------------------------------------------
 
     function test_Unlock_Basic() public {
-        vm.prank(user1);
-        vault.deposit{value: 5 ether}();
+        vm.deal(protocol, 10 ether);
+        vm.prank(protocol);
+        vault.depositFor{value: 5 ether}(user1);
 
         vm.prank(protocol);
         vault.lock(user1, 5 ether);
@@ -251,8 +261,9 @@ contract VaultTest is Test {
     }
 
     function test_Unlock_EmitsEvent() public {
-        vm.prank(user1);
-        vault.deposit{value: 2 ether}();
+        vm.deal(protocol, 10 ether);
+        vm.prank(protocol);
+        vault.depositFor{value: 2 ether}(user1);
 
         vm.prank(protocol);
         vault.lock(user1, 2 ether);
@@ -265,8 +276,9 @@ contract VaultTest is Test {
     }
 
     function test_Unlock_Full() public {
-        vm.prank(user1);
-        vault.deposit{value: 3 ether}();
+        vm.deal(protocol, 10 ether);
+        vm.prank(protocol);
+        vault.depositFor{value: 3 ether}(user1);
 
         vm.prank(protocol);
         vault.lock(user1, 3 ether);
@@ -279,8 +291,9 @@ contract VaultTest is Test {
     }
 
     function test_Unlock_RevertOnZeroAmount() public {
-        vm.prank(user1);
-        vault.deposit{value: 1 ether}();
+        vm.deal(protocol, 10 ether);
+        vm.prank(protocol);
+        vault.depositFor{value: 1 ether}(user1);
 
         vm.prank(protocol);
         vault.lock(user1, 1 ether);
@@ -291,8 +304,9 @@ contract VaultTest is Test {
     }
 
     function test_Unlock_RevertIfInsufficientLocked() public {
-        vm.prank(user1);
-        vault.deposit{value: 2 ether}();
+        vm.deal(protocol, 10 ether);
+        vm.prank(protocol);
+        vault.depositFor{value: 2 ether}(user1);
 
         vm.prank(protocol);
         vault.lock(user1, 1 ether);
@@ -313,8 +327,9 @@ contract VaultTest is Test {
     // -------------------------------------------------------------------------
 
     function test_TransferCollateral_Basic() public {
-        vm.prank(user1);
-        vault.deposit{value: 10 ether}();
+        vm.deal(protocol, 20 ether);
+        vm.prank(protocol);
+        vault.depositFor{value: 10 ether}(user1);
 
         vm.prank(protocol);
         vault.lock(user1, 5 ether);
@@ -329,8 +344,9 @@ contract VaultTest is Test {
     }
 
     function test_TransferCollateral_EmitsEvent() public {
-        vm.prank(user1);
-        vault.deposit{value: 3 ether}();
+        vm.deal(protocol, 10 ether);
+        vm.prank(protocol);
+        vault.depositFor{value: 3 ether}(user1);
 
         vm.prank(protocol);
         vault.lock(user1, 3 ether);
@@ -343,8 +359,9 @@ contract VaultTest is Test {
     }
 
     function test_TransferCollateral_RevertIfInsufficientLocked() public {
-        vm.prank(user1);
-        vault.deposit{value: 5 ether}();
+        vm.deal(protocol, 10 ether);
+        vm.prank(protocol);
+        vault.depositFor{value: 5 ether}(user1);
 
         vm.prank(protocol);
         vault.lock(user1, 3 ether);
@@ -396,8 +413,9 @@ contract VaultTest is Test {
     }
 
     function test_EmergencyWithdraw_AfterTimelock() public {
-        vm.prank(user1);
-        vault.deposit{value: 5 ether}();
+        vm.deal(protocol, 10 ether);
+        vm.prank(protocol);
+        vault.depositFor{value: 5 ether}(user1);
 
         // Lock some to test that locked balance is also released
         vm.prank(protocol);
@@ -419,8 +437,9 @@ contract VaultTest is Test {
     }
 
     function test_EmergencyWithdraw_EmitsEvent() public {
-        vm.prank(user1);
-        vault.deposit{value: 1 ether}();
+        vm.deal(protocol, 10 ether);
+        vm.prank(protocol);
+        vault.depositFor{value: 1 ether}(user1);
 
         vm.prank(admin);
         vault.activateEmergency();
@@ -435,8 +454,9 @@ contract VaultTest is Test {
     }
 
     function test_EmergencyWithdraw_RevertIfNotInEmergency() public {
-        vm.prank(user1);
-        vault.deposit{value: 1 ether}();
+        vm.deal(protocol, 10 ether);
+        vm.prank(protocol);
+        vault.depositFor{value: 1 ether}(user1);
 
         vm.expectRevert("Vault: not in emergency mode");
         vm.prank(user1);
@@ -444,8 +464,9 @@ contract VaultTest is Test {
     }
 
     function test_EmergencyWithdraw_RevertBeforeTimelock() public {
-        vm.prank(user1);
-        vault.deposit{value: 1 ether}();
+        vm.deal(protocol, 10 ether);
+        vm.prank(protocol);
+        vault.depositFor{value: 1 ether}(user1);
 
         vm.prank(admin);
         vault.activateEmergency();
@@ -470,43 +491,21 @@ contract VaultTest is Test {
     }
 
     // -------------------------------------------------------------------------
-    // Reentrancy protection
-    // -------------------------------------------------------------------------
-
-    function test_Reentrancy_WithdrawProtected() public {
-        // Deploy attacker and fund it in the vault
-        ReentrancyAttacker attacker = new ReentrancyAttacker(payable(address(vault)));
-        vm.deal(address(attacker), 10 ether);
-
-        // Deposit on behalf of the attacker contract
-        vm.prank(address(attacker));
-        vault.deposit{value: 1 ether}();
-
-        // Fund vault with more BNB so there's something to steal
-        vm.deal(address(vault), 10 ether);
-
-        // Attack should revert due to ReentrancyGuard
-        vm.expectRevert();
-        attacker.attack();
-
-        // Balance should be unchanged (attack failed)
-        assertEq(vault.balance(address(attacker)), 1 ether);
-    }
-
-    // -------------------------------------------------------------------------
     // available() view
     // -------------------------------------------------------------------------
 
     function test_Available_UnlockedEqualsBalance() public {
-        vm.prank(user1);
-        vault.deposit{value: 4 ether}();
+        vm.deal(protocol, 10 ether);
+        vm.prank(protocol);
+        vault.depositFor{value: 4 ether}(user1);
 
         assertEq(vault.available(user1), 4 ether);
     }
 
     function test_Available_PartiallyLocked() public {
-        vm.prank(user1);
-        vault.deposit{value: 10 ether}();
+        vm.deal(protocol, 20 ether);
+        vm.prank(protocol);
+        vault.depositFor{value: 10 ether}(user1);
 
         vm.prank(protocol);
         vault.lock(user1, 3 ether);
@@ -524,14 +523,14 @@ contract VaultTest is Test {
 
     function testFuzz_DepositAndWithdraw(uint96 amount) public {
         vm.assume(amount > 0);
-        vm.deal(user1, amount);
+        vm.deal(protocol, uint256(amount) * 2);
 
-        vm.prank(user1);
-        vault.deposit{value: amount}();
+        vm.prank(protocol);
+        vault.depositFor{value: amount}(user1);
         assertEq(vault.balance(user1), amount);
 
-        vm.prank(user1);
-        vault.withdraw(amount);
+        vm.prank(protocol);
+        vault.withdrawTo(user1, amount);
         assertEq(vault.balance(user1), 0);
     }
 }

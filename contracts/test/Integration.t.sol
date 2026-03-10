@@ -98,25 +98,24 @@ contract IntegrationTest is Test {
         return factory.createMarket{value: 0.01 ether}(PRICE_ID, STRIKE_PRICE, duration, 60, 1);
     }
 
-    function _depositAndPlace(
+    function _calcCollateral(Side side, uint256 tick, uint256 lots) internal pure returns (uint256) {
+        if (side == Side.Bid) {
+            return (lots * LOT * tick) / 100;
+        } else {
+            return (lots * LOT * (100 - tick)) / 100;
+        }
+    }
+
+    function _placeOrder(
         address user,
         uint256 obMarketId,
         Side side,
         uint256 tick,
         uint256 lots
     ) internal returns (uint256 orderId) {
-        uint256 collateral;
-        if (side == Side.Bid) {
-            collateral = (lots * LOT * tick) / 100;
-        } else {
-            collateral = (lots * LOT * (100 - tick)) / 100;
-        }
-
+        uint256 collateral = _calcCollateral(side, tick, lots);
         vm.prank(user);
-        vault.deposit{value: collateral}();
-
-        vm.prank(user);
-        orderId = book.placeOrder(obMarketId, side, OrderType.GoodTilCancel, tick, lots);
+        orderId = book.placeOrder{value: collateral}(obMarketId, side, OrderType.GoodTilCancel, tick, lots);
     }
 
     function _createPriceUpdate(int64 price, uint64 conf, uint64 publishTime)
@@ -161,8 +160,8 @@ contract IntegrationTest is Test {
         (, , , , , , , , uint256 obId) = factory.marketMeta(fmId);
 
         // 2. Place orders: user1 bids at 60, user2 asks at 50
-        uint256 bid1 = _depositAndPlace(user1, obId, Side.Bid, 60, 10);
-        uint256 ask1 = _depositAndPlace(user2, obId, Side.Ask, 50, 10);
+        uint256 bid1 = _placeOrder(user1, obId, Side.Bid, 60, 10);
+        uint256 ask1 = _placeOrder(user2, obId, Side.Ask, 50, 10);
 
         // 3. Clear batch
         vm.prank(operator);
@@ -205,20 +204,15 @@ contract IntegrationTest is Test {
         uint256 fmId = _createMarket(3600);
         (, , , , , , , , uint256 obId) = factory.marketMeta(fmId);
 
-        // user1 bids at 60 (10 lots)
-        uint256 bid1 = _depositAndPlace(user1, obId, Side.Bid, 60, 10);
-        // user2 bids at 55 (5 lots)
-        uint256 bid2 = _depositAndPlace(user2, obId, Side.Bid, 55, 5);
-        // user3 asks at 50 (8 lots)
-        uint256 ask1 = _depositAndPlace(user3, obId, Side.Ask, 50, 8);
+        uint256 bid1 = _placeOrder(user1, obId, Side.Bid, 60, 10);
+        uint256 bid2 = _placeOrder(user2, obId, Side.Bid, 55, 5);
+        uint256 ask1 = _placeOrder(user3, obId, Side.Ask, 50, 8);
 
-        // Clear batch
         vm.prank(operator);
         BatchResult memory result = auction.clearBatch(obId, _noIds());
 
         assertGt(result.matchedLots, 0);
 
-        // All users claim fills
         auction.claimFills(bid1);
         auction.claimFills(bid2);
         auction.claimFills(ask1);
@@ -231,19 +225,16 @@ contract IntegrationTest is Test {
     function test_Cancellation_NoResolution() public {
         uint256 fmId = _createMarket(3600);
 
-        // Close market
         (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
         vm.warp(expiry);
         factory.closeMarket(fmId);
 
-        // Wait 24h without resolution
         vm.warp(block.timestamp + 24 hours);
 
         uint256 creatorBalBefore = user1.balance;
         factory.cancelMarket(fmId);
 
         assertEq(uint256(factory.getMarketState(fmId)), uint256(MarketState.Cancelled));
-        // Bond returned
         assertEq(user1.balance, creatorBalBefore + 0.01 ether);
     }
 
@@ -258,25 +249,21 @@ contract IntegrationTest is Test {
         vm.warp(expiry);
         factory.closeMarket(fmId);
 
-        // Resolver1 submits at publishTime = expiry + 30
         uint64 pt1 = uint64(expiry + 30);
         bytes[] memory data1 = _createPriceUpdate(50000_00000000, 100_00000000, pt1);
         vm.prank(user2);
         resolver.resolveMarket{value: 1}(fmId, data1);
 
-        // Resolver2 challenges with earlier publishTime = expiry + 5
         uint64 pt2 = uint64(expiry + 5);
         bytes[] memory data2 = _createPriceUpdate(48000_00000000, 100_00000000, pt2);
         vm.prank(user3);
         resolver.resolveMarket{value: 1}(fmId, data2);
 
-        // Verify challenger won
         (int64 price, uint256 pt, , address res, ) = resolver.pendingResolutions(fmId);
         assertEq(price, 48000_00000000);
         assertEq(pt, pt2);
         assertEq(res, user3);
 
-        // Finalize — bounty goes to challenger
         vm.roll(block.number + 3);
         uint256 user3BalBefore = user3.balance;
         resolver.finalizeResolution(fmId);
@@ -292,12 +279,10 @@ contract IntegrationTest is Test {
         (, , , , , , , , uint256 obId) = factory.marketMeta(fmId);
 
         uint256 collateral = (10 * LOT * 50) / 100;
-        vm.prank(user1);
-        vault.deposit{value: collateral}();
 
         vm.prank(user1);
         uint256 gasBefore = gasleft();
-        book.placeOrder(obId, Side.Bid, OrderType.GoodTilCancel, 50, 10);
+        book.placeOrder{value: collateral}(obId, Side.Bid, OrderType.GoodTilCancel, 50, 10);
         uint256 gasUsed = gasBefore - gasleft();
         emit log_named_uint("placeOrder gas", gasUsed);
     }
@@ -306,7 +291,7 @@ contract IntegrationTest is Test {
         uint256 fmId = _createMarket(3600);
         (, , , , , , , , uint256 obId) = factory.marketMeta(fmId);
 
-        uint256 orderId = _depositAndPlace(user1, obId, Side.Bid, 50, 10);
+        uint256 orderId = _placeOrder(user1, obId, Side.Bid, 50, 10);
 
         vm.prank(user1);
         uint256 gasBefore = gasleft();
@@ -319,8 +304,8 @@ contract IntegrationTest is Test {
         uint256 fmId = _createMarket(3600);
         (, , , , , , , , uint256 obId) = factory.marketMeta(fmId);
 
-        _depositAndPlace(user1, obId, Side.Bid, 60, 10);
-        _depositAndPlace(user2, obId, Side.Ask, 50, 10);
+        _placeOrder(user1, obId, Side.Bid, 60, 10);
+        _placeOrder(user2, obId, Side.Ask, 50, 10);
 
         vm.prank(operator);
         uint256 gasBefore = gasleft();
@@ -333,8 +318,8 @@ contract IntegrationTest is Test {
         uint256 fmId = _createMarket(3600);
         (, , , , , , , , uint256 obId) = factory.marketMeta(fmId);
 
-        uint256 bid1 = _depositAndPlace(user1, obId, Side.Bid, 60, 10);
-        _depositAndPlace(user2, obId, Side.Ask, 50, 10);
+        uint256 bid1 = _placeOrder(user1, obId, Side.Bid, 60, 10);
+        _placeOrder(user2, obId, Side.Ask, 50, 10);
 
         vm.prank(operator);
         auction.clearBatch(obId, _noIds());
@@ -394,19 +379,16 @@ contract IntegrationTest is Test {
         factory.closeMarket(fmId);
 
         uint256 collateral = (10 * LOT * 50) / 100;
-        vm.prank(user1);
-        vault.deposit{value: collateral}();
 
         vm.expectRevert("OrderBook: market not active");
         vm.prank(user1);
-        book.placeOrder(obId, Side.Bid, OrderType.GoodTilCancel, 50, 10);
+        book.placeOrder{value: collateral}(obId, Side.Bid, OrderType.GoodTilCancel, 50, 10);
     }
 
     function test_CancelMarket_FromOpenState() public {
         uint256 fmId = _createMarket(3600);
         (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
 
-        // Wait past expiry + 24h without closing
         vm.warp(expiry + 24 hours);
 
         uint256 balBefore = user1.balance;
@@ -421,8 +403,8 @@ contract IntegrationTest is Test {
         (, , , , , , , , uint256 obId) = factory.marketMeta(fmId);
 
         // Batch 1
-        uint256 bid1 = _depositAndPlace(user1, obId, Side.Bid, 60, 10);
-        uint256 ask1 = _depositAndPlace(user2, obId, Side.Ask, 50, 10);
+        uint256 bid1 = _placeOrder(user1, obId, Side.Bid, 60, 10);
+        uint256 ask1 = _placeOrder(user2, obId, Side.Ask, 50, 10);
 
         vm.prank(operator);
         auction.clearBatch(obId, _noIds());
@@ -430,12 +412,11 @@ contract IntegrationTest is Test {
         auction.claimFills(bid1);
         auction.claimFills(ask1);
 
-        // Advance past batch interval (60s) before next clear
         vm.warp(block.timestamp + 60);
 
-        // Batch 2 — new orders
-        uint256 bid2 = _depositAndPlace(user1, obId, Side.Bid, 55, 5);
-        uint256 ask2 = _depositAndPlace(user3, obId, Side.Ask, 45, 5);
+        // Batch 2
+        uint256 bid2 = _placeOrder(user1, obId, Side.Bid, 55, 5);
+        uint256 ask2 = _placeOrder(user3, obId, Side.Ask, 45, 5);
 
         vm.prank(operator);
         BatchResult memory r2 = auction.clearBatch(obId, _noIds());
@@ -460,14 +441,10 @@ contract IntegrationTest is Test {
         uint256 askCollateral = (10 * LOT * 40) / 100;
 
         vm.prank(user1);
-        vault.deposit{value: bidCollateral}();
-        vm.prank(user1);
-        uint256 bid1 = book.placeOrder(obId, Side.Bid, OrderType.GoodTilCancel, 60, 10);
+        uint256 bid1 = book.placeOrder{value: bidCollateral}(obId, Side.Bid, OrderType.GoodTilCancel, 60, 10);
 
         vm.prank(user2);
-        vault.deposit{value: askCollateral}();
-        vm.prank(user2);
-        uint256 ask1 = book.placeOrder(obId, Side.Ask, OrderType.GoodTilCancel, 60, 10);
+        uint256 ask1 = book.placeOrder{value: askCollateral}(obId, Side.Ask, OrderType.GoodTilCancel, 60, 10);
 
         vm.prank(operator);
         zeroAuction.clearBatch(obId, _noIds());
@@ -510,16 +487,14 @@ contract IntegrationTest is Test {
         uint256 obId = _getObId(fmId);
         (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
 
-        // Trade so tokens exist
-        uint256 bid1 = _depositAndPlace(user1, obId, Side.Bid, 60, 5);
-        uint256 ask1 = _depositAndPlace(user2, obId, Side.Ask, 60, 5);
+        uint256 bid1 = _placeOrder(user1, obId, Side.Bid, 60, 5);
+        uint256 ask1 = _placeOrder(user2, obId, Side.Ask, 60, 5);
 
         vm.prank(operator);
         zeroAuction.clearBatch(obId, _noIds());
         zeroAuction.claimFills(bid1);
         zeroAuction.claimFills(ask1);
 
-        // Close + wait 24h + cancel
         vm.warp(expiry);
         factory.closeMarket(fmId);
         vm.warp(block.timestamp + 24 hours);
@@ -527,7 +502,6 @@ contract IntegrationTest is Test {
 
         assertEq(uint256(factory.getMarketState(fmId)), uint256(MarketState.Cancelled));
 
-        // Redemption should revert on cancelled market
         vm.expectRevert("Redemption: not resolved");
         vm.prank(user1);
         redemption.redeem(fmId, 5);
@@ -540,17 +514,14 @@ contract IntegrationTest is Test {
     function test_PayResolverBounty_RevertIfNotResolved() public {
         uint256 fmId = _createMarket(3600);
 
-        // Market is Open — should revert
         vm.prank(admin);
         vm.expectRevert("MarketFactory: not resolved");
         factory.payResolverBounty(fmId, user1);
 
-        // Close it
         (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
         vm.warp(expiry);
         factory.closeMarket(fmId);
 
-        // Market is Closed — should still revert
         vm.prank(admin);
         vm.expectRevert("MarketFactory: not resolved");
         factory.payResolverBounty(fmId, user1);
@@ -566,16 +537,14 @@ contract IntegrationTest is Test {
         uint256 obId = _getObId(fmId);
 
         // Place GTC bid for 20 lots at tick 50
+        uint256 bidCollateral = (20 * LOT * 50) / 100;
         vm.prank(user1);
-        vault.deposit{value: (20 * LOT * 50) / 100}();
-        vm.prank(user1);
-        uint256 bidId = book.placeOrder(obId, Side.Bid, OrderType.GoodTilCancel, 50, 20);
+        uint256 bidId = book.placeOrder{value: bidCollateral}(obId, Side.Bid, OrderType.GoodTilCancel, 50, 20);
 
         // Batch 1: ask for 5 lots at tick 50 → partial fill (5 of 20)
+        uint256 askCollateral = (5 * LOT * 50) / 100;
         vm.prank(user2);
-        vault.deposit{value: (5 * LOT * 50) / 100}();
-        vm.prank(user2);
-        uint256 ask1 = book.placeOrder(obId, Side.Ask, OrderType.GoodTilCancel, 50, 5);
+        uint256 ask1 = book.placeOrder{value: askCollateral}(obId, Side.Ask, OrderType.GoodTilCancel, 50, 5);
 
         vm.prank(operator);
         assertEq(zeroAuction.clearBatch(obId, _noIds()).matchedLots, 5);
@@ -583,7 +552,6 @@ contract IntegrationTest is Test {
         zeroAuction.claimFills(bidId);
         zeroAuction.claimFills(ask1);
 
-        // Bid should have 15 lots remaining in book
         (, , , , uint64 remainingLots, , , , ) = book.orders(bidId);
         assertEq(remainingLots, 15, "GTC order should have 15 lots remaining");
         assertEq(token.balanceOf(user1, token.yesTokenId(obId)), 5);
@@ -591,10 +559,9 @@ contract IntegrationTest is Test {
         // Batch 2: ask for 15 lots at tick 50 → fills remainder
         vm.warp(block.timestamp + 60);
 
+        uint256 askCollateral2 = (15 * LOT * 50) / 100;
         vm.prank(user3);
-        vault.deposit{value: (15 * LOT * 50) / 100}();
-        vm.prank(user3);
-        uint256 ask2 = book.placeOrder(obId, Side.Ask, OrderType.GoodTilCancel, 50, 15);
+        uint256 ask2 = book.placeOrder{value: askCollateral2}(obId, Side.Ask, OrderType.GoodTilCancel, 50, 15);
 
         vm.prank(operator);
         assertEq(zeroAuction.clearBatch(obId, _noIds()).matchedLots, 15);
@@ -602,7 +569,6 @@ contract IntegrationTest is Test {
         zeroAuction.claimFills(bidId);
         zeroAuction.claimFills(ask2);
 
-        // Bid should be fully filled now
         (, , , , uint64 finalLots, , , , ) = book.orders(bidId);
         assertEq(finalLots, 0, "GTC order should be fully filled");
         assertEq(token.balanceOf(user1, token.yesTokenId(obId)), 20);
@@ -615,22 +581,18 @@ contract IntegrationTest is Test {
     function test_PythResolver_AdminTransfer() public {
         assertEq(resolver.admin(), admin);
 
-        // Non-admin can't set pending
         vm.prank(user1);
         vm.expectRevert("PythResolver: not admin");
         resolver.setPendingAdmin(user1);
 
-        // Admin sets pending
         vm.prank(admin);
         resolver.setPendingAdmin(user2);
         assertEq(resolver.pendingAdmin(), user2);
 
-        // Wrong person can't accept
         vm.prank(user1);
         vm.expectRevert("PythResolver: not pending admin");
         resolver.acceptAdmin();
 
-        // Pending admin accepts
         vm.prank(user2);
         resolver.acceptAdmin();
         assertEq(resolver.admin(), user2);
@@ -646,7 +608,6 @@ contract IntegrationTest is Test {
         vm.expectRevert("PythResolver: bps exceeds 10000");
         resolver.setConfThreshold(10001);
 
-        // 10000 should be ok
         vm.prank(admin);
         resolver.setConfThreshold(10000);
         assertEq(resolver.confThresholdBps(), 10000);
@@ -691,7 +652,6 @@ contract IntegrationTest is Test {
     // =========================================================================
 
     function test_PythResolver_FailsWithoutAdminRole() public {
-        // Deploy a resolver without granting ADMIN_ROLE on factory
         PythResolver badResolver = new PythResolver(address(mockPyth), address(factory));
 
         uint256 fmId = _createMarket(3600);
@@ -702,7 +662,6 @@ contract IntegrationTest is Test {
         uint64 publishTime = uint64(expiry + 10);
         bytes[] memory updateData = _createPriceUpdate(50000_00000000, 100_00000000, publishTime);
 
-        // Should revert because badResolver doesn't have ADMIN_ROLE on factory
         vm.expectRevert();
         vm.prank(user1);
         badResolver.resolveMarket{value: 1}(fmId, updateData);
@@ -715,42 +674,36 @@ contract IntegrationTest is Test {
     function test_Redemption_E2E() public {
         BatchAuction zeroAuction = _createZeroFeeAuction();
 
-        // 1. Create market
         uint256 fmId = _createMarket(3600);
         uint256 obId = _getObId(fmId);
         (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
 
-        // 2. Place matching orders at tick 60
+        // Place matching orders at tick 60
         uint256 bidCollateral = (10 * LOT * 60) / 100;
         uint256 askCollateral = (10 * LOT * 40) / 100;
 
         vm.prank(user1);
-        vault.deposit{value: bidCollateral}();
-        vm.prank(user1);
-        uint256 bid1 = book.placeOrder(obId, Side.Bid, OrderType.GoodTilCancel, 60, 10);
+        uint256 bid1 = book.placeOrder{value: bidCollateral}(obId, Side.Bid, OrderType.GoodTilCancel, 60, 10);
 
         vm.prank(user2);
-        vault.deposit{value: askCollateral}();
-        vm.prank(user2);
-        uint256 ask1 = book.placeOrder(obId, Side.Ask, OrderType.GoodTilCancel, 60, 10);
+        uint256 ask1 = book.placeOrder{value: askCollateral}(obId, Side.Ask, OrderType.GoodTilCancel, 60, 10);
 
-        // 3. Clear batch
+        // Clear batch
         vm.prank(operator);
         BatchResult memory result = zeroAuction.clearBatch(obId, _noIds());
         assertEq(result.matchedLots, 10);
 
-        // 4. Claim fills — tokens minted, collateral to pool
+        // Claim fills
         zeroAuction.claimFills(bid1);
         zeroAuction.claimFills(ask1);
 
         // With zero fees: pool = bidCollateral + askCollateral = 10 * LOT
         assertEq(vault.marketPool(obId), 10 * LOT);
 
-        // user1 has 10 YES tokens, user2 has 10 NO tokens
         assertEq(token.balanceOf(user1, token.yesTokenId(obId)), 10);
         assertEq(token.balanceOf(user2, token.noTokenId(obId)), 10);
 
-        // 5. Close and resolve market (YES wins with positive price)
+        // Close and resolve market (YES wins with positive price)
         vm.warp(expiry);
         factory.closeMarket(fmId);
 
@@ -763,7 +716,7 @@ contract IntegrationTest is Test {
         resolver.finalizeResolution(fmId);
         assertEq(uint256(factory.getMarketState(fmId)), uint256(MarketState.Resolved));
 
-        // 6. Redeem — user1 redeems 10 YES tokens for 10 * LOT_SIZE BNB
+        // Redeem — user1 redeems 10 YES tokens for 10 * LOT_SIZE BNB
         uint256 user1BalBefore = user1.balance;
         vm.prank(user1);
         redemption.redeem(fmId, 10);
