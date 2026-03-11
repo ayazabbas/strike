@@ -53,6 +53,10 @@
 * [Gas & Costs](technical/gas-and-costs.md)
 * [MEV Mitigation](technical/mev.md)
 
+## Coming Soon
+
+* [AI-Resolved Markets](coming-soon/ai-resolved-markets.md)
+
 ## Project
 
 * [Roadmap](project/roadmap.md)

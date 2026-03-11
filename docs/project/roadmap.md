@@ -63,6 +63,7 @@ Preserved on the `poc` branch.
 
 ## 🔮 Future
 
+- **[AI-Resolved Markets](../coming-soon/ai-resolved-markets.md)** — qualitative event markets (geopolitics, sports, culture) resolved via Flap AI Oracle
 - Multi-asset support (ETH, SOL, BNB + any Pyth feed)
 - Variable market durations (1min, 5min, 15min, 1hr)
 - BSC mainnet deployment
