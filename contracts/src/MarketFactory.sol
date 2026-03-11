@@ -9,10 +9,11 @@ import "./OutcomeToken.sol";
 
 /// @title MarketFactory
 /// @notice Creates and manages binary outcome markets for the Strike CLOB protocol.
-///         Market creation requires a bond (native token) to fund the resolver bounty.
+///         Market creation is permissioned via MARKET_CREATOR_ROLE.
 ///         Tracks market lifecycle: Open → Closed → Resolving → Resolved / Cancelled.
 contract MarketFactory is AccessControl, ReentrancyGuard {
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
+    bytes32 public constant MARKET_CREATOR_ROLE = keccak256("MARKET_CREATOR_ROLE");
 
     // -------------------------------------------------------------------------
     // State
@@ -22,7 +23,6 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
     OutcomeToken public immutable outcomeToken;
 
     uint256 public nextFactoryMarketId = 1;
-    uint256 public creationBond = 0.01 ether;
     bool public paused;
 
     /// @notice Default market parameters
@@ -35,7 +35,6 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
         bytes32 priceId;       // Pyth price feed ID
         int64 strikePrice;     // resolution threshold: price >= strikePrice → YES wins
         uint256 expiryTime;    // when the market closes
-        uint256 creationBond;  // bond paid at creation
         address creator;       // who created the market
         MarketState state;     // lifecycle state
         bool outcomeYes;       // true = YES won (only valid in Resolved state)
@@ -73,9 +72,7 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
     event MarketStateChanged(uint256 indexed factoryMarketId, MarketState newState);
     event FactoryPaused(bool paused);
     event DefaultParamsUpdated(uint256 batchInterval, uint128 minLots);
-    event CreationBondUpdated(uint256 newBond);
     event FeeCollectorUpdated(address indexed collector);
-    event ResolverBountyPaid(uint256 indexed factoryMarketId, address indexed resolver, uint256 amount);
 
     // -------------------------------------------------------------------------
     // Constructor
@@ -111,9 +108,8 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
         uint256 duration,
         uint256 batchInterval,
         uint128 minLots
-    ) external payable nonReentrant returns (uint256 factoryMarketId) {
+    ) external onlyRole(MARKET_CREATOR_ROLE) nonReentrant returns (uint256 factoryMarketId) {
         require(!paused, "MarketFactory: paused");
-        require(msg.value >= creationBond, "MarketFactory: insufficient bond");
         require(duration > 0, "MarketFactory: zero duration");
         require(priceId != bytes32(0), "MarketFactory: zero priceId");
         require(strikePrice > 0, "MarketFactory: zero strikePrice");
@@ -133,7 +129,6 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
             priceId: priceId,
             strikePrice: strikePrice,
             expiryTime: expiryTime,
-            creationBond: msg.value,
             creator: msg.sender,
             state: MarketState.Open,
             outcomeYes: false,
@@ -144,12 +139,6 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
         // Track as active
         activeMarketIndex[factoryMarketId] = activeMarkets.length;
         activeMarkets.push(factoryMarketId);
-
-        // Refund excess bond
-        if (msg.value > creationBond) {
-            (bool ok, ) = msg.sender.call{value: msg.value - creationBond}("");
-            require(ok, "MarketFactory: refund failed");
-        }
 
         emit MarketCreated(factoryMarketId, obMarketId, priceId, strikePrice, expiryTime, msg.sender);
     }
@@ -205,7 +194,7 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
     }
 
     /// @notice Cancel a market (no resolution within 24h of expiry).
-    function cancelMarket(uint256 factoryMarketId) external nonReentrant {
+    function cancelMarket(uint256 factoryMarketId) external {
         MarketMeta storage meta = marketMeta[factoryMarketId];
         require(meta.creator != address(0), "MarketFactory: market not found");
         require(
@@ -225,33 +214,7 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
 
         meta.state = MarketState.Cancelled;
 
-        // Return bond to creator
-        uint256 bond = meta.creationBond;
-        if (bond > 0) {
-            meta.creationBond = 0;
-            (bool ok, ) = meta.creator.call{value: bond}("");
-            require(ok, "MarketFactory: bond refund failed");
-        }
-
         emit MarketStateChanged(factoryMarketId, MarketState.Cancelled);
-    }
-
-    /// @notice Pay resolver bounty from creation bond.
-    function payResolverBounty(uint256 factoryMarketId, address resolver)
-        external
-        onlyRole(ADMIN_ROLE)
-        nonReentrant
-    {
-        MarketMeta storage meta = marketMeta[factoryMarketId];
-        require(meta.state == MarketState.Resolved, "MarketFactory: not resolved");
-        uint256 bond = meta.creationBond;
-        require(bond > 0, "MarketFactory: no bond");
-
-        meta.creationBond = 0;
-        (bool ok, ) = resolver.call{value: bond}("");
-        require(ok, "MarketFactory: bounty transfer failed");
-
-        emit ResolverBountyPaid(factoryMarketId, resolver, bond);
     }
 
     // -------------------------------------------------------------------------
@@ -269,11 +232,6 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
         defaultBatchInterval = _batchInterval;
         defaultMinLots = _minLots;
         emit DefaultParamsUpdated(_batchInterval, _minLots);
-    }
-
-    function setCreationBond(uint256 _bond) external onlyRole(ADMIN_ROLE) {
-        creationBond = _bond;
-        emit CreationBondUpdated(_bond);
     }
 
     function setFeeCollector(address _collector) external onlyRole(ADMIN_ROLE) {

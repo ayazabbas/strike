@@ -46,8 +46,9 @@ contract PythResolverTest is Test {
 
         resolver = new PythResolver(address(mockPyth), address(factory));
 
-        // PythResolver needs ADMIN_ROLE to call setResolving/setResolved/payResolverBounty
+        // PythResolver needs ADMIN_ROLE to call setResolving/setResolved
         factory.grantRole(factory.ADMIN_ROLE(), address(resolver));
+        factory.grantRole(factory.MARKET_CREATOR_ROLE(), user1);
 
         vm.stopPrank();
 
@@ -57,9 +58,9 @@ contract PythResolverTest is Test {
 
         // Create a market
         vm.prank(user1);
-        marketId = factory.createMarket{value: 0.01 ether}(PRICE_ID, STRIKE_PRICE, 3600, 60, 1);
+        marketId = factory.createMarket(PRICE_ID, STRIKE_PRICE, 3600, 60, 1);
 
-        (, , expiryTime, , , , , , ) = factory.marketMeta(marketId);
+        (, , expiryTime, , , , , ) = factory.marketMeta(marketId);
     }
 
     // =========================================================================
@@ -297,14 +298,10 @@ contract PythResolverTest is Test {
         // Advance past finality gate
         vm.roll(block.number + 3);
 
-        uint256 resolver1BalBefore = resolver1.balance;
         resolver.finalizeResolution(marketId);
 
         // Market should be Resolved
         assertEq(uint256(factory.getMarketState(marketId)), uint256(MarketState.Resolved));
-
-        // Resolver should have received bounty
-        assertEq(resolver1.balance, resolver1BalBefore + 0.01 ether);
 
         // Check finalized flag
         (, , , , bool fin) = resolver.pendingResolutions(marketId);
@@ -323,7 +320,7 @@ contract PythResolverTest is Test {
         vm.roll(block.number + 3);
         resolver.finalizeResolution(marketId);
 
-        (, , , , , , bool outcomeYes, , ) = factory.marketMeta(marketId);
+        (, , , , , bool outcomeYes, , ) = factory.marketMeta(marketId);
         assertTrue(outcomeYes);
     }
 
@@ -340,7 +337,7 @@ contract PythResolverTest is Test {
         vm.roll(block.number + 3);
         resolver.finalizeResolution(marketId);
 
-        (, , , , , , bool outcomeYes, , ) = factory.marketMeta(marketId);
+        (, , , , , bool outcomeYes, , ) = factory.marketMeta(marketId);
         assertTrue(outcomeYes);
     }
 
@@ -356,7 +353,7 @@ contract PythResolverTest is Test {
         vm.roll(block.number + 3);
         resolver.finalizeResolution(marketId);
 
-        (, , , , , , bool outcomeYes, , ) = factory.marketMeta(marketId);
+        (, , , , , bool outcomeYes, , ) = factory.marketMeta(marketId);
         assertFalse(outcomeYes);
     }
 
@@ -439,7 +436,7 @@ contract PythResolverTest is Test {
         vm.roll(block.number + 3);
         resolver.finalizeResolution(marketId);
 
-        (, , , , , MarketState state, bool outcomeYes, int64 settlementPrice, ) = factory.marketMeta(marketId);
+        (, , , , MarketState state, bool outcomeYes, int64 settlementPrice, ) = factory.marketMeta(marketId);
         assertEq(uint256(state), uint256(MarketState.Resolved));
         assertEq(settlementPrice, price);
 

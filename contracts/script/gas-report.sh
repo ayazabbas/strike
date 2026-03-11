@@ -71,15 +71,13 @@ echo ""
 # ─── 2. Market Creation ───
 echo "── Market Creation ──"
 
-BOND=$(cast call $FACTORY "creationBond()(uint256)" --rpc-url $RPC | awk '{print $1}')
-
 GAS=$(send_gas $FACTORY "createMarket(bytes32,int64,uint256,uint256,uint128)" \
     0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace \
     5000000000000 \
     7200 \
     60 \
     1 \
-    --value $BOND --private-key $DEPLOYER_PK)
+    --private-key $DEPLOYER_PK)
 record "MarketFactory.createMarket" $GAS
 
 # Get the new orderbook market ID

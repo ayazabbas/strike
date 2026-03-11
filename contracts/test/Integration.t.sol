@@ -63,8 +63,9 @@ contract IntegrationTest is Test {
         vault.grantRole(vault.PROTOCOL_ROLE(), address(redemption));
         token.grantRole(token.MINTER_ROLE(), address(auction));
         token.grantRole(token.MINTER_ROLE(), address(redemption));
-        // PythResolver needs ADMIN_ROLE to call setResolving/setResolved/payResolverBounty
+        // PythResolver needs ADMIN_ROLE to call setResolving/setResolved
         factory.grantRole(factory.ADMIN_ROLE(), address(resolver));
+        factory.grantRole(factory.MARKET_CREATOR_ROLE(), user1);
 
         vm.stopPrank();
 
@@ -89,13 +90,13 @@ contract IntegrationTest is Test {
     }
 
     function _getObId(uint256 fmId) internal view returns (uint256) {
-        (, , , , , , , , uint256 obId) = factory.marketMeta(fmId);
+        (, , , , , , , uint256 obId) = factory.marketMeta(fmId);
         return obId;
     }
 
     function _createMarket(uint256 duration) internal returns (uint256) {
         vm.prank(user1);
-        return factory.createMarket{value: 0.01 ether}(PRICE_ID, STRIKE_PRICE, duration, 60, 1);
+        return factory.createMarket(PRICE_ID, STRIKE_PRICE, duration, 60, 1);
     }
 
     function _calcCollateral(Side side, uint256 tick, uint256 lots) internal pure returns (uint256) {
@@ -157,7 +158,7 @@ contract IntegrationTest is Test {
     function test_FullLifecycle() public {
         // 1. Create market
         uint256 fmId = _createMarket(3600);
-        (, , , , , , , , uint256 obId) = factory.marketMeta(fmId);
+        (, , , , , , , uint256 obId) = factory.marketMeta(fmId);
 
         // 2. Place orders: user1 bids at 60, user2 asks at 50
         uint256 bid1 = _placeOrder(user1, obId, Side.Bid, 60, 10);
@@ -177,7 +178,7 @@ contract IntegrationTest is Test {
         auction.claimFills(ask1);
 
         // 5. Close market
-        (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
+        (, , uint256 expiry, , , , , ) = factory.marketMeta(fmId);
         vm.warp(expiry);
         factory.closeMarket(fmId);
         assertEq(uint256(factory.getMarketState(fmId)), uint256(MarketState.Closed));
@@ -202,7 +203,7 @@ contract IntegrationTest is Test {
 
     function test_MultiUser_ThreeTraders() public {
         uint256 fmId = _createMarket(3600);
-        (, , , , , , , , uint256 obId) = factory.marketMeta(fmId);
+        (, , , , , , , uint256 obId) = factory.marketMeta(fmId);
 
         uint256 bid1 = _placeOrder(user1, obId, Side.Bid, 60, 10);
         uint256 bid2 = _placeOrder(user2, obId, Side.Bid, 55, 5);
@@ -225,17 +226,15 @@ contract IntegrationTest is Test {
     function test_Cancellation_NoResolution() public {
         uint256 fmId = _createMarket(3600);
 
-        (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
+        (, , uint256 expiry, , , , , ) = factory.marketMeta(fmId);
         vm.warp(expiry);
         factory.closeMarket(fmId);
 
         vm.warp(block.timestamp + 24 hours);
 
-        uint256 creatorBalBefore = user1.balance;
         factory.cancelMarket(fmId);
 
         assertEq(uint256(factory.getMarketState(fmId)), uint256(MarketState.Cancelled));
-        assertEq(user1.balance, creatorBalBefore + 0.01 ether);
     }
 
     // =========================================================================
@@ -245,7 +244,7 @@ contract IntegrationTest is Test {
     function test_Challenge_TwoResolvers() public {
         uint256 fmId = _createMarket(3600);
 
-        (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
+        (, , uint256 expiry, , , , , ) = factory.marketMeta(fmId);
         vm.warp(expiry);
         factory.closeMarket(fmId);
 
@@ -265,9 +264,7 @@ contract IntegrationTest is Test {
         assertEq(res, user3);
 
         vm.roll(block.number + 3);
-        uint256 user3BalBefore = user3.balance;
         resolver.finalizeResolution(fmId);
-        assertEq(user3.balance, user3BalBefore + 0.01 ether);
     }
 
     // =========================================================================
@@ -276,7 +273,7 @@ contract IntegrationTest is Test {
 
     function test_GasSnapshot_PlaceOrder() public {
         uint256 fmId = _createMarket(3600);
-        (, , , , , , , , uint256 obId) = factory.marketMeta(fmId);
+        (, , , , , , , uint256 obId) = factory.marketMeta(fmId);
 
         uint256 collateral = (10 * LOT * 50) / 100;
 
@@ -289,7 +286,7 @@ contract IntegrationTest is Test {
 
     function test_GasSnapshot_CancelOrder() public {
         uint256 fmId = _createMarket(3600);
-        (, , , , , , , , uint256 obId) = factory.marketMeta(fmId);
+        (, , , , , , , uint256 obId) = factory.marketMeta(fmId);
 
         uint256 orderId = _placeOrder(user1, obId, Side.Bid, 50, 10);
 
@@ -302,7 +299,7 @@ contract IntegrationTest is Test {
 
     function test_GasSnapshot_ClearBatch() public {
         uint256 fmId = _createMarket(3600);
-        (, , , , , , , , uint256 obId) = factory.marketMeta(fmId);
+        (, , , , , , , uint256 obId) = factory.marketMeta(fmId);
 
         _placeOrder(user1, obId, Side.Bid, 60, 10);
         _placeOrder(user2, obId, Side.Ask, 50, 10);
@@ -316,7 +313,7 @@ contract IntegrationTest is Test {
 
     function test_GasSnapshot_ClaimFills() public {
         uint256 fmId = _createMarket(3600);
-        (, , , , , , , , uint256 obId) = factory.marketMeta(fmId);
+        (, , , , , , , uint256 obId) = factory.marketMeta(fmId);
 
         uint256 bid1 = _placeOrder(user1, obId, Side.Bid, 60, 10);
         _placeOrder(user2, obId, Side.Ask, 50, 10);
@@ -333,7 +330,7 @@ contract IntegrationTest is Test {
     function test_GasSnapshot_ResolveMarket() public {
         uint256 fmId = _createMarket(3600);
 
-        (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
+        (, , uint256 expiry, , , , , ) = factory.marketMeta(fmId);
         vm.warp(expiry);
         factory.closeMarket(fmId);
 
@@ -353,7 +350,7 @@ contract IntegrationTest is Test {
 
     function test_MarketCreation_RegistersInOrderBook() public {
         uint256 fmId = _createMarket(3600);
-        (, , , , , , , , uint256 obId) = factory.marketMeta(fmId);
+        (, , , , , , , uint256 obId) = factory.marketMeta(fmId);
 
         (uint32 mId, bool active, , , , , ) = book.markets(obId);
         assertEq(mId, obId);
@@ -362,7 +359,7 @@ contract IntegrationTest is Test {
 
     function test_CloseMarket_DeactivatesOrderBook() public {
         uint256 fmId = _createMarket(3600);
-        (, , uint256 expiry, , , , , , uint256 obId) = factory.marketMeta(fmId);
+        (, , uint256 expiry, , , , , uint256 obId) = factory.marketMeta(fmId);
 
         vm.warp(expiry);
         factory.closeMarket(fmId);
@@ -373,7 +370,7 @@ contract IntegrationTest is Test {
 
     function test_CannotPlaceOrderAfterClose() public {
         uint256 fmId = _createMarket(3600);
-        (, , uint256 expiry, , , , , , uint256 obId) = factory.marketMeta(fmId);
+        (, , uint256 expiry, , , , , uint256 obId) = factory.marketMeta(fmId);
 
         vm.warp(expiry);
         factory.closeMarket(fmId);
@@ -387,20 +384,18 @@ contract IntegrationTest is Test {
 
     function test_CancelMarket_FromOpenState() public {
         uint256 fmId = _createMarket(3600);
-        (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
+        (, , uint256 expiry, , , , , ) = factory.marketMeta(fmId);
 
         vm.warp(expiry + 24 hours);
 
-        uint256 balBefore = user1.balance;
         factory.cancelMarket(fmId);
 
         assertEq(uint256(factory.getMarketState(fmId)), uint256(MarketState.Cancelled));
-        assertEq(user1.balance, balBefore + 0.01 ether);
     }
 
     function test_MultipleBatches_BeforeClose() public {
         uint256 fmId = _createMarket(3600);
-        (, , , , , , , , uint256 obId) = factory.marketMeta(fmId);
+        (, , , , , , , uint256 obId) = factory.marketMeta(fmId);
 
         // Batch 1
         uint256 bid1 = _placeOrder(user1, obId, Side.Bid, 60, 10);
@@ -434,7 +429,7 @@ contract IntegrationTest is Test {
         BatchAuction zeroAuction = _createZeroFeeAuction();
         uint256 fmId = _createMarket(3600);
         uint256 obId = _getObId(fmId);
-        (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
+        (, , uint256 expiry, , , , , ) = factory.marketMeta(fmId);
 
         // Place matching orders at tick 60
         uint256 bidCollateral = (10 * LOT * 60) / 100;
@@ -465,7 +460,7 @@ contract IntegrationTest is Test {
         vm.roll(block.number + 3);
         resolver.finalizeResolution(fmId);
 
-        (, , , , , , bool outcomeYes, , ) = factory.marketMeta(fmId);
+        (, , , , , bool outcomeYes, , ) = factory.marketMeta(fmId);
         assertFalse(outcomeYes, "NO should win when price < strike");
 
         // user2 redeems 10 NO tokens for 10 * LOT BNB
@@ -485,7 +480,7 @@ contract IntegrationTest is Test {
         BatchAuction zeroAuction = _createZeroFeeAuction();
         uint256 fmId = _createMarket(3600);
         uint256 obId = _getObId(fmId);
-        (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
+        (, , uint256 expiry, , , , , ) = factory.marketMeta(fmId);
 
         uint256 bid1 = _placeOrder(user1, obId, Side.Bid, 60, 5);
         uint256 ask1 = _placeOrder(user2, obId, Side.Ask, 60, 5);
@@ -505,26 +500,6 @@ contract IntegrationTest is Test {
         vm.expectRevert("Redemption: not resolved");
         vm.prank(user1);
         redemption.redeem(fmId, 5);
-    }
-
-    // =========================================================================
-    // payResolverBounty — revert on non-resolved market
-    // =========================================================================
-
-    function test_PayResolverBounty_RevertIfNotResolved() public {
-        uint256 fmId = _createMarket(3600);
-
-        vm.prank(admin);
-        vm.expectRevert("MarketFactory: not resolved");
-        factory.payResolverBounty(fmId, user1);
-
-        (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
-        vm.warp(expiry);
-        factory.closeMarket(fmId);
-
-        vm.prank(admin);
-        vm.expectRevert("MarketFactory: not resolved");
-        factory.payResolverBounty(fmId, user1);
     }
 
     // =========================================================================
@@ -624,30 +599,6 @@ contract IntegrationTest is Test {
     }
 
     // =========================================================================
-    // ResolverBountyPaid event
-    // =========================================================================
-
-    function test_ResolverBountyPaid_EmitsEvent() public {
-        uint256 fmId = _createMarket(3600);
-        (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
-
-        vm.warp(expiry);
-        factory.closeMarket(fmId);
-
-        uint64 publishTime = uint64(expiry + 10);
-        bytes[] memory updateData = _createPriceUpdate(50000_00000000, 100_00000000, publishTime);
-        vm.prank(user2);
-        resolver.resolveMarket{value: 1}(fmId, updateData);
-
-        vm.roll(block.number + 3);
-
-        vm.expectEmit(true, true, false, true);
-        emit MarketFactory.ResolverBountyPaid(fmId, user2, 0.01 ether);
-
-        resolver.finalizeResolution(fmId);
-    }
-
-    // =========================================================================
     // PythResolver role — resolution fails without ADMIN_ROLE
     // =========================================================================
 
@@ -655,7 +606,7 @@ contract IntegrationTest is Test {
         PythResolver badResolver = new PythResolver(address(mockPyth), address(factory));
 
         uint256 fmId = _createMarket(3600);
-        (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
+        (, , uint256 expiry, , , , , ) = factory.marketMeta(fmId);
         vm.warp(expiry);
         factory.closeMarket(fmId);
 
@@ -676,7 +627,7 @@ contract IntegrationTest is Test {
 
         uint256 fmId = _createMarket(3600);
         uint256 obId = _getObId(fmId);
-        (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
+        (, , uint256 expiry, , , , , ) = factory.marketMeta(fmId);
 
         // Place matching orders at tick 60
         uint256 bidCollateral = (10 * LOT * 60) / 100;

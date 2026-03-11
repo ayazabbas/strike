@@ -80,7 +80,7 @@ contract GasReport is Script {
         // --- 2. Create market ---
         vm.startBroadcast(DEPLOYER_PK);
         g = gasleft();
-        uint256 marketId = factory.createMarket{value: factory.creationBond()}(
+        uint256 marketId = factory.createMarket(
             0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace, // BTC/USD
             50000_00000000, // strike price ($50k, expo=-8)
             3600,         // duration (1hr)

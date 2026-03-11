@@ -107,11 +107,12 @@ contract DeployScript is Script {
         outcomeToken.grantRole(outcomeToken.MINTER_ROLE(), address(redemption));
 
         factory.grantRole(factory.ADMIN_ROLE(), address(pythResolver));
+        factory.grantRole(factory.MARKET_CREATOR_ROLE(), deployer);
 
         // 11. Create test market: BTC/USD, 1 hour, 12s batches
         bytes32 priceId = bytes32(uint256(1));
         int64 strikePrice = int64(5_000_000_000_000); // $50,000 with expo=-8
-        uint256 factoryMarketId = factory.createMarket{value: 0.01 ether}(
+        uint256 factoryMarketId = factory.createMarket(
             priceId,
             strikePrice,
             3600,  // 1 hour duration
