@@ -110,7 +110,7 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
         uint128 minLots
     ) external onlyRole(MARKET_CREATOR_ROLE) nonReentrant returns (uint256 factoryMarketId) {
         require(!paused, "MarketFactory: paused");
-        require(duration >= 600, "MarketFactory: duration too short");
+        require(duration > 0, "MarketFactory: zero duration");
         require(priceId != bytes32(0), "MarketFactory: zero priceId");
         require(strikePrice > 0, "MarketFactory: zero strikePrice");
 

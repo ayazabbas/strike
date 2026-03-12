@@ -124,10 +124,10 @@ contract MarketFactoryTest is Test {
         factory.createMarket(PRICE_ID, STRIKE_PRICE, 3600, 60, 1);
     }
 
-    function test_CreateMarket_RevertIfDurationTooShort() public {
-        vm.expectRevert("MarketFactory: duration too short");
+    function test_CreateMarket_RevertIfZeroDuration() public {
+        vm.expectRevert("MarketFactory: zero duration");
         vm.prank(user1);
-        factory.createMarket(PRICE_ID, STRIKE_PRICE, 0, 60, 1);
+        factory.createMarket(PRICE_ID, STRIKE_PRICE, 0, 0, 1);
     }
 
     function test_CreateMarket_RevertIfZeroPriceId() public {
@@ -142,10 +142,11 @@ contract MarketFactoryTest is Test {
         factory.createMarket(PRICE_ID, STRIKE_PRICE, 600, 601, 1);
     }
 
-    function test_CreateMarket_RevertIfDurationUnder600() public {
-        vm.expectRevert("MarketFactory: duration too short");
+    function test_CreateMarket_ShortDurationAllowed() public {
+        // Short durations (e.g. 5 min) should be allowed — no minimum enforced
         vm.prank(user1);
-        factory.createMarket(PRICE_ID, STRIKE_PRICE, 599, 60, 1);
+        uint256 id = factory.createMarket(PRICE_ID, STRIKE_PRICE, 300, 12, 1);
+        assertGt(id, 0);
     }
 
     function test_CloseMarket_Basic() public {
