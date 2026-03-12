@@ -8,8 +8,7 @@ Based on EVM gas primitives and the FBA CLOB feasibility report. **These are est
 |-----------|-----------|---------------|------------|
 | Place order | 180k | 250k | 450k |
 | Cancel order | 60k | 100k | 180k |
-| Clear batch | 800k | 1.5M | 3.0M |
-| Claim fill | 80k | 150k | 250k |
+| Clear batch (atomic settle) | 1.0M | 2.0M | 4.0M |
 | Pyth verify (1 feed) | 200k | 300k | 600k |
 | Create market | ~440k | ~440k | ~440k |
 
@@ -21,8 +20,7 @@ At BNB ≈ $628, across different gas price scenarios:
 |--------|-------------|------------|------------|
 | Place order | $0.008 | $0.031 | $0.157 |
 | Cancel order | $0.003 | $0.013 | $0.063 |
-| Clear batch | $0.047 | $0.189 | $0.943 |
-| Claim fill | $0.005 | $0.019 | $0.094 |
+| Clear batch (atomic) | $0.063 | $0.251 | $1.257 |
 | Resolve market | $0.009 | $0.038 | $0.189 |
 
 BSC's 2026 gas price (~0.05 gwei) makes all operations sub-cent for users and sub-5-cents for keepers.
@@ -39,17 +37,17 @@ BSC's 2026 gas price (~0.05 gwei) makes all operations sub-cent for users and su
 - Calldata for signed update payloads: 16 gas per nonzero byte (EIP-2028)
 - Single biggest gas component in `resolveMarket()`
 
-### Batch Clearing
+### Batch Clearing (Atomic Settlement)
 - Segment tree traversal: O(log 99) ≈ 7 iterations
 - Result storage: one struct write
-- **Does not scale with order count** — this is the key efficiency of claim-based settlement
+- Per-order settlement: unlock, transfer fees, mint tokens, refund excess
+- Scales linearly with order count, bounded by MAX_ORDERS_PER_BATCH (400)
 
 ## Optimization Targets
 
 | Metric | Target | Rationale |
 |--------|--------|-----------|
 | Place order | < 250k | Stay within report's typical estimate |
-| Clear batch | < 1.5M | Ensure keeper costs remain viable |
-| Claim fill | < 150k | Keep user costs negligible |
+| Clear batch | < 4.0M | Ensure keeper costs remain viable (includes atomic settlement) |
 
 Optimization pass in Phase 4 will benchmark real gas usage and adjust struct packing, storage layout, and tree implementation if needed.

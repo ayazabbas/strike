@@ -41,7 +41,6 @@ This "procedural challenge" mechanism ensures the deterministic rule (earliest u
 ## Resolver Incentives
 
 - Resolution is **permissionless** — anyone can call `resolveMarket()`
-- A **resolver bounty** is paid from the market creation bond (e.g., 0.005 BNB)
 - The protocol runs backstop keepers to ensure timely resolution
 - If no one resolves within 24 hours, the market auto-cancels and all funds are refunded
 

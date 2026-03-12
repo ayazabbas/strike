@@ -66,11 +66,15 @@ export REDEMPTION=<redemption address>
 export MOCK_PYTH=<mockPyth address>
 ```
 
-### Deposit BNB
+### Approve & Deposit USDT
+
+On devnet, a MockUSDT is deployed. Approve the Vault, then place orders (deposit happens automatically):
 
 ```bash
-cast send $VAULT "deposit()" \
-  --value 1ether \
+export USDT=<mockUSDT address from deploy output>
+
+# Approve Vault to spend USDT
+cast send $USDT "approve(address,uint256)" $VAULT 1000000000000000000000 \
   --rpc-url $RPC \
   --private-key $PK
 ```
@@ -96,7 +100,7 @@ cast send $ORDERBOOK "placeOrder(uint256,uint8,uint8,uint256,uint256)" \
 
 Arguments: `marketId=1, side=0(Bid), orderType=1(GTC), tick=60, lots=10`.
 
-Collateral required: `10 * 1e15 * 60 / 100 = 6e15 wei = 0.006 BNB`.
+Collateral required: `10 * 1e18 * 60 / 100 = 6e18 = 6 USDT`.
 
 ### Place an Ask Order
 
@@ -105,9 +109,8 @@ Place an ask at tick 60 for 10 lots (from a different account):
 ```bash
 export PK2=0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d
 
-# Deposit first
-cast send $VAULT "deposit()" \
-  --value 1ether \
+# Approve Vault for USDT first
+cast send $USDT "approve(address,uint256)" $VAULT 1000000000000000000000 \
   --rpc-url $RPC \
   --private-key $PK2
 
@@ -128,14 +131,7 @@ cast send $BATCH_AUCTION "clearBatch(uint256)" 1 \
   --private-key $PK
 ```
 
-### Claim Fills
-
-```bash
-# Claim fills for order ID 1
-cast send $BATCH_AUCTION "claimFills(uint256)" 1 \
-  --rpc-url $RPC \
-  --private-key $PK
-```
+Note: Settlement is atomic — all orders in the batch are settled inline during `clearBatch()`. No separate claim step is needed.
 
 ### Read Market State
 
@@ -226,7 +222,7 @@ For batch clearing keepers and the indexer, see the [strike-infra](https://githu
 
 ## Troubleshooting
 
-- **"insufficient available balance"** -- deposit more BNB into the Vault before placing orders.
+- **"insufficient available balance"** -- ensure you have approved the Vault for sufficient USDT before placing orders.
 - **"too soon"** -- wait for the batch interval to elapse before calling `clearBatch` again, or use `cast rpc evm_increaseTime`.
 - **"market halted"** / **"not active"** -- check the market state with `cast call $ORDERBOOK "markets(uint256)" <id>`.
 - **Role errors** -- verify role wiring with `cast call <contract> "hasRole(bytes32,address)(bool)" <role_hash> <address>`.

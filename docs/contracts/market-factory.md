@@ -5,7 +5,7 @@ Singleton factory that creates and manages prediction markets.
 ## `createMarket(priceId, duration, batchInterval, minLots)`
 
 - Registers a new market in OrderBook via `registerMarket()`
-- Requires creation bond (default 0.01 BNB, funds resolver bounty)
+- Requires MARKET_CREATOR_ROLE
 - Stores MarketMeta with lifecycle tracking
 - Emits `MarketCreated` event
 
@@ -55,13 +55,7 @@ Open → Closed ─────────────→ Cancelled
 - **ADMIN_ROLE:** PythResolver (for `setResolving`, `setResolved`, `payResolverBounty`)
 - **DEFAULT_ADMIN_ROLE:** protocol admin (pause, parameter updates)
 - `closeMarket()` and `cancelMarket()` are permissionless
-- Market creation is permissionless (anyone can create with bond)
-
-## Bond Management
-
-- Creator pays `creationBond` on market creation
-- On resolution: bond paid to resolver via `payResolverBounty()`
-- On cancellation: bond refunded to creator
+- Market creation requires MARKET_CREATOR_ROLE
 
 ## Events
 

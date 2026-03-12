@@ -49,11 +49,11 @@ MarketFactory (singleton)
 
 **Per-market isolation.** Each market's orderbook state is isolated via per-market mappings within the singleton OrderBook contract. Segment trees are allocated per-side per-market, preventing cross-market contention and bounding worst-case gas costs to a single market's depth.
 
-**Bounded iteration.** No contract function iterates over an unbounded set. Segment trees provide O(log N) operations. Claim and prune functions take explicit order ID arrays from the caller.
+**Bounded iteration.** No contract function iterates over an unbounded set. Segment trees provide O(log N) operations. Batch order count is capped at MAX_ORDERS_PER_BATCH (400) with automatic overflow to the next batch.
 
-**Atomic settlement.** `clearBatch(marketId, orderIds[])` clears the batch and settles all provided orders in a single transaction. The keeper passes the order IDs to settle inline — no separate claim step is needed. This simplifies the UX and removes the need for users to submit a second transaction.
+**Atomic settlement.** `clearBatch(marketId)` clears the batch and settles all orders in a single transaction. The contract reads `batchOrderIds[marketId][batchId]` internally — no order IDs are passed by the caller. Settlement uses the clearing price (not each order's limit tick), and excess collateral is refunded inline.
 
-**Permissionless operations.** Clearing, resolution, and pruning are all callable by anyone. Economic incentives (resolver bounty) ensure they happen without relying on trusted operators.
+**Permissionless operations.** Clearing and resolution are callable by anyone. Economic incentives ensure they happen without relying on trusted operators.
 
 ## Access Control Graph
 
@@ -92,28 +92,30 @@ MarketFactory (singleton)
 - `MINTER_ROLE` on OutcomeToken → granted to BatchAuction + Redemption
 - `ADMIN_ROLE` on MarketFactory → granted to PythResolver
 
-## Sequence: Place Order → Clear → Claim → Redeem
+## Sequence: Approve → Place Order → Clear (atomic) → Redeem
 
 ```
-User           Vault         OrderBook      BatchAuction    OutcomeToken   Redemption
+User           Vault(USDT)    OrderBook      BatchAuction    OutcomeToken   Redemption
  │               │               │               │               │            │
- │──placeOrder(){ msg.value }──→│               │               │            │
- │               │◄─depositFor()─│               │               │            │
+ │──approve(Vault, amount)──→   │               │               │            │
+ │──placeOrder(mktId,side,tick,lots)───────────→│               │            │
+ │               │◄─depositFor()─│  (transferFrom)              │            │
  │               │◄──lock()─────│               │               │            │
  │               │               │               │               │            │
- │  (batch interval elapses)     │               │               │            │
+ │  (keeper decides to clear)    │               │               │            │
  │               │               │               │               │            │
-Keeper─────────────────────clearBatch(mktId, orderIds[])────────→│            │
+Keeper──────────────────────clearBatch(marketId)───────────────→│            │
  │               │               │◄─findClearing─│               │            │
- │               │◄──settleFill─────────────────│  (inline)     │            │
- │               │               │◄─reduceOrder─│               │            │
+ │               │               │◄─getBatchOrderIds─│           │            │
+ │               │◄──settleFill──────────────────│  (per order) │            │
+ │               │               │◄─reduceOrder──│               │            │
  │               │               │               │──mintSingle()→│            │
- │◄──BNB refund──│               │               │  (unfilled)  │            │
+ │◄──USDT refund─│               │               │  (excess)    │            │
  │               │               │               │               │            │
  │  (market expires + resolved via PythResolver) │               │            │
  │               │               │               │               │            │
  │──redeem()─────────────────────────────────────────────────────────────────→│
  │               │               │               │               │◄─redeem()─│
  │               │◄──redeemFromPool──────────────────────────────────────────│
- │◄──BNB payout──│               │               │               │            │
+ │◄──USDT payout─│               │               │               │            │
 ```

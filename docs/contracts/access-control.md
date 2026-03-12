@@ -66,7 +66,7 @@ Grants access to:
 - `burnPair(from, marketId, amount)` -- burn YES + NO token pair
 - `redeem(from, marketId, amount, winningOutcome)` -- burn winning tokens
 
-Granted to **BatchAuction** (mints tokens during `claimFills`) and **Redemption** (burns winning tokens during redemption).
+Granted to **BatchAuction** (mints tokens during atomic settlement in `clearBatch`) and **Redemption** (burns winning tokens during redemption).
 
 ### ADMIN_ROLE (MarketFactory)
 

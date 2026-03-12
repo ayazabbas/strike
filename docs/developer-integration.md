@@ -39,12 +39,12 @@ const meta = await readContract({
   args: [factoryMarketId],
 });
 
-// Deposit BNB
+// Approve Vault for USDT (one-time)
 await writeContract({
-  address: VAULT_ADDRESS,
-  abi: VaultABI,
-  functionName: 'deposit',
-  value: parseEther('0.1'),
+  address: USDT_ADDRESS,
+  abi: erc20ABI,
+  functionName: 'approve',
+  args: [VAULT_ADDRESS, parseEther('1000')],
 });
 ```
 
@@ -53,8 +53,9 @@ await writeContract({
 ```typescript
 import { Contract, parseEther } from 'ethers';
 
-const vault = new Contract(VAULT_ADDRESS, VaultABI, signer);
-await vault.deposit({ value: parseEther('0.1') });
+// Approve Vault for USDT (one-time)
+const usdt = new Contract(USDT_ADDRESS, erc20ABI, signer);
+await usdt.approve(VAULT_ADDRESS, parseEther('1000'));
 
 const orderBook = new Contract(ORDERBOOK_ADDRESS, OrderBookABI, signer);
 const tx = await orderBook.placeOrder(
@@ -80,18 +81,18 @@ The mapping is stored in `MarketFactory.marketMeta[factoryMarketId].orderBookMar
 **When to use which:**
 
 - **User-facing / API:** Always use `factoryMarketId`. It is the canonical market identifier for resolution, redemption, and display.
-- **Trading operations:** `OrderBook.placeOrder`, `BatchAuction.clearBatch`, and `BatchAuction.claimFills` use `orderBookMarketId`.
+- **Trading operations:** `OrderBook.placeOrder` and `BatchAuction.clearBatch` use `orderBookMarketId`.
 - **Token IDs:** `OutcomeToken` derives YES/NO token IDs from `orderBookMarketId` (`marketId*2` = YES, `marketId*2+1` = NO).
 
 ## Key Flows
 
-### 1. Deposit Collateral
+### 1. Approve Vault for USDT
 
 ```solidity
-vault.deposit{value: amount}();
+usdt.approve(address(vault), type(uint256).max);
 ```
 
-Credits `msg.value` to the sender's balance in the Vault.
+One-time approval. The Vault uses `safeTransferFrom` to pull USDT when orders are placed.
 
 ### 2. Place an Order
 
@@ -101,7 +102,7 @@ uint256 orderId = orderBook.placeOrder(
     Side.Bid,                    // 0 = Bid (YES), 1 = Ask (NO)
     OrderType.GoodTilCancel,     // 0 = GoodTilBatch, 1 = GoodTilCancel
     60,                          // tick (1-99, price = tick/100)
-    10                           // lots (each = 0.001 BNB)
+    10                           // lots (each = 1 USDT)
 );
 ```
 
@@ -109,40 +110,35 @@ Collateral is locked in the Vault automatically:
 - Bid: `lots * LOT_SIZE * tick / 100`
 - Ask: `lots * LOT_SIZE * (100 - tick) / 100`
 
-Where `LOT_SIZE = 1e15 wei = 0.001 BNB`.
+Where `LOT_SIZE = 1e18 = 1 USDT`.
 
-### 3. Batch Clearing
+### 3. Batch Clearing (Atomic Settlement)
 
 ```solidity
 // Anyone can trigger (keepers do this automatically)
 batchAuction.clearBatch(orderBookMarketId);
 ```
 
-Finds the clearing tick via the segment tree and records the `BatchResult`. Enforces a minimum interval (`batchInterval` seconds) between clears.
+Finds the clearing tick via the segment tree, records the `BatchResult`, and **settles all orders atomically** in the same transaction:
+- Filled collateral (at clearing price) moves to the market's redemption pool
+- Excess refund (order tick vs clearing tick difference) returned to owner
+- Uniform fee (20 bps) deducted and sent to `protocolFeeCollector`
+- Unfilled collateral returned (GoodTilBatch) or rolled to next batch (GoodTilCancel)
+- Outcome tokens minted: Bid fills receive YES tokens, Ask fills receive NO tokens
 
-### 4. Claim Fills
+No separate claim step is needed — settlement happens inline.
 
-```solidity
-batchAuction.claimFills(orderId);
-```
-
-Pro-rata settlement based on the clearing result:
-- Filled collateral moves to the market's redemption pool in Vault.
-- Protocol fee is deducted and sent to `protocolFeeCollector`.
-- Unfilled collateral is unlocked (GoodTilBatch) or stays locked for the next batch (GoodTilCancel).
-- Outcome tokens are minted: Bid fills receive YES tokens, Ask fills receive NO tokens.
-
-### 5. Redeem After Resolution
+### 4. Redeem After Resolution
 
 ```solidity
 redemption.redeem(factoryMarketId, tokenAmount);
 ```
 
-Burns `tokenAmount` winning outcome tokens and pays out `tokenAmount * LOT_SIZE` BNB from the market's redemption pool.
+Burns `tokenAmount` winning outcome tokens and pays out `tokenAmount * LOT_SIZE` USDT from the market's redemption pool.
 
 ## Collateral Formulas
 
-All values in wei. `LOT_SIZE = 1e15` (0.001 BNB).
+All values in wei. `LOT_SIZE = 1e18` (1 USDT).
 
 | Side | Collateral Required |
 |------|---------------------|

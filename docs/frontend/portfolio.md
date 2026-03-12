@@ -5,7 +5,7 @@ The portfolio page (`/portfolio`) shows all positions across markets.
 ## Sections
 
 ### Collateral Balance
-- Deposited BNB
+- USDT balance
 - Locked (backing open orders)
 - Available (withdrawable)
 - Deposit / Withdraw buttons
@@ -19,10 +19,6 @@ The portfolio page (`/portfolio`) shows all positions across markets.
 - All open orders across all markets
 - Cancel individual or bulk cancel
 - Filter by market, side, status
-
-### Pending Claims
-- Fills ready to claim after batch clearing
-- "Claim All" button for batch claiming across markets
 
 ### Redeemable
 - Winning tokens from resolved markets

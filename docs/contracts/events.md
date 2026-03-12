@@ -7,12 +7,12 @@ Complete list of events emitted by all Strike protocol contracts.
 ```solidity
 event Deposited(address indexed user, uint256 amount);
 ```
-Emitted when a user deposits BNB into the Vault.
+Emitted when USDT is deposited into the Vault for a user (via `safeTransferFrom`).
 
 ```solidity
 event Withdrawn(address indexed user, uint256 amount);
 ```
-Emitted when a user withdraws available (unlocked) BNB.
+Emitted when USDT is transferred to a user's wallet (via `safeTransfer`).
 
 ```solidity
 event Locked(address indexed user, uint256 amount);
@@ -22,7 +22,7 @@ Emitted when collateral is locked (e.g., on order placement).
 ```solidity
 event Unlocked(address indexed user, uint256 amount);
 ```
-Emitted when collateral is unlocked (e.g., on cancel, prune, or partial unfill).
+Emitted when collateral is unlocked (e.g., on cancel or partial unfill).
 
 ```solidity
 event CollateralTransferred(address indexed from, address indexed to, uint256 amount);
@@ -37,7 +37,7 @@ Emitted when collateral is moved into a market's redemption pool (during fill se
 ```solidity
 event RedeemedFromPool(uint256 indexed marketId, address indexed to, uint256 amount);
 ```
-Emitted when BNB is paid out from a market's redemption pool to a user (during token redemption).
+Emitted when USDT is paid out from a market's redemption pool to a user (during token redemption).
 
 ```solidity
 event EmergencyModeActivated(uint256 timestamp);
@@ -102,19 +102,14 @@ event BatchCleared(
 Emitted when a batch is cleared. `clearingTick` is the price tick at which bids and asks cross (0 if no crossing). `matchedLots` is the total lots matched at the clearing tick.
 
 ```solidity
-event FillClaimed(
+event OrderSettled(
     uint256 indexed orderId,
     address indexed owner,
     uint256 filledLots,
     uint256 collateralReleased
 );
 ```
-Emitted when a user claims fills for an order after batch clearing. `filledLots` may be 0 if the order did not participate in the clearing. `collateralReleased` is the unfilled collateral returned (0 for GTC partial fills where unfilled lots stay resting).
-
-```solidity
-event OrderPruned(uint256 indexed orderId, address indexed pruner);
-```
-Emitted when an expired GoodTilBatch order is pruned. The pruner may receive a bounty.
+Emitted when an order is settled during atomic `clearBatch()`. `filledLots` may be 0 if the order did not participate in the clearing. `collateralReleased` is the unfilled/excess collateral returned.
 
 ## OutcomeToken
 
@@ -167,14 +162,14 @@ Emitted when winning outcome tokens are burned during redemption.
 ## FeeModel
 
 ```solidity
-event FeeParamsUpdated(uint256 takerFeeBps, uint256 makerRebateBps);
+event FeeBpsUpdated(uint256 feeBps);
 ```
-Emitted when the taker fee or maker rebate is updated.
+Emitted when the uniform fee is updated.
 
 ```solidity
-event BountiesUpdated(uint256 resolverBounty, uint256 prunerBounty);
+event ClearingBountyUpdated(uint256 clearingBountyBps);
 ```
-Emitted when resolver or pruner bounty amounts are updated.
+Emitted when the clearing bounty is updated.
 
 ```solidity
 event ProtocolFeeCollectorUpdated(address indexed collector);
@@ -272,4 +267,4 @@ event Redeemed(
     bool outcomeYes
 );
 ```
-Emitted when a user redeems winning outcome tokens for BNB. `amount` is the number of tokens burned; payout is `amount * LOT_SIZE` wei.
+Emitted when a user redeems winning outcome tokens for USDT. `amount` is the number of tokens burned; payout is `amount * LOT_SIZE` (1e18 = 1 USDT).

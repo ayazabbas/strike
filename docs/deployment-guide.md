@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - [Foundry](https://book.getfoundry.sh/) installed (`forge`, `anvil`, `cast`)
-- BNB for gas and the market creation bond (>= 0.1 BNB recommended)
+- BNB for gas fees
 - Deployer EOA private key
 - BscScan API key (for contract verification)
 
@@ -44,7 +44,7 @@ Contracts must be deployed in this exact order because of immutable constructor 
 |----------|-----------------|
 | `Vault(admin)` | deployer address |
 | `OutcomeToken(admin)` | deployer address |
-| `FeeModel(admin, takerFeeBps, makerRebateBps, resolverBounty, prunerBounty, protocolFeeCollector)` | deployer, 30, 0, 0.005 ether, 0.0001 ether, deployer |
+| `FeeModel(admin, feeBps, protocolFeeCollector)` | deployer, 20, deployer |
 | `OrderBook(admin, vault)` | deployer, Vault address |
 | `BatchAuction(admin, orderBook, vault, feeModel, outcomeToken)` | deployer, OrderBook, Vault, FeeModel, OutcomeToken |
 | `MarketFactory(admin, orderBook, outcomeToken, feeCollector)` | deployer, OrderBook, OutcomeToken, deployer |
@@ -172,10 +172,10 @@ For contracts with complex constructor args, use `cast abi-encode` to produce th
    - `OutcomeToken.hasRole(MINTER_ROLE, Redemption)` -- true
    - `MarketFactory.hasRole(ADMIN_ROLE, PythResolver)` -- true
 
-4. **Test market creation** -- call `MarketFactory.createMarket{value: 0.01 ether}(...)` with a known Pyth price ID and verify the market appears in `activeMarkets`.
+4. **Test market creation** -- call `MarketFactory.createMarket(...)` with a known Pyth price ID (requires MARKET_CREATOR_ROLE) and verify the market appears in `activeMarkets`.
 
-5. **Test place/cancel cycle** -- call `OrderBook.placeOrder{value: collateral}(...)` and verify collateral is escrowed in Vault. Cancel the order and verify BNB is returned to wallet.
+5. **Test place/cancel cycle** -- approve Vault for USDT, call `OrderBook.placeOrder(...)` and verify USDT collateral is escrowed in Vault. Cancel the order and verify USDT is returned to wallet.
 
-6. **Keepers configured** -- batch-keeper, market-keeper, resolution-keeper, and pruning-keeper (in strike-infra) pointing at correct contract addresses.
+6. **Keepers configured** -- batch-keeper, market-keeper, and resolution-keeper (in strike-infra) pointing at correct contract addresses.
 
 7. **Indexer configured** -- indexer (in strike-infra) pointing at correct RPC and contract addresses, listening for all relevant events.

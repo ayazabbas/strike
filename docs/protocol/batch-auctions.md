@@ -6,7 +6,7 @@ Strike uses **Frequency Batch Auctions (FBA)** instead of continuous order match
 
 1. **Accumulate orders** — during the batch interval, traders place and cancel orders. Orders are recorded on-chain but not matched yet.
 
-2. **Trigger clearing** — anyone calls `clearBatch()`. This is permissionless. A minimum time (`batchInterval`) must pass between consecutive clears.
+2. **Trigger clearing** — anyone calls `clearBatch(marketId)`. This is permissionless. There is no on-chain batch interval enforcement — the keeper decides clearing cadence.
 
 3. **Find clearing price** — the contract uses a segment tree binary search to find the clearing tick:
    - Binary search for the highest tick where cumulative bids >= cumulative asks
@@ -15,23 +15,29 @@ Strike uses **Frequency Batch Auctions (FBA)** instead of continuous order match
 
 4. **Calculate pro-rata fills** — at the clearing tick, one side may be oversubscribed. Each order on the oversubscribed side gets `filledLots = (orderLots * matchedLots) / totalSideLots`.
 
-5. **Store result** — a `BatchResult` is written: clearing tick, matched lots, total bid/ask lots, timestamp. No per-order writes happen during clearing — this keeps gas efficient.
+5. **Store result + advance batch** — a `BatchResult` is written: clearing tick, matched lots, total bid/ask lots, timestamp. The batch counter advances so new orders go to the next batch.
 
-6. **Traders claim** — after clearing, traders call `claimFills()` for settlement:
-   - Filled collateral moves to the market pool (for later redemption)
-   - Taker fee deducted, sent to protocol fee collector
+6. **Atomic settlement** — all orders in the batch are settled inline in the same transaction:
+   - Filled collateral (at clearing price, not order tick) moves to the market pool
+   - Excess refund = (locked at order tick) - (cost at clearing tick) returned to owner
+   - Uniform fee (20 bps) deducted, sent to protocol fee collector
    - Outcome tokens minted (bidder gets YES, asker gets NO)
    - Unfilled collateral returned to owner
+   - GTC orders with remaining lots roll to the next batch
 
-## Collateral Model (Option A: BNB-only)
+## Collateral Model (USDT)
 
-Both sides lock BNB. Asks do NOT require pre-existing outcome tokens.
+Both sides lock USDT (ERC-20). Users must approve the Vault before placing orders. Asks do NOT require pre-existing outcome tokens.
 
-- **Bid** at tick 50 for 10 lots: locks `10 * 0.001 * 50/100 = 0.005 BNB`
-- **Ask** at tick 50 for 10 lots: locks `10 * 0.001 * 50/100 = 0.005 BNB`
-- Total per matched lot = LOT_SIZE (0.001 BNB), fully collateralized
+- **Bid** at tick 50 for 10 lots: locks `10 * 1 * 50/100 = 5 USDT`
+- **Ask** at tick 50 for 10 lots: locks `10 * 1 * 50/100 = 5 USDT`
+- Total per matched lot = LOT_SIZE (1e18 = 1 USDT), fully collateralized
 
 This is simpler than requiring askers to hold outcome tokens, and provides symmetric UX for both sides.
+
+## Clearing Price Settlement
+
+All fills settle at the **clearing tick**, not each order's limit tick. A bid placed at tick 70 that clears at tick 55 pays only 55% per lot — the excess 15% is refunded. This ensures all participants in a batch trade at the same fair price.
 
 ## Fill Logic
 
@@ -55,9 +61,13 @@ This is simpler than requiring askers to hold outcome tokens, and provides symme
 - **Capital efficient** — traders can express precise views at specific prices
 - **Secondary market** — outcome tokens are tradeable on the book, not locked until resolution
 
+## Batch Overflow
+
+Each batch can hold up to **MAX_ORDERS_PER_BATCH (400)** orders. When a batch is full, new orders automatically spill into the next batch. This bounds the gas cost of `clearBatch()` while keeping order placement seamless.
+
 ## Batch Cadence
 
-The batch interval is configurable per market at creation time (default: 60 seconds).
+The batch interval is configurable per market at creation time. There is no on-chain enforcement of the interval — the keeper decides when to call `clearBatch()`.
 
 ## Segment Tree
 

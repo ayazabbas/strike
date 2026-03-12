@@ -4,12 +4,13 @@ Keepers are off-chain services that call permissionless contract functions to ke
 
 ## Batch Clearing Keeper
 
-Calls `clearBatch()` on active markets at the configured batch interval.
+Calls `clearBatch(marketId)` on active markets. The keeper decides clearing cadence — there is no on-chain batch interval enforcement.
 
 - Monitors pending order volume via segment tree reads
 - Skips clearing if no crossing orders (saves gas)
 - Gas estimation + exponential backoff on failures
 - Multi-market scheduling: round-robin or priority by volume
+- Settlement is atomic — all orders in the batch are settled inline (no separate claim step)
 
 ```bash
 # Configuration
@@ -29,15 +30,6 @@ Resolves expired markets with Pyth oracle data.
 - Handles fallback window extension if initial fetch has no data
 - Claims resolver bounty on success
 
-## Pruning Keeper
-
-Cleans up expired orders to reclaim storage.
-
-- Scans for expired/stale orders (via indexed events or contract reads)
-- Calls `pruneExpiredOrders(orderId[])` in batches
-- Returns collateral to expired order owners
-- Runs less frequently (~30s intervals)
-
 ## Deployment
 
 All keepers run as systemd services:
@@ -49,8 +41,10 @@ cd keeper && npm install && npm run build
 # Systemd
 sudo cp deploy/systemd/strike-*.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now strike-batch-keeper strike-resolution-keeper strike-pruning-keeper
+sudo systemctl enable --now strike-batch-keeper strike-resolution-keeper
 ```
+
+Note: The pruning keeper is no longer needed in V2. Markets expire naturally and `clearBatch()` handles all settlement atomically.
 
 ## Monitoring
 

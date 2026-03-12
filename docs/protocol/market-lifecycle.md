@@ -18,7 +18,6 @@ Open → Closed → Resolving → Resolved
 ### Closed
 - **No new orders accepted** — the final batch has cleared
 - Existing orders can still be cancelled (to free collateral)
-- Traders can still claim unclaimed fills from previous batches
 - Outcome token pair minting/merging still available
 - **Transition:** anyone submits a valid Pyth resolution → enters `Resolving`
 
@@ -30,15 +29,13 @@ Open → Closed → Resolving → Resolved
 
 ### Resolved
 - Outcome is final (YES or NO)
-- Winning outcome tokens redeem 1:1 for collateral
+- Winning outcome tokens redeem 1:1 for USDT collateral
 - Losing tokens are worthless
-- Resolver receives bounty from market creation bond
 
 ### Cancelled
 - Triggered if no valid Pyth update is submitted within the maximum resolution window (24h)
 - Also triggered if confidence interval exceeds threshold at resolution time
-- All outcome tokens can be burned for collateral refund (1 YES + 1 NO → 1 collateral)
-- Market creation bond returned minus gas costs
+- All outcome tokens can be burned for USDT collateral refund (1 YES + 1 NO → 1 USDT)
 
 ## Timeline (5-minute market, 60s batch interval)
 

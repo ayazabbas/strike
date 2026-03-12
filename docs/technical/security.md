@@ -13,14 +13,13 @@ All external state-changing functions use OpenZeppelin's `ReentrancyGuard`. The 
 | `clearBatch()` | Anyone (permissionless) |
 | `resolveMarket()` | Anyone (with valid Pyth data) |
 | `finalizeResolution()` | Anyone (after finality window) |
-| `pruneExpiredOrders()` | Anyone (permissionless) |
-| `claimFills()` / `redeem()` | Token/order holders |
-| `createMarket()` | Anyone (with sufficient creation bond) |
+| `redeem()` | Token holders |
+| `createMarket()` | MARKET_CREATOR_ROLE |
 | `pause()` / `unpause()` | Owner |
 | `setFeeCollector()` | Owner |
 
 ### Bounded Iteration
-No function iterates over unbounded sets. Segment trees provide O(log N) operations. Claim and prune functions require explicit order ID arrays from callers.
+No function iterates over unbounded sets. Segment trees provide O(log N) operations. Batch order count is capped at MAX_ORDERS_PER_BATCH (400) with automatic overflow to the next batch.
 
 ### Emergency Controls
 - **Pausable:** owner can pause market creation and trading protocol-wide or per-market
@@ -45,7 +44,7 @@ No function iterates over unbounded sets. Segment trees provide O(log N) operati
 - **Replay protection:** each market can only be resolved once
 
 ## Trading Safety
-- **Full collateralization:** all orders backed by locked collateral or outcome tokens
+- **Full collateralization:** all orders backed by locked USDT collateral
 - **No leverage:** no margin, no liquidation risk
 - **Deterministic halt:** trading stops when `timeRemaining < batchInterval`, preventing last-second exploitation
 - Funds cannot be locked — cancellation/withdrawal always available

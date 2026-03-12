@@ -16,11 +16,11 @@ Prices on the orderbook use a **tick system**: 99 discrete price levels from 0.0
 
 ## Batch Intervals
 
-The orderbook doesn't match orders continuously. Instead, orders accumulate and are matched every **batch interval** (60 seconds by default). This is configurable per market.
+The orderbook doesn't match orders continuously. Instead, orders accumulate and are matched in periodic batches. The clearing cadence is determined by the keeper — there is no on-chain interval enforcement.
 
 ## Clearing Price
 
-Each batch that has crossing orders (bids ≥ asks) produces a single **uniform clearing price**. This is the tick that maximizes total matched volume. All fills in that batch happen at this price.
+Each batch that has crossing orders (bids ≥ asks) produces a single **uniform clearing price**. This is the tick that maximizes total matched volume. All fills in that batch settle at this clearing price — not at each order's limit tick. Any excess collateral (difference between order tick and clearing tick) is refunded automatically.
 
 ## Pro-Rata Fills
 
@@ -35,4 +35,4 @@ If one side of the book has more volume than the other at the clearing price, th
 
 ## Collateral
 
-All orders are fully collateralized with BNB. When you place a bid (buy YES), you lock BNB collateral proportional to the tick price. When you place an ask (sell YES), you also lock BNB collateral proportional to `(100 - tick)`. Both sides lock BNB -- asks do NOT require pre-existing outcome tokens. There is no leverage or margin.
+All orders are fully collateralized with **USDT** (ERC-20). Users must approve the Vault contract before placing orders. When you place a bid (buy YES), you lock USDT proportional to the tick price. When you place an ask (sell YES), you also lock USDT proportional to `(100 - tick)`. Both sides lock USDT — asks do NOT require pre-existing outcome tokens. 1 YES + 1 NO = 1 USDT (LOT_SIZE = 1e18). There is no leverage or margin.

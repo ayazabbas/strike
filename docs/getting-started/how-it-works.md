@@ -16,11 +16,11 @@ Traders express their view by buying outcome tokens on the orderbook:
 
 1. **Market opens** — A new market is created with a strike price and expiry. The orderbook begins accepting orders.
 
-2. **Place orders** — Traders submit limit orders at their desired price (0.01–0.99). A YES token priced at 0.70 means "70% chance price is above strike." Deposit collateral or existing outcome tokens to back your orders.
+2. **Approve USDT** — Before trading, approve the Vault contract to spend your USDT. This is a one-time step per wallet.
 
-3. **Batches clear** — Every 60 seconds (default), all pending orders are matched at a single uniform clearing price. If bids and asks cross, a clearing price is found that maximizes matched volume. The oversubscribed side gets pro-rata partial fills.
+3. **Place orders** — Traders submit limit orders at their desired price (0.01–0.99). A YES token priced at 0.70 means "70% chance price is above strike." USDT collateral is locked automatically when you place an order.
 
-4. **Claim fills** — After a batch clears, traders claim their filled amounts. You receive outcome tokens (if buying) or collateral (if selling).
+4. **Batches clear** — Periodically, all pending orders are matched at a single uniform clearing price. If bids and asks cross, a clearing price is found that maximizes matched volume. The oversubscribed side gets pro-rata partial fills. Settlement happens atomically in the same transaction — you receive outcome tokens and any excess collateral refund automatically.
 
 5. **Trading halts** — When less than one batch interval remains before expiry, the book stops accepting new orders. The final batch clears normally.
 
