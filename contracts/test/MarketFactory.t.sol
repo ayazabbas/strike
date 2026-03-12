@@ -6,6 +6,7 @@ import "../src/MarketFactory.sol";
 import "../src/OrderBook.sol";
 import "../src/OutcomeToken.sol";
 import "../src/Vault.sol";
+import "../src/FeeModel.sol";
 import "../src/ITypes.sol";
 import "./mocks/MockUSDT.sol";
 
@@ -30,7 +31,8 @@ contract MarketFactoryTest is Test {
         vm.startPrank(admin);
         vault = new Vault(admin, address(usdt));
         token = new OutcomeToken(admin);
-        book = new OrderBook(admin, address(vault));
+        FeeModel fm = new FeeModel(admin, 20, 0, 5e18, 1e17, admin);
+        book = new OrderBook(admin, address(vault), address(fm));
 
         factory = new MarketFactory(admin, address(book), address(token), feeCollector);
 
@@ -122,8 +124,8 @@ contract MarketFactoryTest is Test {
         factory.createMarket(PRICE_ID, STRIKE_PRICE, 3600, 60, 1);
     }
 
-    function test_CreateMarket_RevertIfZeroDuration() public {
-        vm.expectRevert("MarketFactory: zero duration");
+    function test_CreateMarket_RevertIfDurationTooShort() public {
+        vm.expectRevert("MarketFactory: duration too short");
         vm.prank(user1);
         factory.createMarket(PRICE_ID, STRIKE_PRICE, 0, 60, 1);
     }
@@ -134,10 +136,16 @@ contract MarketFactoryTest is Test {
         factory.createMarket(bytes32(0), STRIKE_PRICE, 3600, 60, 1);
     }
 
-    function test_CreateMarket_RevertIfDurationTooShort() public {
+    function test_CreateMarket_RevertIfDurationBelowBatchInterval() public {
         vm.expectRevert("MarketFactory: duration must exceed batchInterval");
         vm.prank(user1);
-        factory.createMarket(PRICE_ID, STRIKE_PRICE, 30, 60, 1);
+        factory.createMarket(PRICE_ID, STRIKE_PRICE, 600, 601, 1);
+    }
+
+    function test_CreateMarket_RevertIfDurationUnder600() public {
+        vm.expectRevert("MarketFactory: duration too short");
+        vm.prank(user1);
+        factory.createMarket(PRICE_ID, STRIKE_PRICE, 599, 60, 1);
     }
 
     function test_CloseMarket_Basic() public {

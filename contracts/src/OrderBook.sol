@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./ITypes.sol";
 import "./SegmentTree.sol";
 import "./Vault.sol";
+import "./FeeModel.sol";
 
 /// @title OrderBook
 /// @notice Central limit order book for the Strike binary-outcome protocol.
@@ -30,6 +31,7 @@ contract OrderBook is AccessControl, ReentrancyGuard {
     // -------------------------------------------------------------------------
 
     Vault public immutable vault;
+    FeeModel public immutable feeModel;
 
     uint64 public nextOrderId = 1;
     uint32 public nextMarketId = 1;
@@ -65,10 +67,12 @@ contract OrderBook is AccessControl, ReentrancyGuard {
     // Constructor
     // -------------------------------------------------------------------------
 
-    constructor(address admin, address _vault) {
+    constructor(address admin, address _vault, address _feeModel) {
         require(_vault != address(0), "OrderBook: zero vault");
+        require(_feeModel != address(0), "OrderBook: zero feeModel");
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         vault = Vault(_vault);
+        feeModel = FeeModel(_feeModel);
     }
 
     // -------------------------------------------------------------------------
@@ -145,6 +149,9 @@ contract OrderBook is AccessControl, ReentrancyGuard {
             collateral = (lots * LOT_SIZE * (100 - tick)) / 100;
         }
 
+        // V2.1: Lock collateral + fee upfront to prevent pool insolvency
+        uint256 totalDeposit = collateral + feeModel.calculateFee(collateral);
+
         // Determine batch (overflow to next if current is full)
         uint256 batchId = m.currentBatchId;
         if (batchOrderIds[marketId][batchId].length >= MAX_ORDERS_PER_BATCH) {
@@ -152,19 +159,21 @@ contract OrderBook is AccessControl, ReentrancyGuard {
         }
         require(batchOrderIds[marketId][batchId].length < MAX_ORDERS_PER_BATCH, "OrderBook: batch overflow");
 
-        uint64 oid = nextOrderId++;
-        orderId = oid;
-        orders[orderId] = Order({
-            owner: msg.sender,
-            side: side,
-            orderType: orderType,
-            tick: uint8(tick),
-            lots: uint64(lots),
-            id: oid,
-            marketId: uint32(marketId),
-            batchId: uint32(batchId),
-            timestamp: uint40(block.timestamp)
-        });
+        {
+            uint64 oid = nextOrderId++;
+            orderId = oid;
+            orders[orderId] = Order({
+                owner: msg.sender,
+                side: side,
+                orderType: orderType,
+                tick: uint8(tick),
+                lots: uint64(lots),
+                id: oid,
+                marketId: uint32(marketId),
+                batchId: uint32(batchId),
+                timestamp: uint40(block.timestamp)
+            });
+        }
 
         // Update segment tree
         if (side == Side.Bid) {
@@ -176,9 +185,9 @@ contract OrderBook is AccessControl, ReentrancyGuard {
         // Track order in batch
         batchOrderIds[marketId][batchId].push(orderId);
 
-        // Deposit collateral via ERC20 transferFrom (user must approve Vault)
-        vault.depositFor(msg.sender, collateral);
-        vault.lock(msg.sender, collateral);
+        // Deposit collateral + fee via ERC20 transferFrom (user must approve Vault)
+        vault.depositFor(msg.sender, totalDeposit);
+        vault.lock(msg.sender, totalDeposit);
 
         emit OrderPlaced(orderId, marketId, msg.sender, side, tick, lots, batchId);
     }
@@ -204,6 +213,10 @@ contract OrderBook is AccessControl, ReentrancyGuard {
             collateral = (lots * LOT_SIZE * (100 - tick)) / 100;
         }
 
+        // V2.1: Return collateral + fee (both were locked at placement)
+        uint256 fee = feeModel.calculateFee(collateral);
+        uint256 totalReturn = collateral + fee;
+
         o.lots = 0;
 
         if (side == Side.Bid) {
@@ -212,8 +225,8 @@ contract OrderBook is AccessControl, ReentrancyGuard {
             askTrees[marketId].update(tick, -int256(lots));
         }
 
-        vault.unlock(msg.sender, collateral);
-        vault.withdrawTo(msg.sender, collateral);
+        vault.unlock(msg.sender, totalReturn);
+        vault.withdrawTo(msg.sender, totalReturn);
 
         emit OrderCancelled(orderId, msg.sender);
     }
@@ -227,8 +240,13 @@ contract OrderBook is AccessControl, ReentrancyGuard {
     }
 
     /// @notice Push an order ID to a batch's order list (for GTC rollover).
-    function pushBatchOrderId(uint256 marketId, uint256 batchId, uint256 orderId) external onlyRole(OPERATOR_ROLE) {
+    ///         Returns false if batch is full (caller should auto-cancel).
+    function pushBatchOrderId(uint256 marketId, uint256 batchId, uint256 orderId) external onlyRole(OPERATOR_ROLE) returns (bool) {
+        if (batchOrderIds[marketId][batchId].length >= MAX_ORDERS_PER_BATCH) {
+            return false;
+        }
         batchOrderIds[marketId][batchId].push(orderId);
+        return true;
     }
 
     // -------------------------------------------------------------------------

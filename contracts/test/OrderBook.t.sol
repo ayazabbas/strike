@@ -4,12 +4,14 @@ pragma solidity ^0.8.25;
 import "forge-std/Test.sol";
 import "../src/OrderBook.sol";
 import "../src/Vault.sol";
+import "../src/FeeModel.sol";
 import "../src/ITypes.sol";
 import "./mocks/MockUSDT.sol";
 
 contract OrderBookTest is Test {
     OrderBook public book;
     Vault public vault;
+    FeeModel public feeModel;
     MockUSDT public usdt;
 
     address public admin = address(0x1);
@@ -25,7 +27,8 @@ contract OrderBookTest is Test {
 
         vm.startPrank(admin);
         vault = new Vault(admin, address(usdt));
-        book = new OrderBook(admin, address(vault));
+        feeModel = new FeeModel(admin, 20, 0, 5e18, 1e17, admin);
+        book = new OrderBook(admin, address(vault), address(feeModel));
         book.grantRole(book.OPERATOR_ROLE(), operator);
         vault.grantRole(vault.PROTOCOL_ROLE(), address(book));
         vm.stopPrank();
@@ -45,7 +48,7 @@ contract OrderBookTest is Test {
 
     function test_Constructor_RevertZeroVault() public {
         vm.expectRevert("OrderBook: zero vault");
-        new OrderBook(admin, address(0));
+        new OrderBook(admin, address(0), address(feeModel));
     }
 
     // =========================================================================
@@ -216,25 +219,27 @@ contract OrderBookTest is Test {
         book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 50, 10);
     }
 
-    function test_PlaceOrder_LocksCollateral_Bid() public {
+    function test_PlaceOrder_LocksCollateralPlusFee_Bid() public {
         uint256 mId = _setupMarket();
         uint256 collateral = (10 * LOT * 50) / 100;
+        uint256 fee = feeModel.calculateFee(collateral);
 
         vm.prank(user1);
         book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 50, 10);
 
-        assertEq(vault.locked(user1), collateral);
+        assertEq(vault.locked(user1), collateral + fee);
         assertEq(vault.available(user1), 0);
     }
 
-    function test_PlaceOrder_LocksCollateral_Ask() public {
+    function test_PlaceOrder_LocksCollateralPlusFee_Ask() public {
         uint256 mId = _setupMarket();
         uint256 collateral = (10 * LOT * 40) / 100;
+        uint256 fee = feeModel.calculateFee(collateral);
 
         vm.prank(user1);
         book.placeOrder(mId, Side.Ask, OrderType.GoodTilCancel, 60, 10);
 
-        assertEq(vault.locked(user1), collateral);
+        assertEq(vault.locked(user1), collateral + fee);
     }
 
     function test_PlaceOrder_UpdatesSegmentTree() public {
@@ -351,6 +356,7 @@ contract OrderBookTest is Test {
     function test_CancelOrder_Basic() public {
         uint256 mId = _setupMarket();
         uint256 collateral = _calcCollateral(Side.Bid, 50, 10);
+        uint256 fee = feeModel.calculateFee(collateral);
         uint256 orderId = _placeOrder(user1, mId, Side.Bid, 50, 10);
 
         uint256 walletBefore = usdt.balanceOf(user1);
@@ -361,7 +367,7 @@ contract OrderBookTest is Test {
         assertEq(lots, 0);
         assertEq(vault.locked(user1), 0);
         assertEq(vault.balance(user1), 0);
-        assertEq(usdt.balanceOf(user1) - walletBefore, collateral);
+        assertEq(usdt.balanceOf(user1) - walletBefore, collateral + fee);
     }
 
     function test_CancelOrder_EmitsEvent() public {
@@ -449,25 +455,27 @@ contract OrderBookTest is Test {
     // Fuzz tests
     // =========================================================================
 
-    function testFuzz_PlaceOrder_CollateralLockedCorrectly(uint8 tick, uint8 lotsRaw) public {
+    function testFuzz_PlaceOrder_CollateralPlusFeeLocked(uint8 tick, uint8 lotsRaw) public {
         uint256 t = (uint256(tick) % 99) + 1;
         uint256 l = (uint256(lotsRaw) % 100) + 1;
 
         uint256 mId = _setupMarket();
 
         uint256 collateral = (l * LOT * t) / 100;
+        uint256 fee = feeModel.calculateFee(collateral);
         vm.prank(user1);
         book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, t, l);
 
-        assertEq(vault.locked(user1), collateral);
+        assertEq(vault.locked(user1), collateral + fee);
     }
 
-    function testFuzz_CancelOrder_ReturnsUSDT(uint8 tick, uint8 lotsRaw) public {
+    function testFuzz_CancelOrder_ReturnsUSDTPlusFee(uint8 tick, uint8 lotsRaw) public {
         uint256 t = (uint256(tick) % 99) + 1;
         uint256 l = (uint256(lotsRaw) % 100) + 1;
 
         uint256 mId = _setupMarket();
         uint256 collateral = _calcCollateral(Side.Bid, t, l);
+        uint256 fee = feeModel.calculateFee(collateral);
 
         vm.prank(user1);
         uint256 orderId = book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, t, l);
@@ -477,6 +485,6 @@ contract OrderBookTest is Test {
         book.cancelOrder(orderId);
 
         assertEq(vault.locked(user1), 0);
-        assertEq(usdt.balanceOf(user1) - walletBefore, collateral);
+        assertEq(usdt.balanceOf(user1) - walletBefore, collateral + fee);
     }
 }

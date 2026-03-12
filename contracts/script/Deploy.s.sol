@@ -49,14 +49,13 @@ contract DeployScript is Script {
         Vault vault = new Vault(deployer, address(usdt));
 
         // 5. OrderBook
-        OrderBook orderBook = new OrderBook(deployer, address(vault));
+        OrderBook orderBook = new OrderBook(deployer, address(vault), address(feeModel));
 
         // 6. BatchAuction
         BatchAuction batchAuction = new BatchAuction(
             deployer,
             address(orderBook),
             address(vault),
-            address(feeModel),
             address(outcomeToken)
         );
 

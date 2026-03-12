@@ -97,6 +97,7 @@ contract PythResolver is ReentrancyGuard {
     }
 
     function setConfThreshold(uint256 newBps) external onlyAdmin {
+        require(newBps >= 10, "PythResolver: threshold too low");
         require(newBps <= 10000, "PythResolver: bps exceeds 10000");
         confThresholdBps = newBps;
     }

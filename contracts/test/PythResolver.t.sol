@@ -8,6 +8,7 @@ import "../src/MarketFactory.sol";
 import "../src/OrderBook.sol";
 import "../src/OutcomeToken.sol";
 import "../src/Vault.sol";
+import "../src/FeeModel.sol";
 import "../src/ITypes.sol";
 import "./mocks/MockUSDT.sol";
 
@@ -36,7 +37,8 @@ contract PythResolverTest is Test {
         vm.startPrank(admin);
         vault = new Vault(admin, address(usdt));
         token = new OutcomeToken(admin);
-        book = new OrderBook(admin, address(vault));
+        FeeModel fm = new FeeModel(admin, 20, 0, 5e18, 1e17, admin);
+        book = new OrderBook(admin, address(vault), address(fm));
 
         mockPyth = new MockPyth(120, 1);
 

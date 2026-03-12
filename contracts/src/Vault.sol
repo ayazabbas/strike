@@ -40,6 +40,7 @@ contract Vault is ReentrancyGuard, AccessControl {
     event RedeemedFromPool(uint256 indexed marketId, address indexed to, uint256 amount);
     event EmergencyModeActivated(uint256 timestamp);
     event EmergencyWithdrawn(address indexed user, uint256 amount);
+    event EmergencyPoolDrained(uint256 indexed marketId, address indexed recipient, uint256 amount);
 
     // -------------------------------------------------------------------------
     // Constructor
@@ -110,7 +111,7 @@ contract Vault is ReentrancyGuard, AccessControl {
         uint256 protocolFee,
         uint256 unlockAmount,
         bool withdrawUser
-    ) external onlyRole(PROTOCOL_ROLE) {
+    ) external onlyRole(PROTOCOL_ROLE) nonReentrant {
         uint256 totalDeduct = toPool + protocolFee + unlockAmount;
         require(locked[user] >= totalDeduct, "Vault: insufficient locked balance");
         locked[user] -= totalDeduct;
@@ -167,6 +168,17 @@ contract Vault is ReentrancyGuard, AccessControl {
         emergencyMode = true;
         emergencyActivatedAt = block.timestamp;
         emit EmergencyModeActivated(block.timestamp);
+    }
+
+    function emergencyDrainPool(uint256 marketId, address recipient) external onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant {
+        require(emergencyMode, "Vault: not in emergency mode");
+        require(block.timestamp >= emergencyActivatedAt + EMERGENCY_TIMELOCK, "Vault: timelock not elapsed");
+        require(recipient != address(0), "Vault: zero recipient");
+        uint256 amount = marketPool[marketId];
+        require(amount > 0, "Vault: empty market pool");
+        marketPool[marketId] = 0;
+        collateralToken.safeTransfer(recipient, amount);
+        emit EmergencyPoolDrained(marketId, recipient, amount);
     }
 
     function emergencyWithdraw() external nonReentrant {

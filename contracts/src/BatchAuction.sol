@@ -2,6 +2,7 @@
 pragma solidity ^0.8.25;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./ITypes.sol";
 import "./OrderBook.sol";
 import "./Vault.sol";
@@ -13,7 +14,7 @@ import "./OutcomeToken.sol";
 ///         clearBatch(marketId) atomically: advances batch, finds clearing price,
 ///         and settles ALL orders in the batch. No separate claimFills needed.
 ///         Settlement uses the CLEARING price, not the order's limit price.
-contract BatchAuction is AccessControl {
+contract BatchAuction is AccessControl, ReentrancyGuard {
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
 
     // -------------------------------------------------------------------------
@@ -22,7 +23,6 @@ contract BatchAuction is AccessControl {
 
     OrderBook public immutable orderBook;
     Vault public immutable vault;
-    FeeModel public immutable feeModel;
     OutcomeToken public immutable outcomeToken;
 
     /// @notice marketId => batchId => BatchResult
@@ -47,21 +47,20 @@ contract BatchAuction is AccessControl {
         uint256 filledLots,
         uint256 collateralReleased
     );
+    event GtcAutoCancelled(uint256 indexed orderId, address indexed owner);
 
     // -------------------------------------------------------------------------
     // Constructor
     // -------------------------------------------------------------------------
 
-    constructor(address admin, address _orderBook, address _vault, address _feeModel, address _outcomeToken) {
+    constructor(address admin, address _orderBook, address _vault, address _outcomeToken) {
         require(_orderBook != address(0), "BatchAuction: zero orderBook");
         require(_vault != address(0), "BatchAuction: zero vault");
-        require(_feeModel != address(0), "BatchAuction: zero feeModel");
         require(_outcomeToken != address(0), "BatchAuction: zero outcomeToken");
 
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         orderBook = OrderBook(_orderBook);
         vault = Vault(_vault);
-        feeModel = FeeModel(_feeModel);
         outcomeToken = OutcomeToken(_outcomeToken);
     }
 
@@ -69,7 +68,7 @@ contract BatchAuction is AccessControl {
     // Batch clearing — atomic: advance + clear + settle all
     // -------------------------------------------------------------------------
 
-    function clearBatch(uint256 marketId) external returns (BatchResult memory result) {
+    function clearBatch(uint256 marketId) external nonReentrant returns (BatchResult memory result) {
         uint32 currentBatchId;
         {
             (uint32 id, bool active, bool halted, uint32 _batchId, , , ) = orderBook.markets(marketId);
@@ -118,8 +117,12 @@ contract BatchAuction is AccessControl {
 
         // Settle ALL orders in this batch atomically
         uint256[] memory ids = orderBook.getBatchOrderIds(marketId, currentBatchId);
+
+        // Two-pass settlement: compute fills first (with rounding correction), then settle
+        uint256[] memory fills = _computeFills(ids, result);
+
         for (uint256 i = 0; i < ids.length; i++) {
-            _settleOrder(ids[i], result);
+            _settleOrder(ids[i], result, fills[i]);
         }
     }
 
@@ -148,8 +151,9 @@ contract BatchAuction is AccessControl {
     struct SettleAmounts {
         uint256 filledLots;
         uint256 filledCollateral;   // at clearing price
-        uint256 excessRefund;       // locked for filled - cost at clearing price
+        uint256 excessRefund;       // (lockedForFilled + lockedFeeForFilled) - filledCollateral - protocolFee
         uint256 unfilledCollateral; // at order tick
+        uint256 unfilledFee;        // fee portion of unfilled collateral
         uint256 toPool;
         uint256 protocolFee;
     }
@@ -169,23 +173,100 @@ contract BatchAuction is AccessControl {
         info = OrderInfo(marketId, owner, side, orderType, tick, lots, batchId);
     }
 
-    function _settleAmounts(OrderInfo memory o, BatchResult memory result)
+    /// @dev Compute fills for all orders with rounding remainder correction (Fix 4).
+    function _computeFills(uint256[] memory ids, BatchResult memory result)
+        internal
+        view
+        returns (uint256[] memory fills)
+    {
+        fills = new uint256[](ids.length);
+        if (result.matchedLots == 0) return fills;
+
+        uint256 totalFilledBid;
+        uint256 totalFilledAsk;
+
+        // 0 = not participating, 1 = participating bid, 2 = participating ask
+        uint8[] memory pType = new uint8[](ids.length);
+
+        for (uint256 i = 0; i < ids.length; i++) {
+            OrderInfo memory o = _readOrder(ids[i]);
+            if (o.lots == 0) continue;
+            if (!_orderParticipates(o.side, o.tick, result.clearingTick)) continue;
+
+            fills[i] = _calcFilledLots(o.lots, o.side, result);
+            if (o.side == Side.Bid) {
+                pType[i] = 1;
+                totalFilledBid += fills[i];
+            } else {
+                pType[i] = 2;
+                totalFilledAsk += fills[i];
+            }
+        }
+
+        // Distribute bid-side rounding remainder (+1 per order, backwards)
+        if (result.totalBidLots > result.matchedLots && totalFilledBid < result.matchedLots) {
+            uint256 rem = result.matchedLots - totalFilledBid;
+            for (uint256 i = ids.length; i > 0 && rem > 0; i--) {
+                if (pType[i - 1] == 1) {
+                    fills[i - 1]++;
+                    rem--;
+                }
+            }
+        }
+
+        // Distribute ask-side rounding remainder (+1 per order, backwards)
+        if (result.totalAskLots > result.matchedLots && totalFilledAsk < result.matchedLots) {
+            uint256 rem = result.matchedLots - totalFilledAsk;
+            for (uint256 i = ids.length; i > 0 && rem > 0; i--) {
+                if (pType[i - 1] == 2) {
+                    fills[i - 1]++;
+                    rem--;
+                }
+            }
+        }
+    }
+
+    /// @dev V2.1 settle amounts: pool gets full filledCollateral, fee from locked excess.
+    function _settleAmounts(OrderInfo memory o, BatchResult memory result, uint256 filledLots)
         internal
         view
         returns (SettleAmounts memory s)
     {
-        s.filledLots = _calcFilledLots(o.lots, o.side, result);
+        s.filledLots = filledLots;
         uint256 unfilledLots = o.lots - s.filledLots;
 
+        // Use OrderBook's feeModel for locked amounts (matches what was locked at placement)
+        FeeModel obFee = orderBook.feeModel();
+
         uint256 lockedForFilled = _collateral(s.filledLots, o.tick, o.side);
+        uint256 lockedFeeForFilled = obFee.calculateFee(lockedForFilled);
+
         s.filledCollateral = _collateral(s.filledLots, result.clearingTick, o.side);
-        s.excessRefund = lockedForFilled - s.filledCollateral;
+        s.protocolFee = obFee.calculateFee(s.filledCollateral);
+        s.toPool = s.filledCollateral; // V2.1: full amount goes to pool (no fee deduction)
+
+        s.excessRefund = (lockedForFilled + lockedFeeForFilled) - s.filledCollateral - s.protocolFee;
+
         s.unfilledCollateral = _collateral(unfilledLots, o.tick, o.side);
-        s.protocolFee = feeModel.calculateFee(s.filledCollateral);
-        s.toPool = s.filledCollateral - s.protocolFee;
+        s.unfilledFee = obFee.calculateFee(s.unfilledCollateral);
     }
 
-    function _settleOrder(uint256 orderId, BatchResult memory result) internal {
+    /// @dev Try GTC rollover; auto-cancel if next batch is full (Fix 2).
+    function _tryRollOrCancel(uint256 orderId, OrderInfo memory o, uint256 nextBatchId) internal {
+        bool pushed = orderBook.pushBatchOrderId(o.marketId, nextBatchId, orderId);
+        if (!pushed) {
+            // Next batch full — auto-cancel: unlock collateral + fee
+            uint256 collateral = _collateral(o.lots, o.tick, o.side);
+            uint256 fee = orderBook.feeModel().calculateFee(collateral);
+            orderBook.reduceOrderLots(orderId, o.lots);
+            orderBook.updateTreeVolume(o.marketId, o.side, o.tick, -int256(o.lots));
+            vault.unlock(o.owner, collateral + fee);
+            vault.withdrawTo(o.owner, collateral + fee);
+            emit GtcAutoCancelled(orderId, o.owner);
+        }
+    }
+
+    function _settleOrder(uint256 orderId, BatchResult memory result, uint256 precomputedFill) internal {
         OrderInfo memory o = _readOrder(orderId);
         require(o.marketId == result.marketId, "BatchAuction: wrong market");
 
@@ -199,36 +280,37 @@ contract BatchAuction is AccessControl {
             require(o.batchId <= result.batchId, "BatchAuction: batch not reached");
         }
 
-        // Non-participating order (tick doesn't cross clearing)
-        if (!_orderParticipates(o.side, o.tick, result.clearingTick)) {
+        // Non-participating order (precomputedFill == 0 and tick doesn't cross)
+        if (precomputedFill == 0 && !_orderParticipates(o.side, o.tick, result.clearingTick)) {
             if (o.orderType == OrderType.GoodTilBatch) {
-                // GTB non-participating: return collateral to wallet, remove from book
+                // GTB non-participating: return collateral + fee to wallet, remove from book
                 uint256 collateral = _collateral(o.lots, o.tick, o.side);
+                uint256 fee = orderBook.feeModel().calculateFee(collateral);
                 orderBook.reduceOrderLots(orderId, o.lots);
                 orderBook.updateTreeVolume(o.marketId, o.side, o.tick, -int256(o.lots));
-                if (collateral > 0) {
-                    vault.unlock(o.owner, collateral);
-                    vault.withdrawTo(o.owner, collateral);
+                if (collateral + fee > 0) {
+                    vault.unlock(o.owner, collateral + fee);
+                    vault.withdrawTo(o.owner, collateral + fee);
                 }
             } else {
-                // GTC non-participating: roll to next batch, leave in tree
-                orderBook.pushBatchOrderId(o.marketId, result.batchId + 1, orderId);
+                // GTC non-participating: roll to next batch (or auto-cancel if full)
+                _tryRollOrCancel(orderId, o, result.batchId + 1);
             }
             emit OrderSettled(orderId, o.owner, 0, 0);
             return;
         }
 
-        // Participating order — compute fills at clearing price
-        SettleAmounts memory s = _settleAmounts(o, result);
-
-        if (s.filledLots == 0) {
-            // Edge case: participating but zero fill (shouldn't happen normally)
+        // Participating but zero fill (edge case)
+        if (precomputedFill == 0) {
             if (o.orderType == OrderType.GoodTilCancel) {
-                orderBook.pushBatchOrderId(o.marketId, result.batchId + 1, orderId);
+                _tryRollOrCancel(orderId, o, result.batchId + 1);
             }
             emit OrderSettled(orderId, o.owner, 0, 0);
             return;
         }
+
+        // Participating order — compute settlement at clearing price
+        SettleAmounts memory s = _settleAmounts(o, result, precomputedFill);
 
         bool fullyFilled = s.filledLots == o.lots;
 
@@ -238,8 +320,8 @@ contract BatchAuction is AccessControl {
             orderBook.updateTreeVolume(o.marketId, o.side, o.tick, -int256(o.lots));
             vault.settleFill(
                 o.owner, o.marketId, s.toPool,
-                feeModel.protocolFeeCollector(), s.protocolFee,
-                s.unfilledCollateral + s.excessRefund, true
+                orderBook.feeModel().protocolFeeCollector(), s.protocolFee,
+                s.unfilledCollateral + s.unfilledFee + s.excessRefund, true
             );
         } else {
             // GTC partial fill: reduce filled lots, return excess refund, roll remainder
@@ -247,11 +329,11 @@ contract BatchAuction is AccessControl {
             orderBook.updateTreeVolume(o.marketId, o.side, o.tick, -int256(s.filledLots));
             vault.settleFill(
                 o.owner, o.marketId, s.toPool,
-                feeModel.protocolFeeCollector(), s.protocolFee,
+                orderBook.feeModel().protocolFeeCollector(), s.protocolFee,
                 s.excessRefund, s.excessRefund > 0
             );
-            // Roll to next batch
-            orderBook.pushBatchOrderId(o.marketId, result.batchId + 1, orderId);
+            // Roll to next batch (or auto-cancel if full)
+            _tryRollOrCancel(orderId, o, result.batchId + 1);
         }
 
         // Mint outcome tokens
@@ -260,7 +342,7 @@ contract BatchAuction is AccessControl {
         }
 
         uint256 released = (fullyFilled || o.orderType == OrderType.GoodTilBatch)
-            ? s.unfilledCollateral + s.excessRefund
+            ? s.unfilledCollateral + s.unfilledFee + s.excessRefund
             : s.excessRefund;
         emit OrderSettled(orderId, o.owner, s.filledLots, released);
     }

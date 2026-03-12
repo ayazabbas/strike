@@ -65,10 +65,10 @@ contract DeployTestnetScript is Script {
         Vault vault = new Vault(deployer, usdtAddr);
         d.vault = address(vault);
 
-        OrderBook orderBook = new OrderBook(deployer, address(vault));
+        OrderBook orderBook = new OrderBook(deployer, address(vault), address(feeModel));
         d.orderBook = address(orderBook);
 
-        BatchAuction batchAuction = new BatchAuction(deployer, address(orderBook), address(vault), address(feeModel), address(outcomeToken));
+        BatchAuction batchAuction = new BatchAuction(deployer, address(orderBook), address(vault), address(outcomeToken));
         d.batchAuction = address(batchAuction);
 
         MarketFactory factory = new MarketFactory(deployer, address(orderBook), address(outcomeToken), deployer);

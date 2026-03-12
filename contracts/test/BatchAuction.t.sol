@@ -33,8 +33,8 @@ contract BatchAuctionTest is Test {
         vault = new Vault(admin, address(usdt));
         feeModel = new FeeModel(admin, 20, 0, 5e18, 1e17, admin);
         token = new OutcomeToken(admin);
-        book = new OrderBook(admin, address(vault));
-        auction = new BatchAuction(admin, address(book), address(vault), address(feeModel), address(token));
+        book = new OrderBook(admin, address(vault), address(feeModel));
+        auction = new BatchAuction(admin, address(book), address(vault), address(token));
 
         book.grantRole(book.OPERATOR_ROLE(), operator);
         book.grantRole(book.OPERATOR_ROLE(), address(auction));
@@ -79,8 +79,7 @@ contract BatchAuctionTest is Test {
 
     function _createZeroFeeAuction() internal returns (BatchAuction) {
         vm.startPrank(admin);
-        FeeModel zeroFee = new FeeModel(admin, 0, 0, 5e18, 1e17, admin);
-        BatchAuction za = new BatchAuction(admin, address(book), address(vault), address(zeroFee), address(token));
+        BatchAuction za = new BatchAuction(admin, address(book), address(vault), address(token));
         book.grantRole(book.OPERATOR_ROLE(), address(za));
         vault.grantRole(vault.PROTOCOL_ROLE(), address(za));
         token.grantRole(token.MINTER_ROLE(), address(za));
@@ -219,7 +218,7 @@ contract BatchAuctionTest is Test {
         uint256 mId = _setupMarket();
 
         // Bid at tick 70 (locks 70% per lot), ask at tick 40 (locks 60% per lot)
-        // Clearing tick should be between 40-70
+        // Clearing tick should be between 40-70 (zero fee auction)
         _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 70, 10);
         _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 40, 10);
 
@@ -229,17 +228,18 @@ contract BatchAuctionTest is Test {
         BatchResult memory r = za.clearBatch(mId);
         assertGt(r.clearingTick, 0);
 
-        // Bidder locked at tick 70 but settled at clearingTick — should get excess refund
-        // Asker locked at tick 40 but settled at clearingTick — should get excess refund
-        uint256 bidLockedPerLot = (LOT * 70) / 100;
-        uint256 bidCostPerLot = (LOT * r.clearingTick) / 100;
-        uint256 bidExcessRefund = (bidLockedPerLot - bidCostPerLot) * 10;
+        // V2.1: locked = collateral + fee at order tick
+        // excessRefund = (lockedForFilled + lockedFee) - filledCollateral - protocolFee
+        uint256 bidLocked = (10 * LOT * 70) / 100;
+        uint256 bidFilled = (10 * LOT * r.clearingTick) / 100;
+        uint256 bidExcessRefund = (bidLocked + feeModel.calculateFee(bidLocked))
+            - bidFilled - feeModel.calculateFee(bidFilled);
 
-        uint256 askLockedPerLot = (LOT * 60) / 100;
-        uint256 askCostPerLot = (LOT * (100 - r.clearingTick)) / 100;
-        uint256 askExcessRefund = (askLockedPerLot - askCostPerLot) * 10;
+        uint256 askLocked = (10 * LOT * 60) / 100;
+        uint256 askFilled = (10 * LOT * (100 - r.clearingTick)) / 100;
+        uint256 askExcessRefund = (askLocked + feeModel.calculateFee(askLocked))
+            - askFilled - feeModel.calculateFee(askFilled);
 
-        // Users should have received their excess refund
         assertEq(usdt.balanceOf(user1) - user1UsdtBefore, bidExcessRefund, "bid excess refund");
         assertEq(usdt.balanceOf(user2) - user2UsdtBefore, askExcessRefund, "ask excess refund");
     }
@@ -339,13 +339,14 @@ contract BatchAuctionTest is Test {
 
         uint256 user3UsdtBefore = usdt.balanceOf(user3);
         uint256 lowBidCollateral = _calcCollateral(Side.Bid, 30, 5);
+        uint256 lowBidFee = feeModel.calculateFee(lowBidCollateral);
 
         auction.clearBatch(mId);
 
-        // Low bid was GTB non-participating → collateral returned, order removed
+        // Low bid was GTB non-participating → collateral + fee returned, order removed
         (, , , , uint64 lots, , , , ) = book.orders(lowBidId);
         assertEq(lots, 0, "GTB non-participating should be removed");
-        assertEq(usdt.balanceOf(user3) - user3UsdtBefore, lowBidCollateral, "collateral should be returned");
+        assertEq(usdt.balanceOf(user3) - user3UsdtBefore, lowBidCollateral + lowBidFee, "collateral+fee should be returned");
     }
 
     // =========================================================================
@@ -552,10 +553,13 @@ contract BatchAuctionTest is Test {
         _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
         _placeOrder(user2, mId, Side.Ask, OrderType.GoodTilBatch, 50, 10);
 
+        // V2.1: locked = collateral + fee (OrderBook uses real feeModel)
         uint256 bidCollateral = (10 * LOT * 50) / 100;
         uint256 askCollateral = (10 * LOT * 50) / 100;
-        assertEq(vault.locked(user1), bidCollateral);
-        assertEq(vault.locked(user2), askCollateral);
+        uint256 bidFee = feeModel.calculateFee(bidCollateral);
+        uint256 askFee = feeModel.calculateFee(askCollateral);
+        assertEq(vault.locked(user1), bidCollateral + bidFee);
+        assertEq(vault.locked(user2), askCollateral + askFee);
 
         BatchResult memory r = za.clearBatch(mId);
         assertEq(r.clearingTick, 50);
@@ -569,6 +573,7 @@ contract BatchAuctionTest is Test {
     function test_FullLifecycle_CancelBeforeClear() public {
         uint256 mId = _setupMarket();
         uint256 collateral = _calcCollateral(Side.Bid, 50, 10);
+        uint256 fee = feeModel.calculateFee(collateral);
         uint256 bidId = _placeOrder(user1, mId, Side.Bid, OrderType.GoodTilCancel, 50, 10);
 
         uint256 walletBefore = usdt.balanceOf(user1);
@@ -576,7 +581,7 @@ contract BatchAuctionTest is Test {
         book.cancelOrder(bidId);
 
         assertEq(vault.locked(user1), 0);
-        assertEq(usdt.balanceOf(user1) - walletBefore, collateral);
+        assertEq(usdt.balanceOf(user1) - walletBefore, collateral + fee);
     }
 
     // =========================================================================

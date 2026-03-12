@@ -44,8 +44,8 @@ contract IntegrationTest is Test {
         vault = new Vault(admin, address(usdt));
         token = new OutcomeToken(admin);
         feeModel = new FeeModel(admin, 20, 0, 5e18, 1e17, feeCollector);
-        book = new OrderBook(admin, address(vault));
-        auction = new BatchAuction(admin, address(book), address(vault), address(feeModel), address(token));
+        book = new OrderBook(admin, address(vault), address(feeModel));
+        auction = new BatchAuction(admin, address(book), address(vault), address(token));
 
         mockPyth = new MockPyth(120, 1);
 
@@ -83,8 +83,7 @@ contract IntegrationTest is Test {
 
     function _createZeroFeeAuction() internal returns (BatchAuction) {
         vm.startPrank(admin);
-        FeeModel zeroFee = new FeeModel(admin, 0, 0, 5e18, 1e17, feeCollector);
-        BatchAuction za = new BatchAuction(admin, address(book), address(vault), address(zeroFee), address(token));
+        BatchAuction za = new BatchAuction(admin, address(book), address(vault), address(token));
         book.grantRole(book.OPERATOR_ROLE(), address(za));
         vault.grantRole(vault.PROTOCOL_ROLE(), address(za));
         token.grantRole(token.MINTER_ROLE(), address(za));
