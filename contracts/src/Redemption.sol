@@ -9,7 +9,7 @@ import "./Vault.sol";
 
 /// @title Redemption
 /// @notice Handles post-resolution token redemption for binary outcome markets.
-///         Users burn winning outcome tokens 1:1 for collateral (BNB).
+///         Users burn winning outcome tokens 1:1 for collateral (USDT).
 contract Redemption is ReentrancyGuard {
     // -------------------------------------------------------------------------
     // State
@@ -39,9 +39,9 @@ contract Redemption is ReentrancyGuard {
         require(_outcomeToken != address(0), "Redemption: zero outcomeToken");
         require(_vault != address(0), "Redemption: zero vault");
 
-        factory = MarketFactory(payable(_factory));
+        factory = MarketFactory(_factory);
         outcomeToken = OutcomeToken(_outcomeToken);
-        vault = Vault(payable(_vault));
+        vault = Vault(_vault);
     }
 
     // -------------------------------------------------------------------------
@@ -49,7 +49,7 @@ contract Redemption is ReentrancyGuard {
     // -------------------------------------------------------------------------
 
     /// @notice Redeem winning outcome tokens for collateral.
-    ///         Burns `amount` of the winning token and sends BNB to msg.sender.
+    ///         Burns `amount` of the winning token and sends USDT to msg.sender.
     /// @param factoryMarketId The factory market ID.
     /// @param amount Number of winning outcome tokens to redeem.
     function redeem(uint256 factoryMarketId, uint256 amount) external nonReentrant {

@@ -291,9 +291,4 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
         delete closedMarketIndex[factoryMarketId];
     }
 
-    // -------------------------------------------------------------------------
-    // Receive
-    // -------------------------------------------------------------------------
-
-    receive() external payable {}
 }

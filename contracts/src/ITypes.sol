@@ -3,8 +3,8 @@ pragma solidity ^0.8.25;
 
 // ITypes — Shared types for the Strike CLOB protocol.
 
-// Size of one lot in wei (0.001 BNB).
-uint256 constant LOT_SIZE = 1e15;
+// Size of one lot in collateral token units (1 USDT = 1e18).
+uint256 constant LOT_SIZE = 1e18;
 
 /// @notice Side of an order in a binary outcome market.
 enum Side {
@@ -26,7 +26,7 @@ struct Order {
     Side side;           // 1 byte  — Bid or Ask
     OrderType orderType; // 1 byte  — GTC or GTB
     uint8 tick;          // 1 byte  — price tick 1-99 (price = tick/100)
-    uint64 lots;         // 8 bytes — remaining lots (each lot = 1e15 wei)
+    uint64 lots;         // 8 bytes — remaining lots (each lot = 1 USDT = 1e18)
     // --- Slot 2 (21 bytes) ---
     uint64 id;           // 8 bytes — unique order ID
     uint32 marketId;     // 4 bytes — market this order belongs to

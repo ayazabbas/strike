@@ -30,12 +30,13 @@ contract DeployTestnetScript is Script {
         address pythResolver;
         address redemption;
         address pyth;
-
+        address usdt;
     }
 
     function run() external {
         uint256 pk = vm.envUint("PRIVATE_KEY");
         address deployer = vm.addr(pk);
+        address usdtAddr = vm.envAddress("USDT_ADDRESS");
 
         address pythAddr = block.chainid == 97
             ? PYTH_BSC_TESTNET
@@ -47,19 +48,21 @@ contract DeployTestnetScript is Script {
         console.log("  Chain ID:", block.chainid);
         console.log("  Deployer:", deployer);
         console.log("  Pyth:", pythAddr);
+        console.log("  USDT:", usdtAddr);
 
         Deployed memory d;
         d.pyth = pythAddr;
+        d.usdt = usdtAddr;
 
         vm.startBroadcast(pk);
 
-        FeeModel feeModel = new FeeModel(deployer, 30, 0, 0.005 ether, 0.0001 ether, deployer);
+        FeeModel feeModel = new FeeModel(deployer, 20, 0, 5e18, 1e17, deployer);
         d.feeModel = address(feeModel);
 
         OutcomeToken outcomeToken = new OutcomeToken(deployer);
         d.outcomeToken = address(outcomeToken);
 
-        Vault vault = new Vault(deployer);
+        Vault vault = new Vault(deployer, usdtAddr);
         d.vault = address(vault);
 
         OrderBook orderBook = new OrderBook(deployer, address(vault));
@@ -104,6 +107,7 @@ contract DeployTestnetScript is Script {
         );
         json = string.concat(
             json,
+            '","usdt":"', vm.toString(d.usdt),
             '","marketFactory":"', vm.toString(d.factory),
             '","pythResolver":"', vm.toString(d.pythResolver),
             '","redemption":"', vm.toString(d.redemption),

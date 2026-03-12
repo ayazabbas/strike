@@ -6,19 +6,16 @@ import {Vault} from "../src/Vault.sol";
 import {OrderBook} from "../src/OrderBook.sol";
 import {MarketFactory} from "../src/MarketFactory.sol";
 import {Side, OrderType} from "../src/ITypes.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /// @notice Seed the devnet with test orders that cross, giving the
 ///         batch-keeper something real to clear.
-///
-///   Bids:  accounts 1-5 at ticks 45, 50, 55, 60, 65 (2 lots each)
-///   Asks:  accounts 6-8 at ticks 35, 40, 45 (2 lots each)
-///
-///   Clearing tick ≈ 55 (cum_bid == cum_ask == 6 lots).
 contract SeedScript is Script {
     function run() external {
-        Vault vault = Vault(payable(vm.envAddress("VAULT_ADDR")));
+        Vault vault = Vault(vm.envAddress("VAULT_ADDR"));
         OrderBook orderBook = OrderBook(vm.envAddress("ORDER_BOOK_ADDR"));
-        MarketFactory factory = MarketFactory(payable(vm.envAddress("MARKET_FACTORY_ADDR")));
+        MarketFactory factory = MarketFactory(vm.envAddress("MARKET_FACTORY_ADDR"));
+        IERC20 usdt = IERC20(vm.envAddress("USDT_ADDR"));
 
         // Get orderBook market ID from factory market #1
         (,,,,,,, uint256 obMarketId) = factory.marketMeta(1);
@@ -43,10 +40,10 @@ contract SeedScript is Script {
         ];
         uint256[3] memory askTicks = [uint256(35), uint256(40), uint256(45)];
 
-        // Place bid orders (accounts 1-5)
+        // Place bid orders (accounts 1-5): approve USDT then place
         for (uint256 i = 0; i < 5; i++) {
             vm.startBroadcast(bidKeys[i]);
-            vault.deposit{value: 1 ether}();
+            usdt.approve(address(vault), type(uint256).max);
             uint256 orderId = orderBook.placeOrder(
                 obMarketId, Side.Bid, OrderType.GoodTilCancel, bidTicks[i], 2
             );
@@ -57,7 +54,7 @@ contract SeedScript is Script {
         // Place ask orders (accounts 6-8)
         for (uint256 i = 0; i < 3; i++) {
             vm.startBroadcast(askKeys[i]);
-            vault.deposit{value: 1 ether}();
+            usdt.approve(address(vault), type(uint256).max);
             uint256 orderId = orderBook.placeOrder(
                 obMarketId, Side.Ask, OrderType.GoodTilCancel, askTicks[i], 2
             );

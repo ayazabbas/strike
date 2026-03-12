@@ -7,12 +7,14 @@ import "../src/OrderBook.sol";
 import "../src/OutcomeToken.sol";
 import "../src/Vault.sol";
 import "../src/ITypes.sol";
+import "./mocks/MockUSDT.sol";
 
 contract MarketFactoryTest is Test {
     MarketFactory public factory;
     OrderBook public book;
     OutcomeToken public token;
     Vault public vault;
+    MockUSDT public usdt;
 
     address public admin = address(0x1);
     address public user1 = address(0x3);
@@ -23,31 +25,20 @@ contract MarketFactoryTest is Test {
     int64 public constant STRIKE_PRICE = int64(50000_00000000);
 
     function setUp() public {
-        vm.startPrank(admin);
+        usdt = new MockUSDT();
 
-        vault = new Vault(admin);
+        vm.startPrank(admin);
+        vault = new Vault(admin, address(usdt));
         token = new OutcomeToken(admin);
         book = new OrderBook(admin, address(vault));
 
         factory = new MarketFactory(admin, address(book), address(token), feeCollector);
 
-        // Grant factory OPERATOR_ROLE on OrderBook so it can registerMarket/deactivateMarket
         book.grantRole(book.OPERATOR_ROLE(), address(factory));
-        // Grant book PROTOCOL_ROLE on Vault
         vault.grantRole(vault.PROTOCOL_ROLE(), address(book));
-
-        // Grant MARKET_CREATOR_ROLE to user1 for testing
         factory.grantRole(factory.MARKET_CREATOR_ROLE(), user1);
-
         vm.stopPrank();
-
-        vm.deal(user1, 100 ether);
-        vm.deal(user2, 100 ether);
     }
-
-    // =========================================================================
-    // Constructor
-    // =========================================================================
 
     function test_Constructor_SetsImmutables() public view {
         assertEq(address(factory.orderBook()), address(book));
@@ -70,26 +61,13 @@ contract MarketFactoryTest is Test {
         new MarketFactory(admin, address(book), address(token), address(0));
     }
 
-    // =========================================================================
-    // createMarket
-    // =========================================================================
-
     function test_CreateMarket_Basic() public {
         vm.prank(user1);
         uint256 id = factory.createMarket(PRICE_ID, STRIKE_PRICE, 3600, 60, 1);
-
         assertEq(id, 1);
 
-        (
-            bytes32 priceId,
-            ,
-            uint256 expiryTime,
-            address creator,
-            MarketState state,
-            ,
-            ,
-            uint256 obId
-        ) = factory.marketMeta(id);
+        (bytes32 priceId, , uint256 expiryTime, address creator, MarketState state, , , uint256 obId)
+            = factory.marketMeta(id);
 
         assertEq(priceId, PRICE_ID);
         assertEq(expiryTime, block.timestamp + 3600);
@@ -101,7 +79,6 @@ contract MarketFactoryTest is Test {
     function test_CreateMarket_EmitsEvent() public {
         vm.expectEmit(true, true, false, true);
         emit MarketFactory.MarketCreated(1, 1, PRICE_ID, STRIKE_PRICE, block.timestamp + 3600, user1);
-
         vm.prank(user1);
         factory.createMarket(PRICE_ID, STRIKE_PRICE, 3600, 60, 1);
     }
@@ -111,7 +88,6 @@ contract MarketFactoryTest is Test {
         uint256 id1 = factory.createMarket(PRICE_ID, STRIKE_PRICE, 3600, 60, 1);
         uint256 id2 = factory.createMarket(PRICE_ID, STRIKE_PRICE, 7200, 60, 1);
         vm.stopPrank();
-
         assertEq(id1, 1);
         assertEq(id2, 2);
     }
@@ -119,7 +95,6 @@ contract MarketFactoryTest is Test {
     function test_CreateMarket_TracksActive() public {
         vm.prank(user1);
         factory.createMarket(PRICE_ID, STRIKE_PRICE, 3600, 60, 1);
-
         assertEq(factory.getActiveMarketCount(), 1);
         assertEq(factory.activeMarkets(0), 1);
     }
@@ -127,18 +102,15 @@ contract MarketFactoryTest is Test {
     function test_CreateMarket_UsesDefaults() public {
         vm.prank(user1);
         uint256 id = factory.createMarket(PRICE_ID, STRIKE_PRICE, 3600, 0, 0);
-
         (, , , , , , , uint256 obId) = factory.marketMeta(id);
         (, , , , uint32 minLots, uint32 batchInterval, ) = book.markets(obId);
-
-        assertEq(batchInterval, 60); // default
-        assertEq(minLots, 1); // default
+        assertEq(batchInterval, 60);
+        assertEq(minLots, 1);
     }
 
     function test_CreateMarket_RevertIfPaused() public {
         vm.prank(admin);
         factory.pauseFactory(true);
-
         vm.expectRevert("MarketFactory: paused");
         vm.prank(user1);
         factory.createMarket(PRICE_ID, STRIKE_PRICE, 3600, 60, 1);
@@ -165,17 +137,12 @@ contract MarketFactoryTest is Test {
     function test_CreateMarket_RevertIfDurationTooShort() public {
         vm.expectRevert("MarketFactory: duration must exceed batchInterval");
         vm.prank(user1);
-        factory.createMarket(PRICE_ID, STRIKE_PRICE, 30, 60, 1); // duration < batchInterval
+        factory.createMarket(PRICE_ID, STRIKE_PRICE, 30, 60, 1);
     }
-
-    // =========================================================================
-    // closeMarket
-    // =========================================================================
 
     function test_CloseMarket_Basic() public {
         vm.prank(user1);
         uint256 id = factory.createMarket(PRICE_ID, STRIKE_PRICE, 3600, 60, 1);
-
         vm.warp(block.timestamp + 3600);
         factory.closeMarket(id);
 
@@ -188,7 +155,6 @@ contract MarketFactoryTest is Test {
     function test_CloseMarket_RevertIfNotExpired() public {
         vm.prank(user1);
         uint256 id = factory.createMarket(PRICE_ID, STRIKE_PRICE, 3600, 60, 1);
-
         vm.expectRevert("MarketFactory: not expired");
         factory.closeMarket(id);
     }
@@ -196,28 +162,18 @@ contract MarketFactoryTest is Test {
     function test_CloseMarket_RevertIfAlreadyClosed() public {
         vm.prank(user1);
         uint256 id = factory.createMarket(PRICE_ID, STRIKE_PRICE, 3600, 60, 1);
-
         vm.warp(block.timestamp + 3600);
         factory.closeMarket(id);
-
         vm.expectRevert("MarketFactory: not open");
         factory.closeMarket(id);
     }
 
-    // =========================================================================
-    // cancelMarket
-    // =========================================================================
-
     function test_CancelMarket_Basic() public {
         vm.prank(user1);
         uint256 id = factory.createMarket(PRICE_ID, STRIKE_PRICE, 3600, 60, 1);
-
         vm.warp(block.timestamp + 3600);
         factory.closeMarket(id);
-
-        // Wait 24h after expiry
         vm.warp(block.timestamp + 24 hours);
-
         factory.cancelMarket(id);
 
         (, , , , MarketState state, , , ) = factory.marketMeta(id);
@@ -227,23 +183,16 @@ contract MarketFactoryTest is Test {
     function test_CancelMarket_RevertIfTooEarly() public {
         vm.prank(user1);
         uint256 id = factory.createMarket(PRICE_ID, STRIKE_PRICE, 3600, 60, 1);
-
         vm.warp(block.timestamp + 3600);
         factory.closeMarket(id);
-
         vm.expectRevert("MarketFactory: too early to cancel");
         factory.cancelMarket(id);
     }
-
-    // =========================================================================
-    // Admin controls
-    // =========================================================================
 
     function test_PauseFactory() public {
         vm.prank(admin);
         factory.pauseFactory(true);
         assertTrue(factory.paused());
-
         vm.prank(admin);
         factory.pauseFactory(false);
         assertFalse(factory.paused());
@@ -252,7 +201,6 @@ contract MarketFactoryTest is Test {
     function test_SetDefaultParams() public {
         vm.prank(admin);
         factory.setDefaultParams(120, 5);
-
         assertEq(factory.defaultBatchInterval(), 120);
         assertEq(factory.defaultMinLots(), 5);
     }
@@ -261,7 +209,6 @@ contract MarketFactoryTest is Test {
         address newCollector = address(0x88);
         vm.prank(admin);
         factory.setFeeCollector(newCollector);
-
         assertEq(factory.feeCollector(), newCollector);
     }
 
@@ -281,36 +228,23 @@ contract MarketFactoryTest is Test {
         factory.setDefaultParams(120, 5);
     }
 
-    // =========================================================================
-    // State machine
-    // =========================================================================
-
     function test_StateTransition_FullLifecycle() public {
         vm.prank(user1);
         uint256 id = factory.createMarket(PRICE_ID, STRIKE_PRICE, 3600, 60, 1);
-
-        // Open
         assertEq(uint256(factory.getMarketState(id)), uint256(MarketState.Open));
 
-        // Close
         vm.warp(block.timestamp + 3600);
         factory.closeMarket(id);
         assertEq(uint256(factory.getMarketState(id)), uint256(MarketState.Closed));
 
-        // Resolving
         vm.prank(admin);
         factory.setResolving(id);
         assertEq(uint256(factory.getMarketState(id)), uint256(MarketState.Resolving));
 
-        // Resolved
         vm.prank(admin);
         factory.setResolved(id, true, 50000);
         assertEq(uint256(factory.getMarketState(id)), uint256(MarketState.Resolved));
     }
-
-    // =========================================================================
-    // View helpers
-    // =========================================================================
 
     function test_GetActiveMarketCount_MultipleMarkets() public {
         vm.startPrank(user1);
@@ -321,7 +255,6 @@ contract MarketFactoryTest is Test {
 
         assertEq(factory.getActiveMarketCount(), 3);
 
-        // Close first market
         vm.warp(block.timestamp + 3600);
         factory.closeMarket(1);
         assertEq(factory.getActiveMarketCount(), 2);

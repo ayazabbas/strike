@@ -10,9 +10,9 @@ import "./OutcomeToken.sol";
 
 /// @title BatchAuction
 /// @notice Implements Frequent Batch Auction clearing for the Strike CLOB.
-///         A keeper calls clearBatch(marketId, orderIds) to find the clearing price
-///         and settle orders inline. claimFills() remains as a public fallback.
-///         Expired GoodTilBatch orders can be pruned for a bounty.
+///         clearBatch(marketId) atomically: advances batch, finds clearing price,
+///         and settles ALL orders in the batch. No separate claimFills needed.
+///         Settlement uses the CLEARING price, not the order's limit price.
 contract BatchAuction is AccessControl {
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
 
@@ -28,9 +28,6 @@ contract BatchAuction is AccessControl {
     /// @notice marketId => batchId => BatchResult
     mapping(uint256 => mapping(uint256 => BatchResult)) public batchResults;
 
-    /// @notice orderId => last batchId for which fills were claimed (0 = never claimed)
-    mapping(uint256 => uint256) public lastClaimedBatch;
-
     /// @notice marketId => timestamp of last batch clear
     mapping(uint256 => uint256) public lastClearTime;
 
@@ -44,13 +41,12 @@ contract BatchAuction is AccessControl {
         uint256 clearingTick,
         uint256 matchedLots
     );
-    event FillClaimed(
+    event OrderSettled(
         uint256 indexed orderId,
         address indexed owner,
         uint256 filledLots,
         uint256 collateralReleased
     );
-    event OrderPruned(uint256 indexed orderId, address indexed pruner);
 
     // -------------------------------------------------------------------------
     // Constructor
@@ -64,32 +60,23 @@ contract BatchAuction is AccessControl {
 
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         orderBook = OrderBook(_orderBook);
-        vault = Vault(payable(_vault));
+        vault = Vault(_vault);
         feeModel = FeeModel(_feeModel);
         outcomeToken = OutcomeToken(_outcomeToken);
     }
 
     // -------------------------------------------------------------------------
-    // Batch clearing
+    // Batch clearing — atomic: advance + clear + settle all
     // -------------------------------------------------------------------------
 
-    /// @notice Clear the current batch for a market. Optionally settles orders inline.
-    /// @param marketId The market to clear.
-    /// @param orderIds Order IDs to settle inline (keeper-provided). Pass empty for no inline settlement.
-    function clearBatch(uint256 marketId, uint256[] calldata orderIds) external returns (BatchResult memory result) {
+    function clearBatch(uint256 marketId) external returns (BatchResult memory result) {
         uint32 currentBatchId;
         {
-            (uint32 id, bool active, bool halted, uint32 _batchId, , uint32 batchInterval, ) = orderBook.markets(marketId);
+            (uint32 id, bool active, bool halted, uint32 _batchId, , , ) = orderBook.markets(marketId);
             require(id != 0, "BatchAuction: market not found");
             require(active, "BatchAuction: market not active");
             require(!halted, "BatchAuction: market halted");
             currentBatchId = _batchId;
-
-            // Enforce batch interval (skip for first clear)
-            uint256 lastClear = lastClearTime[marketId];
-            if (lastClear != 0) {
-                require(block.timestamp >= lastClear + batchInterval, "BatchAuction: too soon");
-            }
         }
 
         uint256 clearingTick = orderBook.findClearingTick(marketId);
@@ -123,13 +110,16 @@ contract BatchAuction is AccessControl {
 
         batchResults[marketId][currentBatchId] = result;
         lastClearTime[marketId] = block.timestamp;
+
+        // Advance batch FIRST — new orders go to currentBatchId+1
         orderBook.advanceBatch(marketId);
 
         emit BatchCleared(marketId, currentBatchId, clearingTick, matchedLots);
 
-        // Inline settlement
-        for (uint256 i = 0; i < orderIds.length; i++) {
-            _settleOrder(orderIds[i], result);
+        // Settle ALL orders in this batch atomically
+        uint256[] memory ids = orderBook.getBatchOrderIds(marketId, currentBatchId);
+        for (uint256 i = 0; i < ids.length; i++) {
+            _settleOrder(ids[i], result);
         }
     }
 
@@ -137,7 +127,6 @@ contract BatchAuction is AccessControl {
     // Internal helpers
     // -------------------------------------------------------------------------
 
-    /// @dev Calculate collateral for lots at a given tick and side.
     function _collateral(uint256 lots, uint256 tick, Side side) internal pure returns (uint256) {
         if (side == Side.Bid) {
             return (lots * LOT_SIZE * tick) / 100;
@@ -146,7 +135,6 @@ contract BatchAuction is AccessControl {
         }
     }
 
-    /// @dev Read order fields we need, packed to avoid stack-too-deep.
     struct OrderInfo {
         uint256 marketId;
         address owner;
@@ -157,10 +145,11 @@ contract BatchAuction is AccessControl {
         uint256 batchId;
     }
 
-    /// @dev Settlement amounts computed during claimFills.
     struct SettleAmounts {
         uint256 filledLots;
-        uint256 unfilledCollateral;
+        uint256 filledCollateral;   // at clearing price
+        uint256 excessRefund;       // locked for filled - cost at clearing price
+        uint256 unfilledCollateral; // at order tick
         uint256 toPool;
         uint256 protocolFee;
     }
@@ -180,7 +169,6 @@ contract BatchAuction is AccessControl {
         info = OrderInfo(marketId, owner, side, orderType, tick, lots, batchId);
     }
 
-    /// @dev Compute settlement amounts for an order.
     function _settleAmounts(OrderInfo memory o, BatchResult memory result)
         internal
         view
@@ -188,90 +176,93 @@ contract BatchAuction is AccessControl {
     {
         s.filledLots = _calcFilledLots(o.lots, o.side, result);
         uint256 unfilledLots = o.lots - s.filledLots;
+
+        uint256 lockedForFilled = _collateral(s.filledLots, o.tick, o.side);
+        s.filledCollateral = _collateral(s.filledLots, result.clearingTick, o.side);
+        s.excessRefund = lockedForFilled - s.filledCollateral;
         s.unfilledCollateral = _collateral(unfilledLots, o.tick, o.side);
-        uint256 filledCollateral = _collateral(o.lots, o.tick, o.side) - s.unfilledCollateral;
-        s.protocolFee = feeModel.calculateTakerFee(filledCollateral);
-        s.toPool = filledCollateral - s.protocolFee;
+        s.protocolFee = feeModel.calculateFee(s.filledCollateral);
+        s.toPool = s.filledCollateral - s.protocolFee;
     }
 
-    /// @dev Settle a single order against a batch result. Used by clearBatch (inline)
-    ///      and claimFills (fallback). Validates market/batch, performs pro-rata fill,
-    ///      settles vault, and mints outcome tokens.
     function _settleOrder(uint256 orderId, BatchResult memory result) internal {
         OrderInfo memory o = _readOrder(orderId);
         require(o.marketId == result.marketId, "BatchAuction: wrong market");
-        require(o.lots > 0, "BatchAuction: order empty");
 
-        // Determine expected batch and prevent double-settle
-        uint256 lastClaimed = lastClaimedBatch[orderId];
-        if (lastClaimed == 0) {
+        // Skip already-filled/cancelled orders
+        if (o.lots == 0) return;
+
+        // Safety: validate batch relationship
+        if (o.orderType == OrderType.GoodTilBatch) {
             require(o.batchId == result.batchId, "BatchAuction: wrong batch");
         } else {
-            require(o.orderType == OrderType.GoodTilCancel, "BatchAuction: already claimed");
-            require(lastClaimed + 1 == result.batchId, "BatchAuction: wrong batch");
+            require(o.batchId <= result.batchId, "BatchAuction: batch not reached");
         }
 
-        lastClaimedBatch[orderId] = result.batchId;
-
-        // Non-participating order: just mark as claimed
+        // Non-participating order (tick doesn't cross clearing)
         if (!_orderParticipates(o.side, o.tick, result.clearingTick)) {
-            emit FillClaimed(orderId, o.owner, 0, 0);
+            if (o.orderType == OrderType.GoodTilBatch) {
+                // GTB non-participating: return collateral to wallet, remove from book
+                uint256 collateral = _collateral(o.lots, o.tick, o.side);
+                orderBook.reduceOrderLots(orderId, o.lots);
+                orderBook.updateTreeVolume(o.marketId, o.side, o.tick, -int256(o.lots));
+                if (collateral > 0) {
+                    vault.unlock(o.owner, collateral);
+                    vault.withdrawTo(o.owner, collateral);
+                }
+            } else {
+                // GTC non-participating: roll to next batch, leave in tree
+                orderBook.pushBatchOrderId(o.marketId, result.batchId + 1, orderId);
+            }
+            emit OrderSettled(orderId, o.owner, 0, 0);
             return;
         }
 
+        // Participating order — compute fills at clearing price
         SettleAmounts memory s = _settleAmounts(o, result);
 
-        if (o.orderType == OrderType.GoodTilCancel && s.filledLots < o.lots) {
-            // GTC partial fill: only remove filled lots, leave unfilled resting
-            orderBook.reduceOrderLots(orderId, s.filledLots);
-            orderBook.updateTreeVolume(o.marketId, o.side, o.tick, -int256(s.filledLots));
-            vault.settleFill(o.owner, o.marketId, s.toPool, feeModel.protocolFeeCollector(), s.protocolFee, 0, false);
-        } else {
-            // GTB or GTC full fill: remove entire order from the book
-            // Unfilled collateral is returned directly to user's wallet
-            orderBook.reduceOrderLots(orderId, o.lots);
-            orderBook.updateTreeVolume(o.marketId, o.side, o.tick, -int256(o.lots));
-            vault.settleFill(o.owner, o.marketId, s.toPool, feeModel.protocolFeeCollector(), s.protocolFee, s.unfilledCollateral, true);
+        if (s.filledLots == 0) {
+            // Edge case: participating but zero fill (shouldn't happen normally)
+            if (o.orderType == OrderType.GoodTilCancel) {
+                orderBook.pushBatchOrderId(o.marketId, result.batchId + 1, orderId);
+            }
+            emit OrderSettled(orderId, o.owner, 0, 0);
+            return;
         }
 
+        bool fullyFilled = s.filledLots == o.lots;
+
+        if (fullyFilled || o.orderType == OrderType.GoodTilBatch) {
+            // Full fill or GTB: remove entire order, return unfilled + excess to wallet
+            orderBook.reduceOrderLots(orderId, o.lots);
+            orderBook.updateTreeVolume(o.marketId, o.side, o.tick, -int256(o.lots));
+            vault.settleFill(
+                o.owner, o.marketId, s.toPool,
+                feeModel.protocolFeeCollector(), s.protocolFee,
+                s.unfilledCollateral + s.excessRefund, true
+            );
+        } else {
+            // GTC partial fill: reduce filled lots, return excess refund, roll remainder
+            orderBook.reduceOrderLots(orderId, s.filledLots);
+            orderBook.updateTreeVolume(o.marketId, o.side, o.tick, -int256(s.filledLots));
+            vault.settleFill(
+                o.owner, o.marketId, s.toPool,
+                feeModel.protocolFeeCollector(), s.protocolFee,
+                s.excessRefund, s.excessRefund > 0
+            );
+            // Roll to next batch
+            orderBook.pushBatchOrderId(o.marketId, result.batchId + 1, orderId);
+        }
+
+        // Mint outcome tokens
         if (s.filledLots > 0) {
             outcomeToken.mintSingle(o.owner, o.marketId, s.filledLots, o.side == Side.Bid);
         }
 
-        uint256 released = (o.orderType == OrderType.GoodTilCancel && s.filledLots < o.lots) ? 0 : s.unfilledCollateral;
-        emit FillClaimed(orderId, o.owner, s.filledLots, released);
-    }
-
-    // -------------------------------------------------------------------------
-    // Claim fills — public fallback (pro-rata settlement)
-    // -------------------------------------------------------------------------
-
-    /// @notice Claim fills for an order after its batch has been cleared.
-    ///         Fallback for orders not settled inline by clearBatch.
-    /// @param orderId The order to claim fills for.
-    function claimFills(uint256 orderId) external {
-        OrderInfo memory o = _readOrder(orderId);
-
-        // Determine which batch to claim
-        uint256 batchToClaim;
-        uint256 lastClaimed = lastClaimedBatch[orderId];
-        if (lastClaimed == 0) {
-            batchToClaim = o.batchId;
-        } else {
-            require(o.orderType == OrderType.GoodTilCancel, "BatchAuction: already claimed");
-            require(o.lots > 0, "BatchAuction: order fully filled");
-            batchToClaim = lastClaimed + 1;
-        }
-
-        BatchResult memory result = batchResults[o.marketId][batchToClaim];
-        require(result.timestamp != 0, "BatchAuction: batch not cleared");
-
-        _settleOrder(orderId, result);
-    }
-
-    /// @notice Check if fills have been claimed for an order (backward-compatible view).
-    function claimed(uint256 orderId) external view returns (bool) {
-        return lastClaimedBatch[orderId] > 0;
+        uint256 released = (fullyFilled || o.orderType == OrderType.GoodTilBatch)
+            ? s.unfilledCollateral + s.excessRefund
+            : s.excessRefund;
+        emit OrderSettled(orderId, o.owner, s.filledLots, released);
     }
 
     function _orderParticipates(Side side, uint256 tick, uint256 clearingTick) internal pure returns (bool) {
@@ -289,53 +280,9 @@ contract BatchAuction is AccessControl {
     }
 
     // -------------------------------------------------------------------------
-    // Prune expired orders
-    // -------------------------------------------------------------------------
-
-    /// @notice Prune a GoodTilBatch order that has expired (batch has advanced).
-    ///         Unlocks the order's collateral.
-    /// @param orderId The expired order to prune.
-    function pruneExpiredOrder(uint256 orderId) external {
-        OrderInfo memory o = _readOrder(orderId);
-
-        require(o.orderType == OrderType.GoodTilBatch, "BatchAuction: not GTB order");
-        require(o.lots > 0, "BatchAuction: order already empty");
-
-        (, , , uint32 currentBatchId, , , ) = orderBook.markets(o.marketId);
-        require(currentBatchId > o.batchId, "BatchAuction: batch not yet advanced");
-
-        // Batch must have been cleared
-        BatchResult memory result = batchResults[o.marketId][o.batchId];
-        require(result.timestamp != 0, "BatchAuction: batch not cleared");
-
-        // If the order participated in clearing, it must be claimed first
-        // to ensure filled collateral flows to market pool (prevents settlement bypass)
-        if (_orderParticipates(o.side, o.tick, result.clearingTick)) {
-            require(lastClaimedBatch[orderId] >= o.batchId, "BatchAuction: claim fills first");
-        }
-
-        // Mark as claimed to prevent any future claimFills attempt
-        lastClaimedBatch[orderId] = o.batchId;
-
-        uint256 collateral = _collateral(o.lots, o.tick, o.side);
-
-        // Remove from book
-        orderBook.reduceOrderLots(orderId, o.lots);
-        orderBook.updateTreeVolume(o.marketId, o.side, o.tick, -int256(o.lots));
-
-        if (collateral > 0) {
-            vault.unlock(o.owner, collateral);
-            vault.withdrawTo(o.owner, collateral);
-        }
-
-        emit OrderPruned(orderId, msg.sender);
-    }
-
-    // -------------------------------------------------------------------------
     // View helpers
     // -------------------------------------------------------------------------
 
-    /// @notice Get the batch result for a specific market and batch.
     function getBatchResult(uint256 marketId, uint256 batchId) external view returns (BatchResult memory) {
         return batchResults[marketId][batchId];
     }

@@ -83,7 +83,7 @@ contract PythResolver is ReentrancyGuard {
         require(_pyth != address(0), "PythResolver: zero pyth");
         require(_factory != address(0), "PythResolver: zero factory");
         pyth = IPyth(_pyth);
-        factory = MarketFactory(payable(_factory));
+        factory = MarketFactory(_factory);
         admin = msg.sender;
     }
 

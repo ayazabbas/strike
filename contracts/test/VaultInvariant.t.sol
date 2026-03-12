@@ -3,21 +3,26 @@ pragma solidity ^0.8.25;
 
 import "forge-std/Test.sol";
 import "../src/Vault.sol";
+import "./mocks/MockUSDT.sol";
 
-/// @notice Invariant test: Vault BNB balance == sum of all account balances + all known market pools.
+/// @notice Invariant test: Vault USDT balance == sum of all account balances + all known market pools.
 contract VaultInvariantTest is Test {
     Vault public vault;
+    MockUSDT public usdt;
     VaultHandler public handler;
 
     address public admin = address(0x1);
 
     function setUp() public {
+        usdt = new MockUSDT();
+
         vm.startPrank(admin);
-        vault = new Vault(admin);
-        handler = new VaultHandler(vault);
+        vault = new Vault(admin, address(usdt));
+        handler = new VaultHandler(vault, usdt);
         vault.grantRole(vault.PROTOCOL_ROLE(), address(handler));
         vm.stopPrank();
 
+        handler.approveAll();
         targetContract(address(handler));
     }
 
@@ -35,27 +40,37 @@ contract VaultInvariantTest is Test {
         }
 
         assertEq(
-            address(vault).balance,
+            usdt.balanceOf(address(vault)),
             totalAccountBalances + totalPools,
-            "Vault BNB != sum(balances) + sum(pools)"
+            "Vault USDT != sum(balances) + sum(pools)"
         );
     }
 }
 
 contract VaultHandler is Test {
     Vault public vault;
+    MockUSDT public usdt;
 
     address[5] internal _actors;
     uint256[] public marketIds;
     mapping(uint256 => bool) public isMarket;
 
-    constructor(Vault _vault) {
+    constructor(Vault _vault, MockUSDT _usdt) {
         vault = _vault;
+        usdt = _usdt;
         _actors[0] = address(0x1001);
         _actors[1] = address(0x1002);
         _actors[2] = address(0x1003);
         _actors[3] = address(0x1004);
         _actors[4] = address(0x1005);
+
+    }
+
+    function approveAll() external {
+        for (uint256 i = 0; i < 5; i++) {
+            vm.prank(_actors[i]);
+            usdt.approve(address(vault), type(uint256).max);
+        }
     }
 
     function getActors() public view returns (address[] memory out) {
@@ -69,11 +84,10 @@ contract VaultHandler is Test {
 
     function deposit(uint256 actorIdx, uint256 amount) external {
         address actor = _actors[actorIdx % 5];
-        amount = bound(amount, 1 wei, 10 ether);
+        amount = bound(amount, 1, 10 ether);
 
-        // Fund the handler and deposit via depositFor (protocol role)
-        vm.deal(address(this), amount);
-        vault.depositFor{value: amount}(actor);
+        usdt.mint(actor, amount);
+        vault.depositFor(actor, amount);
     }
 
     function withdraw(uint256 actorIdx, uint256 amount) external {
@@ -81,7 +95,6 @@ contract VaultHandler is Test {
         uint256 avail = vault.available(actor);
         if (avail == 0) return;
         amount = bound(amount, 1, avail);
-
         vault.withdrawTo(actor, amount);
     }
 
@@ -90,7 +103,6 @@ contract VaultHandler is Test {
         uint256 avail = vault.available(actor);
         if (avail == 0) return;
         amount = bound(amount, 1, avail);
-
         vault.lock(actor, amount);
     }
 
@@ -99,7 +111,6 @@ contract VaultHandler is Test {
         uint256 lck = vault.locked(actor);
         if (lck == 0) return;
         amount = bound(amount, 1, lck);
-
         vault.unlock(actor, amount);
     }
 

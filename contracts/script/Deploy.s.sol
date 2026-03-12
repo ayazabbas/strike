@@ -11,23 +11,9 @@ import {MarketFactory} from "../src/MarketFactory.sol";
 import {PythResolver} from "../src/PythResolver.sol";
 import {Redemption} from "../src/Redemption.sol";
 import {MockPyth} from "@pythnetwork/pyth-sdk-solidity/MockPyth.sol";
+import {MockUSDT} from "../test/mocks/MockUSDT.sol";
 
 /// @notice Deploy the full Strike protocol and seed a test market (devnet/anvil).
-///
-///   Deployment order (PythResolver.factory is immutable, so MarketFactory
-///   must be deployed first):
-///
-///     1. FeeModel
-///     2. OutcomeToken
-///     3. Vault
-///     4. OrderBook
-///     5. BatchAuction
-///     6. MockPyth (SDK standard mock)
-///     7. MarketFactory      (needs orderBook, outcomeToken)
-///     8. PythResolver        (needs mockPyth, factory)
-///     9. Wire roles
-///    10. Create test market
-///    11. Print addresses as JSON
 contract DeployScript is Script {
     function run() external {
         // Default to anvil account 0 if PRIVATE_KEY not set
@@ -43,26 +29,29 @@ contract DeployScript is Script {
 
         vm.startBroadcast(pk);
 
-        // 1. FeeModel
+        // 1. MockUSDT (test collateral)
+        MockUSDT usdt = new MockUSDT();
+
+        // 2. FeeModel (20 bps = 0.20% uniform fee)
         FeeModel feeModel = new FeeModel(
             deployer,
-            30,            // 0.30% taker fee
-            0,             // 0% maker rebate
-            0.005 ether,   // resolver bounty
-            0.0001 ether,  // pruner bounty
+            20,            // 0.20% uniform fee
+            0,             // clearing bounty disabled
+            5e18,          // resolver bounty (5 USDT)
+            1e17,          // pruner bounty (0.1 USDT)
             deployer       // protocol fee collector
         );
 
-        // 2. OutcomeToken
+        // 3. OutcomeToken
         OutcomeToken outcomeToken = new OutcomeToken(deployer);
 
-        // 3. Vault
-        Vault vault = new Vault(deployer);
+        // 4. Vault (ERC20 collateral)
+        Vault vault = new Vault(deployer, address(usdt));
 
-        // 4. OrderBook
+        // 5. OrderBook
         OrderBook orderBook = new OrderBook(deployer, address(vault));
 
-        // 5. BatchAuction
+        // 6. BatchAuction
         BatchAuction batchAuction = new BatchAuction(
             deployer,
             address(orderBook),
@@ -71,10 +60,10 @@ contract DeployScript is Script {
             address(outcomeToken)
         );
 
-        // 6. MockPyth (60s valid period, 1 wei fee)
+        // 7. MockPyth (60s valid period, 1 wei fee)
         MockPyth mockPyth = new MockPyth(60, 1);
 
-        // 7. MarketFactory
+        // 8. MarketFactory
         MarketFactory factory = new MarketFactory(
             deployer,
             address(orderBook),
@@ -82,20 +71,20 @@ contract DeployScript is Script {
             deployer // fee collector
         );
 
-        // 8. PythResolver
+        // 9. PythResolver
         PythResolver pythResolver = new PythResolver(
             address(mockPyth),
             address(factory)
         );
 
-        // 9. Redemption
+        // 10. Redemption
         Redemption redemption = new Redemption(
             address(factory),
             address(outcomeToken),
             address(vault)
         );
 
-        // 10. Wire roles
+        // 11. Wire roles
         orderBook.grantRole(orderBook.OPERATOR_ROLE(), address(batchAuction));
         orderBook.grantRole(orderBook.OPERATOR_ROLE(), address(factory));
 
@@ -109,22 +98,12 @@ contract DeployScript is Script {
         factory.grantRole(factory.ADMIN_ROLE(), address(pythResolver));
         factory.grantRole(factory.MARKET_CREATOR_ROLE(), deployer);
 
-        // 11. Create test market: BTC/USD, 1 hour, 12s batches
-        bytes32 priceId = bytes32(uint256(1));
-        int64 strikePrice = int64(5_000_000_000_000); // $50,000 with expo=-8
-        uint256 factoryMarketId = factory.createMarket(
-            priceId,
-            strikePrice,
-            3600,  // 1 hour duration
-            12,    // 12s batch interval
-            1      // min 1 lot
-        );
-
         vm.stopBroadcast();
 
-        // 12. Print deployed addresses as JSON (grep-able by deploy container)
+        // 12. Print deployed addresses as JSON
         string memory json = string.concat(
-            '{"feeModel":"', vm.toString(address(feeModel)),
+            '{"usdt":"', vm.toString(address(usdt)),
+            '","feeModel":"', vm.toString(address(feeModel)),
             '","outcomeToken":"', vm.toString(address(outcomeToken)),
             '","vault":"', vm.toString(address(vault)),
             '","orderBook":"', vm.toString(address(orderBook)),
@@ -136,7 +115,6 @@ contract DeployScript is Script {
             '","marketFactory":"', vm.toString(address(factory)),
             '","pythResolver":"', vm.toString(address(pythResolver)),
             '","redemption":"', vm.toString(address(redemption)),
-            '","testMarketFactoryId":"', vm.toString(factoryMarketId),
             '"}'
         );
         console.log(json);
