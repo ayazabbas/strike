@@ -374,8 +374,8 @@ contract OrderBookTest is Test {
         uint256 mId = _setupMarket();
         uint256 orderId = _placeOrder(user1, mId, Side.Bid, 50, 10);
 
-        vm.expectEmit(true, true, false, false);
-        emit OrderBook.OrderCancelled(orderId, user1);
+        vm.expectEmit(true, true, true, false);
+        emit OrderBook.OrderCancelled(orderId, mId, user1);
 
         vm.prank(user1);
         book.cancelOrder(orderId);

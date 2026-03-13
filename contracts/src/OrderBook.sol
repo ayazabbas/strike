@@ -61,7 +61,7 @@ contract OrderBook is AccessControl, ReentrancyGuard {
         uint256 lots,
         uint256 batchId
     );
-    event OrderCancelled(uint256 indexed orderId, address indexed owner);
+    event OrderCancelled(uint256 indexed orderId, uint256 indexed marketId, address indexed owner);
 
     // -------------------------------------------------------------------------
     // Constructor
@@ -228,7 +228,7 @@ contract OrderBook is AccessControl, ReentrancyGuard {
         vault.unlock(msg.sender, totalReturn);
         vault.withdrawTo(msg.sender, totalReturn);
 
-        emit OrderCancelled(orderId, msg.sender);
+        emit OrderCancelled(orderId, marketId, msg.sender);
     }
 
     /// @notice Cancel an order on an expired market. Anyone can call this to
@@ -267,7 +267,7 @@ contract OrderBook is AccessControl, ReentrancyGuard {
         vault.unlock(owner, totalReturn);
         vault.withdrawTo(owner, totalReturn);
 
-        emit OrderCancelled(orderId, owner);
+        emit OrderCancelled(orderId, marketId, owner);
     }
 
     /// @notice Batch cancel expired orders. Anyone can call.
@@ -305,7 +305,7 @@ contract OrderBook is AccessControl, ReentrancyGuard {
             vault.unlock(owner, totalReturn);
             vault.withdrawTo(owner, totalReturn);
 
-            emit OrderCancelled(orderIds[i], owner);
+            emit OrderCancelled(orderIds[i], marketId, owner);
         }
     }
 
