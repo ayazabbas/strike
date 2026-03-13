@@ -92,19 +92,19 @@ forge test -vvv
 forge test --match-test testClearBatch -vvv
 ```
 
-## Contract Addresses (BSC Testnet)
+## Contract Addresses (BSC Testnet — V4)
 
 | Contract | Address |
 |----------|---------|
-| MarketFactory | `0xD7fE948535591a086a7991dfc8Eb9A4d55e330CB` |
-| OrderBook | `0xAFeeF2F0DBE473e4C2BC4b5981793F69804CfaD0` |
-| BatchAuction | `0xDB15B4BDC2A2595BbC03af25f225668c098e0ACC` |
-| Vault | `0xf7c51CC50F1589082850978BA8E779318299FeC9` |
-| OutcomeToken | `0x24bA7F171e82d4994cd2BD0f8899955076fEBff5` |
-| Redemption | `0x850DfD796FBb88f576D7136C5f205Cf2AEc01e74` |
-| FeeModel | `0x2EBB7d9468AC5ab8254Aeeac1c30A0878e1fB169` |
-| PythResolver | `0x3f1A1Fc66B7527532f87f8aA2957E27B2Bd9C11A` |
-| MockUSDT | `0x4Be5501EDDF6263984614840A13228D0ecbf8430` |
+| MarketFactory | `0x4460F2Bc7d4405fc3DBd9344F40D5A0f4a4dF4f0` |
+| OrderBook | `0x31EFda3d089CB5150b6aee57adDA3a7Aa97151A3` |
+| BatchAuction | `0xF22db29C2Fe828c5F31C6764d042b39419CBD3fd` |
+| Vault | `0xe19bB1799ed8C369980cb346014c68f83df1C294` |
+| OutcomeToken | `0x2C7E4d5b838D61141252b1c4c09618478C561f49` |
+| Redemption | `0xdBd7dFFEbf8F7a2a3772832D03Ed0a87a57Fb776` |
+| FeeModel | `0x958AA4E008765C1146b46701c5286eB5c57bd7E3` |
+| PythResolver | `0x9ffc6b4A6D86034fDD9a3758bC25361BFC994972` |
+| MockUSDT | `0x35c2731E24d88198cDc0128dD42fC2Ee969fB3fa` |
 
 ## History
 
