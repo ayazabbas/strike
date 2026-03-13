@@ -24,7 +24,7 @@ contract BatchAuctionTest is Test {
     address public user2 = address(0x4);
     address public user3 = address(0x5);
 
-    uint256 public constant LOT = 1e18;
+    uint256 public constant LOT = 1e16;
 
     function setUp() public {
         usdt = new MockUSDT();

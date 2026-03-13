@@ -35,7 +35,7 @@ contract IntegrationTest is Test {
 
     bytes32 public constant PRICE_ID = bytes32(uint256(0xB7C));
     int64 public constant STRIKE_PRICE = int64(50000_00000000);
-    uint256 public constant LOT = 1e18;
+    uint256 public constant LOT = 1e16;
 
     function setUp() public {
         usdt = new MockUSDT();
