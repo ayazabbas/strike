@@ -231,6 +231,47 @@ contract OrderBook is AccessControl, ReentrancyGuard {
         emit OrderCancelled(orderId, marketId, msg.sender);
     }
 
+    /// @notice Batch cancel multiple orders owned by the caller.
+    /// @dev Skips already-cancelled/filled orders (lots == 0) silently.
+    ///      Reverts the whole batch if any order is not owned by msg.sender.
+    function cancelOrders(uint256[] calldata orderIds) external nonReentrant {
+        for (uint256 i = 0; i < orderIds.length; i++) {
+            Order storage o = orders[orderIds[i]];
+
+            if (o.lots == 0) continue;
+
+            require(o.owner == msg.sender, "OrderBook: not owner");
+
+            uint256 lots = o.lots;
+            uint256 tick = o.tick;
+            uint256 marketId = o.marketId;
+            Side side = o.side;
+
+            uint256 collateral;
+            if (side == Side.Bid) {
+                collateral = (lots * LOT_SIZE * tick) / 100;
+            } else {
+                collateral = (lots * LOT_SIZE * (100 - tick)) / 100;
+            }
+
+            uint256 fee = feeModel.calculateFee(collateral);
+            uint256 totalReturn = collateral + fee;
+
+            o.lots = 0;
+
+            if (side == Side.Bid) {
+                bidTrees[marketId].update(tick, -int256(lots));
+            } else {
+                askTrees[marketId].update(tick, -int256(lots));
+            }
+
+            vault.unlock(msg.sender, totalReturn);
+            vault.withdrawTo(msg.sender, totalReturn);
+
+            emit OrderCancelled(orderIds[i], marketId, msg.sender);
+        }
+    }
+
     /// @notice Cancel an order on an expired market. Anyone can call this to
     ///         release escrowed funds back to the order owner.
     function cancelExpiredOrder(uint256 orderId) external nonReentrant {

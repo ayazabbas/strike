@@ -415,6 +415,120 @@ contract OrderBookTest is Test {
     }
 
     // =========================================================================
+    // cancelOrders (batch)
+    // =========================================================================
+
+    function test_CancelOrders_BatchCancelsAll() public {
+        uint256 mId = _setupMarket();
+
+        uint256 oid1 = _placeOrder(user1, mId, Side.Bid, 50, 10);
+        uint256 oid2 = _placeOrder(user1, mId, Side.Bid, 60, 5);
+        uint256 oid3 = _placeOrder(user1, mId, Side.Ask, 40, 10);
+        uint256 oid4 = _placeOrder(user1, mId, Side.Ask, 30, 5);
+
+        uint256 walletBefore = usdt.balanceOf(user1);
+
+        uint256 totalExpected = 0;
+        totalExpected += _calcCollateral(Side.Bid, 50, 10) + feeModel.calculateFee(_calcCollateral(Side.Bid, 50, 10));
+        totalExpected += _calcCollateral(Side.Bid, 60, 5) + feeModel.calculateFee(_calcCollateral(Side.Bid, 60, 5));
+        totalExpected += _calcCollateral(Side.Ask, 40, 10) + feeModel.calculateFee(_calcCollateral(Side.Ask, 40, 10));
+        totalExpected += _calcCollateral(Side.Ask, 30, 5) + feeModel.calculateFee(_calcCollateral(Side.Ask, 30, 5));
+
+        uint256[] memory ids = new uint256[](4);
+        ids[0] = oid1;
+        ids[1] = oid2;
+        ids[2] = oid3;
+        ids[3] = oid4;
+
+        vm.prank(user1);
+        book.cancelOrders(ids);
+
+        // All orders should have lots == 0
+        (, , , , uint64 lots1, , , , ) = book.orders(oid1);
+        (, , , , uint64 lots2, , , , ) = book.orders(oid2);
+        (, , , , uint64 lots3, , , , ) = book.orders(oid3);
+        (, , , , uint64 lots4, , , , ) = book.orders(oid4);
+        assertEq(lots1, 0);
+        assertEq(lots2, 0);
+        assertEq(lots3, 0);
+        assertEq(lots4, 0);
+
+        // All collateral + fees returned
+        assertEq(usdt.balanceOf(user1) - walletBefore, totalExpected);
+        assertEq(vault.locked(user1), 0);
+    }
+
+    function test_CancelOrders_SkipsAlreadyCancelled() public {
+        uint256 mId = _setupMarket();
+
+        uint256 oid1 = _placeOrder(user1, mId, Side.Bid, 50, 10);
+        uint256 oid2 = _placeOrder(user1, mId, Side.Bid, 60, 5);
+
+        // Cancel first order individually
+        vm.prank(user1);
+        book.cancelOrder(oid1);
+
+        uint256 walletBefore = usdt.balanceOf(user1);
+        uint256 expected = _calcCollateral(Side.Bid, 60, 5) + feeModel.calculateFee(_calcCollateral(Side.Bid, 60, 5));
+
+        uint256[] memory ids = new uint256[](2);
+        ids[0] = oid1;
+        ids[1] = oid2;
+
+        // Should not revert — skips oid1 silently
+        vm.prank(user1);
+        book.cancelOrders(ids);
+
+        (, , , , uint64 lots2, , , , ) = book.orders(oid2);
+        assertEq(lots2, 0);
+        assertEq(usdt.balanceOf(user1) - walletBefore, expected);
+    }
+
+    function test_CancelOrders_RevertsIfNotOwner() public {
+        uint256 mId = _setupMarket();
+        uint256 oid1 = _placeOrder(user1, mId, Side.Bid, 50, 10);
+
+        uint256[] memory ids = new uint256[](1);
+        ids[0] = oid1;
+
+        vm.expectRevert("OrderBook: not owner");
+        vm.prank(user2);
+        book.cancelOrders(ids);
+    }
+
+    function test_CancelOrders_MixedSides() public {
+        uint256 mId = _setupMarket();
+
+        uint256 oid1 = _placeOrder(user1, mId, Side.Bid, 40, 10);
+        uint256 oid2 = _placeOrder(user1, mId, Side.Bid, 70, 5);
+        uint256 oid3 = _placeOrder(user1, mId, Side.Ask, 30, 8);
+        uint256 oid4 = _placeOrder(user1, mId, Side.Ask, 60, 3);
+
+        // Verify tree state before
+        assertEq(book.bidVolumeAt(mId, 40), 10);
+        assertEq(book.bidVolumeAt(mId, 70), 5);
+        assertEq(book.askVolumeAt(mId, 30), 8);
+        assertEq(book.askVolumeAt(mId, 60), 3);
+
+        uint256[] memory ids = new uint256[](4);
+        ids[0] = oid1;
+        ids[1] = oid2;
+        ids[2] = oid3;
+        ids[3] = oid4;
+
+        vm.prank(user1);
+        book.cancelOrders(ids);
+
+        // Trees should be zeroed
+        assertEq(book.bidVolumeAt(mId, 40), 0);
+        assertEq(book.bidVolumeAt(mId, 70), 0);
+        assertEq(book.askVolumeAt(mId, 30), 0);
+        assertEq(book.askVolumeAt(mId, 60), 0);
+        assertEq(book.totalBidVolume(mId), 0);
+        assertEq(book.totalAskVolume(mId), 0);
+    }
+
+    // =========================================================================
     // View functions
     // =========================================================================
 
