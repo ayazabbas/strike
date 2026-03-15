@@ -32,22 +32,24 @@ Strike is a fully on-chain prediction market protocol on BNB Chain. Traders buy 
 - **No on-chain batch interval enforcement**: Keeper decides clearing cadence.
 - **Permissioned market creation**: Requires MARKET_CREATOR_ROLE (no creation bond).
 
-## BSC Testnet V2 Addresses (deployed 2026-03-12)
+## BSC Testnet V6 Addresses (deployed 2026-03-15, batchCancel)
 
-- MockUSDT: `0x4Be5501EDDF6263984614840A13228D0ecbf8430`
-- Vault: `0xf7c51CC50F1589082850978BA8E779318299FeC9`
-- OrderBook: `0xAFeeF2F0DBE473e4C2BC4b5981793F69804CfaD0`
-- BatchAuction: `0xDB15B4BDC2A2595BbC03af25f225668c098e0ACC`
-- MarketFactory: `0x5b562aeD5db8e4799565F1092d3D2b3C851909b7`
-- PythResolver: `0x23a2553eD776bEE953cC4378F1BCcCe83eDF9BB3`
-- Redemption: `0x850DfD796FBb88f576D7136C5f205Cf2AEc01e74`
+- MockUSDT: `0xb7FFc63715fA15047DCf3b16b0036AD05c3D04F7`
+- FeeModel: `0xe94398B40b9e564E23c4c7dB6115F031B135B678`
+- OutcomeToken: `0x4FA0E346dC388C5A0dFFb7E7a801463CBDfe300B`
+- Vault: `0xc97B3f5F9dac0e6cC05a7e44a791aF1Ec199392e`
+- OrderBook: `0x3D20998b135A4800cD7717D0504366F62C3DD641`
+- BatchAuction: `0x558822b9Fd5be9905200d799A85A721f78a7a0f0`
+- MarketFactory: `0x997A4Ad2249BED986463046DC070b1BB6e0E60A4`
+- PythResolver: `0x96df2608f7c8DCAA4013700502C99531C4299F69`
+- Redemption: `0xA51a642D840154536EAd35437BeaDB9ED088511d`
 - Pyth Core: `0xd7308b14BF4008e7C7196eC35610B1427C5702EA`
 
 ## Tests
 
 ```bash
 cd contracts
-forge test        # 244 tests
+forge test        # 249 tests
 forge test -vvv   # verbose output
 ```
 
