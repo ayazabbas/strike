@@ -6,12 +6,14 @@ import "../src/OrderBook.sol";
 import "../src/Vault.sol";
 import "../src/FeeModel.sol";
 import "../src/ITypes.sol";
+import "../src/OutcomeToken.sol";
 import "./mocks/MockUSDT.sol";
 
 contract OrderBookTest is Test {
     OrderBook public book;
     Vault public vault;
     FeeModel public feeModel;
+    OutcomeToken public token;
     MockUSDT public usdt;
 
     address public admin = address(0x1);
@@ -28,7 +30,8 @@ contract OrderBookTest is Test {
         vm.startPrank(admin);
         vault = new Vault(admin, address(usdt));
         feeModel = new FeeModel(admin, 20, 0, 5e18, 1e17, admin);
-        book = new OrderBook(admin, address(vault), address(feeModel));
+        token = new OutcomeToken(admin);
+        book = new OrderBook(admin, address(vault), address(feeModel), address(token));
         book.grantRole(book.OPERATOR_ROLE(), operator);
         vault.grantRole(vault.PROTOCOL_ROLE(), address(book));
         vm.stopPrank();
@@ -48,7 +51,12 @@ contract OrderBookTest is Test {
 
     function test_Constructor_RevertZeroVault() public {
         vm.expectRevert("OrderBook: zero vault");
-        new OrderBook(admin, address(0), address(feeModel));
+        new OrderBook(admin, address(0), address(feeModel), address(token));
+    }
+
+    function test_Constructor_RevertZeroOutcomeToken() public {
+        vm.expectRevert("OrderBook: zero outcomeToken");
+        new OrderBook(admin, address(vault), address(feeModel), address(0));
     }
 
     // =========================================================================

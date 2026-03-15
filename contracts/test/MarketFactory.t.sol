@@ -32,7 +32,7 @@ contract MarketFactoryTest is Test {
         vault = new Vault(admin, address(usdt));
         token = new OutcomeToken(admin);
         FeeModel fm = new FeeModel(admin, 20, 0, 5e18, 1e17, admin);
-        book = new OrderBook(admin, address(vault), address(fm));
+        book = new OrderBook(admin, address(vault), address(fm), address(token));
 
         factory = new MarketFactory(admin, address(book), address(token), feeCollector);
 

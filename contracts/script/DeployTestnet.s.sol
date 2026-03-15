@@ -65,7 +65,7 @@ contract DeployTestnetScript is Script {
         Vault vault = new Vault(deployer, usdtAddr);
         d.vault = address(vault);
 
-        OrderBook orderBook = new OrderBook(deployer, address(vault), address(feeModel));
+        OrderBook orderBook = new OrderBook(deployer, address(vault), address(feeModel), address(outcomeToken));
         d.orderBook = address(orderBook);
 
         BatchAuction batchAuction = new BatchAuction(deployer, address(orderBook), address(vault), address(outcomeToken));
@@ -88,6 +88,7 @@ contract DeployTestnetScript is Script {
         vault.grantRole(vault.PROTOCOL_ROLE(), address(redemption));
         outcomeToken.grantRole(outcomeToken.MINTER_ROLE(), address(batchAuction));
         outcomeToken.grantRole(outcomeToken.MINTER_ROLE(), address(redemption));
+        outcomeToken.grantRole(outcomeToken.ESCROW_ROLE(), address(batchAuction));
         factory.grantRole(factory.ADMIN_ROLE(), address(pythResolver));
         factory.grantRole(factory.MARKET_CREATOR_ROLE(), deployer);
 

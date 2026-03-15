@@ -8,8 +8,10 @@ uint256 constant LOT_SIZE = 1e16;
 
 /// @notice Side of an order in a binary outcome market.
 enum Side {
-    Bid, // buying YES outcome (willing to pay tick/100)
-    Ask  // selling YES outcome (willing to accept tick/100)
+    Bid,     // buy YES: lock tick/100 * LOT_SIZE USDT → receive YES tokens at fill
+    Ask,     // buy NO:  lock (100-tick)/100 * LOT_SIZE USDT → receive NO tokens at fill
+    SellYes, // sell YES tokens: lock YES tokens → receive tick/100 * LOT_SIZE USDT at fill
+    SellNo   // sell NO tokens:  lock NO tokens → receive (100-tick)/100 * LOT_SIZE USDT at fill
 }
 
 /// @notice Order type classification.

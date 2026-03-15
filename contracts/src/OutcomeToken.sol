@@ -11,6 +11,7 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 ///         This contract does NOT handle collateral — that is the Vault's responsibility.
 contract OutcomeToken is ERC1155, AccessControl {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+    bytes32 public constant ESCROW_ROLE = keccak256("ESCROW_ROLE");
 
     // -------------------------------------------------------------------------
     // Events
@@ -107,6 +108,19 @@ contract OutcomeToken is ERC1155, AccessControl {
         uint256 tokenId = winningOutcome ? yesTokenId(marketId) : noTokenId(marketId);
         _burn(from, tokenId, amount);
         emit Redeemed(from, marketId, amount, winningOutcome);
+    }
+
+    // -------------------------------------------------------------------------
+    // Escrow burn (for sell order settlement)
+    // -------------------------------------------------------------------------
+
+    /// @notice Burns outcome tokens held in escrow (e.g. by OrderBook during sell order settlement).
+    /// @param from     Address holding the tokens (typically OrderBook).
+    /// @param tokenId  Token ID to burn.
+    /// @param amount   Number of tokens to burn.
+    function burnEscrow(address from, uint256 tokenId, uint256 amount) external onlyRole(ESCROW_ROLE) {
+        require(amount > 0, "OutcomeToken: zero amount");
+        _burn(from, tokenId, amount);
     }
 
     // -------------------------------------------------------------------------

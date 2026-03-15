@@ -44,7 +44,7 @@ contract IntegrationTest is Test {
         vault = new Vault(admin, address(usdt));
         token = new OutcomeToken(admin);
         feeModel = new FeeModel(admin, 20, 0, 5e18, 1e17, feeCollector);
-        book = new OrderBook(admin, address(vault), address(feeModel));
+        book = new OrderBook(admin, address(vault), address(feeModel), address(token));
         auction = new BatchAuction(admin, address(book), address(vault), address(token));
 
         mockPyth = new MockPyth(120, 1);

@@ -33,7 +33,7 @@ contract BatchAuctionTest is Test {
         vault = new Vault(admin, address(usdt));
         feeModel = new FeeModel(admin, 20, 0, 5e18, 1e17, admin);
         token = new OutcomeToken(admin);
-        book = new OrderBook(admin, address(vault), address(feeModel));
+        book = new OrderBook(admin, address(vault), address(feeModel), address(token));
         auction = new BatchAuction(admin, address(book), address(vault), address(token));
 
         book.grantRole(book.OPERATOR_ROLE(), operator);

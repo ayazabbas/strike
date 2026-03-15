@@ -131,11 +131,15 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
     // -------------------------------------------------------------------------
 
     function _collateral(uint256 lots, uint256 tick, Side side) internal pure returns (uint256) {
-        if (side == Side.Bid) {
+        if (side == Side.Bid || side == Side.SellYes) {
             return (lots * LOT_SIZE * tick) / 100;
         } else {
             return (lots * LOT_SIZE * (100 - tick)) / 100;
         }
+    }
+
+    function _isSellOrder(Side side) internal pure returns (bool) {
+        return side == Side.SellYes || side == Side.SellNo;
     }
 
     struct OrderInfo {
@@ -194,7 +198,7 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
             if (!_orderParticipates(o.side, o.tick, result.clearingTick)) continue;
 
             fills[i] = _calcFilledLots(o.lots, o.side, result);
-            if (o.side == Side.Bid) {
+            if (o.side == Side.Bid || o.side == Side.SellNo) {
                 pType[i] = 1;
                 totalFilledBid += fills[i];
             } else {
@@ -255,13 +259,23 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
     function _tryRollOrCancel(uint256 orderId, OrderInfo memory o, uint256 nextBatchId) internal {
         bool pushed = orderBook.pushBatchOrderId(o.marketId, nextBatchId, orderId);
         if (!pushed) {
-            // Next batch full — auto-cancel: unlock collateral + fee
-            uint256 collateral = _collateral(o.lots, o.tick, o.side);
-            uint256 fee = orderBook.feeModel().calculateFee(collateral);
             orderBook.reduceOrderLots(orderId, o.lots);
             orderBook.updateTreeVolume(o.marketId, o.side, o.tick, -int256(o.lots));
-            vault.unlock(o.owner, collateral + fee);
-            vault.withdrawTo(o.owner, collateral + fee);
+
+            if (_isSellOrder(o.side)) {
+                // Return outcome tokens to seller
+                bool isYes = (o.side == Side.SellYes);
+                uint256 tokenId = isYes
+                    ? outcomeToken.yesTokenId(o.marketId)
+                    : outcomeToken.noTokenId(o.marketId);
+                orderBook.transferEscrowTokens(o.owner, tokenId, o.lots);
+            } else {
+                // Return USDT collateral + fee
+                uint256 collateral = _collateral(o.lots, o.tick, o.side);
+                uint256 fee = orderBook.feeModel().calculateFee(collateral);
+                vault.unlock(o.owner, collateral + fee);
+                vault.withdrawTo(o.owner, collateral + fee);
+            }
             emit GtcAutoCancelled(orderId, o.owner);
         }
     }
@@ -280,17 +294,29 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
             require(o.batchId <= result.batchId, "BatchAuction: batch not reached");
         }
 
+        bool isSell = _isSellOrder(o.side);
+
         // Non-participating order (precomputedFill == 0 and tick doesn't cross)
         if (precomputedFill == 0 && !_orderParticipates(o.side, o.tick, result.clearingTick)) {
             if (o.orderType == OrderType.GoodTilBatch) {
-                // GTB non-participating: return collateral + fee to wallet, remove from book
-                uint256 collateral = _collateral(o.lots, o.tick, o.side);
-                uint256 fee = orderBook.feeModel().calculateFee(collateral);
                 orderBook.reduceOrderLots(orderId, o.lots);
                 orderBook.updateTreeVolume(o.marketId, o.side, o.tick, -int256(o.lots));
-                if (collateral + fee > 0) {
-                    vault.unlock(o.owner, collateral + fee);
-                    vault.withdrawTo(o.owner, collateral + fee);
+
+                if (isSell) {
+                    // GTB non-participating sell: return tokens
+                    bool isYes = (o.side == Side.SellYes);
+                    uint256 tokenId = isYes
+                        ? outcomeToken.yesTokenId(o.marketId)
+                        : outcomeToken.noTokenId(o.marketId);
+                    orderBook.transferEscrowTokens(o.owner, tokenId, o.lots);
+                } else {
+                    // GTB non-participating buy: return USDT
+                    uint256 collateral = _collateral(o.lots, o.tick, o.side);
+                    uint256 fee = orderBook.feeModel().calculateFee(collateral);
+                    if (collateral + fee > 0) {
+                        vault.unlock(o.owner, collateral + fee);
+                        vault.withdrawTo(o.owner, collateral + fee);
+                    }
                 }
             } else {
                 // GTC non-participating: roll to next batch (or auto-cancel if full)
@@ -309,13 +335,19 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
             return;
         }
 
-        // Participating order — compute settlement at clearing price
+        if (isSell) {
+            _settleSellOrder(orderId, o, result, precomputedFill);
+        } else {
+            _settleBuyOrder(orderId, o, result, precomputedFill);
+        }
+    }
+
+    function _settleBuyOrder(uint256 orderId, OrderInfo memory o, BatchResult memory result, uint256 precomputedFill) internal {
         SettleAmounts memory s = _settleAmounts(o, result, precomputedFill);
 
         bool fullyFilled = s.filledLots == o.lots;
 
         if (fullyFilled || o.orderType == OrderType.GoodTilBatch) {
-            // Full fill or GTB: remove entire order, return unfilled + excess to wallet
             orderBook.reduceOrderLots(orderId, o.lots);
             orderBook.updateTreeVolume(o.marketId, o.side, o.tick, -int256(o.lots));
             vault.settleFill(
@@ -324,7 +356,6 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
                 s.unfilledCollateral + s.unfilledFee + s.excessRefund, true
             );
         } else {
-            // GTC partial fill: reduce filled lots, return excess refund, roll remainder
             orderBook.reduceOrderLots(orderId, s.filledLots);
             orderBook.updateTreeVolume(o.marketId, o.side, o.tick, -int256(s.filledLots));
             vault.settleFill(
@@ -332,7 +363,6 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
                 orderBook.feeModel().protocolFeeCollector(), s.protocolFee,
                 s.excessRefund, s.excessRefund > 0
             );
-            // Roll to next batch (or auto-cancel if full)
             _tryRollOrCancel(orderId, o, result.batchId + 1);
         }
 
@@ -347,14 +377,57 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
         emit OrderSettled(orderId, o.owner, s.filledLots, released);
     }
 
+    function _settleSellOrder(uint256 orderId, OrderInfo memory o, BatchResult memory result, uint256 precomputedFill) internal {
+        uint256 filledLots = precomputedFill;
+        uint256 unfilledLots = o.lots - filledLots;
+        bool fullyFilled = filledLots == o.lots;
+
+        bool isYes = (o.side == Side.SellYes);
+        uint256 tokenId = isYes
+            ? outcomeToken.yesTokenId(o.marketId)
+            : outcomeToken.noTokenId(o.marketId);
+
+        // Compute seller payout at clearing price
+        uint256 payout = _collateral(filledLots, result.clearingTick, o.side);
+
+        // Burn filled tokens from OrderBook custody
+        if (filledLots > 0) {
+            outcomeToken.burnEscrow(address(orderBook), tokenId, filledLots);
+        }
+
+        // Pay seller from market pool
+        if (payout > 0) {
+            vault.redeemFromPool(o.marketId, o.owner, payout);
+        }
+
+        if (fullyFilled || o.orderType == OrderType.GoodTilBatch) {
+            orderBook.reduceOrderLots(orderId, o.lots);
+            orderBook.updateTreeVolume(o.marketId, o.side, o.tick, -int256(o.lots));
+            // Return unfilled tokens to seller
+            if (unfilledLots > 0) {
+                orderBook.transferEscrowTokens(o.owner, tokenId, unfilledLots);
+            }
+        } else {
+            // GTC partial fill: reduce filled, roll remainder
+            orderBook.reduceOrderLots(orderId, filledLots);
+            orderBook.updateTreeVolume(o.marketId, o.side, o.tick, -int256(filledLots));
+            _tryRollOrCancel(orderId, o, result.batchId + 1);
+        }
+
+        emit OrderSettled(orderId, o.owner, filledLots, payout);
+    }
+
     function _orderParticipates(Side side, uint256 tick, uint256 clearingTick) internal pure returns (bool) {
         if (clearingTick == 0) return false;
-        if (side == Side.Bid) return tick >= clearingTick;
+        // Bid and SellNo sit on the bid side: participate if tick >= clearingTick
+        if (side == Side.Bid || side == Side.SellNo) return tick >= clearingTick;
+        // Ask and SellYes sit on the ask side: participate if tick <= clearingTick
         return tick <= clearingTick;
     }
 
     function _calcFilledLots(uint256 lots, Side side, BatchResult memory result) internal pure returns (uint256) {
-        uint256 totalSideLots = side == Side.Bid ? result.totalBidLots : result.totalAskLots;
+        // SellNo sits on bid side, SellYes sits on ask side
+        uint256 totalSideLots = (side == Side.Bid || side == Side.SellNo) ? result.totalBidLots : result.totalAskLots;
         if (totalSideLots <= result.matchedLots) {
             return lots;
         }

@@ -3,17 +3,19 @@ pragma solidity ^0.8.25;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 import "./ITypes.sol";
 import "./SegmentTree.sol";
 import "./Vault.sol";
 import "./FeeModel.sol";
+import "./OutcomeToken.sol";
 
 /// @title OrderBook
 /// @notice Central limit order book for the Strike binary-outcome protocol.
 ///         Orders are placed at price ticks 1-99 (price = tick/100 per lot).
 ///         Each lot = LOT_SIZE collateral units. Collateral is ERC20 (USDT).
 ///         Orders feed into BatchAuction for periodic FBA clearing.
-contract OrderBook is AccessControl, ReentrancyGuard {
+contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
     using SegmentTree for SegmentTree.Tree;
 
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
@@ -32,6 +34,7 @@ contract OrderBook is AccessControl, ReentrancyGuard {
 
     Vault public immutable vault;
     FeeModel public immutable feeModel;
+    OutcomeToken public immutable outcomeToken;
 
     uint64 public nextOrderId = 1;
     uint32 public nextMarketId = 1;
@@ -67,12 +70,14 @@ contract OrderBook is AccessControl, ReentrancyGuard {
     // Constructor
     // -------------------------------------------------------------------------
 
-    constructor(address admin, address _vault, address _feeModel) {
+    constructor(address admin, address _vault, address _feeModel, address _outcomeToken) {
         require(_vault != address(0), "OrderBook: zero vault");
         require(_feeModel != address(0), "OrderBook: zero feeModel");
+        require(_outcomeToken != address(0), "OrderBook: zero outcomeToken");
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         vault = Vault(_vault);
         feeModel = FeeModel(_feeModel);
+        outcomeToken = OutcomeToken(_outcomeToken);
     }
 
     // -------------------------------------------------------------------------
@@ -142,15 +147,7 @@ contract OrderBook is AccessControl, ReentrancyGuard {
         require(lots <= type(uint64).max, "OrderBook: lots overflow");
         require(marketId <= type(uint32).max, "OrderBook: marketId overflow");
 
-        uint256 collateral;
-        if (side == Side.Bid) {
-            collateral = (lots * LOT_SIZE * tick) / 100;
-        } else {
-            collateral = (lots * LOT_SIZE * (100 - tick)) / 100;
-        }
-
-        // V2.1: Lock collateral + fee upfront to prevent pool insolvency
-        uint256 totalDeposit = collateral + feeModel.calculateFee(collateral);
+        bool isSell = (side == Side.SellYes || side == Side.SellNo);
 
         // Determine batch (overflow to next if current is full)
         uint256 batchId = m.currentBatchId;
@@ -175,19 +172,42 @@ contract OrderBook is AccessControl, ReentrancyGuard {
             });
         }
 
-        // Update segment tree
-        if (side == Side.Bid) {
-            bidTrees[marketId].update(tick, int256(lots));
+        if (isSell) {
+            // Sell order: lock outcome tokens instead of USDT
+            bool isYes = (side == Side.SellYes);
+            uint256 tokenId = isYes
+                ? outcomeToken.yesTokenId(marketId)
+                : outcomeToken.noTokenId(marketId);
+            outcomeToken.safeTransferFrom(msg.sender, address(this), tokenId, lots, "");
+
+            // SellYes sits on the ask side, SellNo sits on the bid side
+            if (side == Side.SellYes) {
+                askTrees[marketId].update(tick, int256(lots));
+            } else {
+                bidTrees[marketId].update(tick, int256(lots));
+            }
         } else {
-            askTrees[marketId].update(tick, int256(lots));
+            // Buy order: lock USDT collateral + fee
+            uint256 collateral;
+            if (side == Side.Bid) {
+                collateral = (lots * LOT_SIZE * tick) / 100;
+            } else {
+                collateral = (lots * LOT_SIZE * (100 - tick)) / 100;
+            }
+            uint256 totalDeposit = collateral + feeModel.calculateFee(collateral);
+
+            if (side == Side.Bid) {
+                bidTrees[marketId].update(tick, int256(lots));
+            } else {
+                askTrees[marketId].update(tick, int256(lots));
+            }
+
+            vault.depositFor(msg.sender, totalDeposit);
+            vault.lock(msg.sender, totalDeposit);
         }
 
         // Track order in batch
         batchOrderIds[marketId][batchId].push(orderId);
-
-        // Deposit collateral + fee via ERC20 transferFrom (user must approve Vault)
-        vault.depositFor(msg.sender, totalDeposit);
-        vault.lock(msg.sender, totalDeposit);
 
         emit OrderPlaced(orderId, marketId, msg.sender, side, tick, lots, batchId);
     }
@@ -206,27 +226,35 @@ contract OrderBook is AccessControl, ReentrancyGuard {
         uint256 marketId = o.marketId;
         Side side = o.side;
 
-        uint256 collateral;
-        if (side == Side.Bid) {
-            collateral = (lots * LOT_SIZE * tick) / 100;
-        } else {
-            collateral = (lots * LOT_SIZE * (100 - tick)) / 100;
-        }
-
-        // V2.1: Return collateral + fee (both were locked at placement)
-        uint256 fee = feeModel.calculateFee(collateral);
-        uint256 totalReturn = collateral + fee;
-
         o.lots = 0;
 
-        if (side == Side.Bid) {
+        // Update segment tree
+        if (side == Side.Bid || side == Side.SellNo) {
             bidTrees[marketId].update(tick, -int256(lots));
         } else {
             askTrees[marketId].update(tick, -int256(lots));
         }
 
-        vault.unlock(msg.sender, totalReturn);
-        vault.withdrawTo(msg.sender, totalReturn);
+        if (side == Side.SellYes || side == Side.SellNo) {
+            // Sell order: return outcome tokens
+            bool isYes = (side == Side.SellYes);
+            uint256 tokenId = isYes
+                ? outcomeToken.yesTokenId(marketId)
+                : outcomeToken.noTokenId(marketId);
+            outcomeToken.safeTransferFrom(address(this), msg.sender, tokenId, lots, "");
+        } else {
+            // Buy order: return USDT collateral + fee
+            uint256 collateral;
+            if (side == Side.Bid) {
+                collateral = (lots * LOT_SIZE * tick) / 100;
+            } else {
+                collateral = (lots * LOT_SIZE * (100 - tick)) / 100;
+            }
+            uint256 fee = feeModel.calculateFee(collateral);
+            uint256 totalReturn = collateral + fee;
+            vault.unlock(msg.sender, totalReturn);
+            vault.withdrawTo(msg.sender, totalReturn);
+        }
 
         emit OrderCancelled(orderId, marketId, msg.sender);
     }
@@ -247,26 +275,32 @@ contract OrderBook is AccessControl, ReentrancyGuard {
             uint256 marketId = o.marketId;
             Side side = o.side;
 
-            uint256 collateral;
-            if (side == Side.Bid) {
-                collateral = (lots * LOT_SIZE * tick) / 100;
-            } else {
-                collateral = (lots * LOT_SIZE * (100 - tick)) / 100;
-            }
-
-            uint256 fee = feeModel.calculateFee(collateral);
-            uint256 totalReturn = collateral + fee;
-
             o.lots = 0;
 
-            if (side == Side.Bid) {
+            if (side == Side.Bid || side == Side.SellNo) {
                 bidTrees[marketId].update(tick, -int256(lots));
             } else {
                 askTrees[marketId].update(tick, -int256(lots));
             }
 
-            vault.unlock(msg.sender, totalReturn);
-            vault.withdrawTo(msg.sender, totalReturn);
+            if (side == Side.SellYes || side == Side.SellNo) {
+                bool isYes = (side == Side.SellYes);
+                uint256 tokenId = isYes
+                    ? outcomeToken.yesTokenId(marketId)
+                    : outcomeToken.noTokenId(marketId);
+                outcomeToken.safeTransferFrom(address(this), msg.sender, tokenId, lots, "");
+            } else {
+                uint256 collateral;
+                if (side == Side.Bid) {
+                    collateral = (lots * LOT_SIZE * tick) / 100;
+                } else {
+                    collateral = (lots * LOT_SIZE * (100 - tick)) / 100;
+                }
+                uint256 fee = feeModel.calculateFee(collateral);
+                uint256 totalReturn = collateral + fee;
+                vault.unlock(msg.sender, totalReturn);
+                vault.withdrawTo(msg.sender, totalReturn);
+            }
 
             emit OrderCancelled(orderIds[i], marketId, msg.sender);
         }
@@ -287,26 +321,32 @@ contract OrderBook is AccessControl, ReentrancyGuard {
         uint256 marketId = o.marketId;
         Side side = o.side;
 
-        uint256 collateral;
-        if (side == Side.Bid) {
-            collateral = (lots * LOT_SIZE * tick) / 100;
-        } else {
-            collateral = (lots * LOT_SIZE * (100 - tick)) / 100;
-        }
-
-        uint256 fee = feeModel.calculateFee(collateral);
-        uint256 totalReturn = collateral + fee;
-
         o.lots = 0;
 
-        if (side == Side.Bid) {
+        if (side == Side.Bid || side == Side.SellNo) {
             bidTrees[marketId].update(tick, -int256(lots));
         } else {
             askTrees[marketId].update(tick, -int256(lots));
         }
 
-        vault.unlock(owner, totalReturn);
-        vault.withdrawTo(owner, totalReturn);
+        if (side == Side.SellYes || side == Side.SellNo) {
+            bool isYes = (side == Side.SellYes);
+            uint256 tokenId = isYes
+                ? outcomeToken.yesTokenId(marketId)
+                : outcomeToken.noTokenId(marketId);
+            outcomeToken.safeTransferFrom(address(this), owner, tokenId, lots, "");
+        } else {
+            uint256 collateral;
+            if (side == Side.Bid) {
+                collateral = (lots * LOT_SIZE * tick) / 100;
+            } else {
+                collateral = (lots * LOT_SIZE * (100 - tick)) / 100;
+            }
+            uint256 fee = feeModel.calculateFee(collateral);
+            uint256 totalReturn = collateral + fee;
+            vault.unlock(owner, totalReturn);
+            vault.withdrawTo(owner, totalReturn);
+        }
 
         emit OrderCancelled(orderId, marketId, owner);
     }
@@ -325,26 +365,32 @@ contract OrderBook is AccessControl, ReentrancyGuard {
             uint256 marketId = o.marketId;
             Side side = o.side;
 
-            uint256 collateral;
-            if (side == Side.Bid) {
-                collateral = (lots * LOT_SIZE * tick) / 100;
-            } else {
-                collateral = (lots * LOT_SIZE * (100 - tick)) / 100;
-            }
-
-            uint256 fee = feeModel.calculateFee(collateral);
-            uint256 totalReturn = collateral + fee;
-
             o.lots = 0;
 
-            if (side == Side.Bid) {
+            if (side == Side.Bid || side == Side.SellNo) {
                 bidTrees[marketId].update(tick, -int256(lots));
             } else {
                 askTrees[marketId].update(tick, -int256(lots));
             }
 
-            vault.unlock(owner, totalReturn);
-            vault.withdrawTo(owner, totalReturn);
+            if (side == Side.SellYes || side == Side.SellNo) {
+                bool isYes = (side == Side.SellYes);
+                uint256 tokenId = isYes
+                    ? outcomeToken.yesTokenId(marketId)
+                    : outcomeToken.noTokenId(marketId);
+                outcomeToken.safeTransferFrom(address(this), owner, tokenId, lots, "");
+            } else {
+                uint256 collateral;
+                if (side == Side.Bid) {
+                    collateral = (lots * LOT_SIZE * tick) / 100;
+                } else {
+                    collateral = (lots * LOT_SIZE * (100 - tick)) / 100;
+                }
+                uint256 fee = feeModel.calculateFee(collateral);
+                uint256 totalReturn = collateral + fee;
+                vault.unlock(owner, totalReturn);
+                vault.withdrawTo(owner, totalReturn);
+            }
 
             emit OrderCancelled(orderIds[i], marketId, owner);
         }
@@ -399,11 +445,16 @@ contract OrderBook is AccessControl, ReentrancyGuard {
     }
 
     function updateTreeVolume(uint256 marketId, Side side, uint256 tick, int256 delta) external onlyRole(OPERATOR_ROLE) {
-        if (side == Side.Bid) {
+        if (side == Side.Bid || side == Side.SellNo) {
             bidTrees[marketId].update(tick, delta);
         } else {
             askTrees[marketId].update(tick, delta);
         }
+    }
+
+    /// @notice Transfer outcome tokens held in escrow to a recipient (for sell order settlement).
+    function transferEscrowTokens(address to, uint256 tokenId, uint256 amount) external onlyRole(OPERATOR_ROLE) {
+        outcomeToken.safeTransferFrom(address(this), to, tokenId, amount, "");
     }
 
     function advanceBatch(uint256 marketId) external onlyRole(OPERATOR_ROLE) {
@@ -423,5 +474,19 @@ contract OrderBook is AccessControl, ReentrancyGuard {
 
     function cumulativeAskVolume(uint256 marketId, uint256 tick) external view returns (uint256) {
         return askTrees[marketId].prefixSum(tick);
+    }
+
+    // -------------------------------------------------------------------------
+    // ERC-165 override (AccessControl + ERC1155Holder)
+    // -------------------------------------------------------------------------
+
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        virtual
+        override(AccessControl, ERC1155Holder)
+        returns (bool)
+    {
+        return super.supportsInterface(interfaceId);
     }
 }
