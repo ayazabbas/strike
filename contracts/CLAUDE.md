@@ -6,7 +6,8 @@ Binary outcome prediction market protocol on BNB Chain. Users trade YES/NO outco
 
 ## Key Design Decisions
 
-- **Ask collateral model (Option A):** Askers lock BNB, not outcome tokens. Both sides are BNB-collateralized. This avoids requiring users to pre-hold tokens.
+- **4-sided orderbook (V7):** `Side` enum: `Bid`=0, `Ask`=1, `SellYes`=2, `SellNo`=3. Bid/Ask lock USDT. SellYes/SellNo lock outcome tokens in OrderBook custody (`ERC1155Holder`).
+- **placeOrder signature (V7):** `placeOrder(marketId, side, orderType, tick, lots)` — orderType is 3rd param.
 - **Pyth Core (standard pull oracle):** Resolution uses `IPyth.parsePriceFeedUpdates()` from `@pythnetwork/pyth-sdk-solidity`. Price feed IDs are `bytes32`. BSC testnet Pyth: `0xd7308b14BF4008e7C7196eC35610B1427C5702EA`.
 - **Order types:** GoodTilCancel (GTC) persists across batches; GoodTilBatch (GTB) expires after one batch.
 - **LOT_SIZE = 1e15 wei (0.001 BNB):** Defined in `ITypes.sol`. All collateral math uses this constant.

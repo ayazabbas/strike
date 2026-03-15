@@ -20,6 +20,16 @@ Strike is a fully on-chain prediction market protocol on BNB Chain. Traders buy 
 | **Redemption** | Post-resolution token redemption for USDT |
 | **SegmentTree** | Library for O(log N) clearing tick computation |
 
+## Key V7 Design Decisions (SellYes/SellNo)
+
+- **4-sided orderbook**: `Side` enum has `Bid`, `Ask`, `SellYes`, `SellNo`. SellYes/SellNo let token holders sell back into the book.
+- **Token custody**: OrderBook is `ERC1155Holder`. Sell orders transfer tokens in; cancel/non-fill returns them; fill burns them via `burnEscrow`.
+- **placeOrder signature changed**: `(marketId, side, orderType, tick, lots)` — note `orderType` is now 3rd param (was 4th).
+- **SellYes payout**: at clearing tick, `lots * clearingTick / 100 * LOT_SIZE` USDT from pool.
+- **SellNo payout**: at clearing tick, `lots * (100 - clearingTick) / 100 * LOT_SIZE` USDT from pool.
+- **User flow**: approve `OutcomeToken.setApprovalForAll(OrderBook, true)` once, then place SellYes/SellNo orders.
+- **ESCROW_ROLE**: new role on OutcomeToken, granted to BatchAuction. Used by `burnEscrow()`.
+
 ## Key V2 Design Decisions
 
 - **USDT collateral** (not BNB): 1 YES + 1 NO = 1 USDT. LOT_SIZE = 1e18. Users approve Vault before trading.
@@ -32,24 +42,24 @@ Strike is a fully on-chain prediction market protocol on BNB Chain. Traders buy 
 - **No on-chain batch interval enforcement**: Keeper decides clearing cadence.
 - **Permissioned market creation**: Requires MARKET_CREATOR_ROLE (no creation bond).
 
-## BSC Testnet V6 Addresses (deployed 2026-03-15, batchCancel)
+## BSC Testnet V7 Addresses (deployed 2026-03-15, SellYes/SellNo)
 
-- MockUSDT: `0xb7FFc63715fA15047DCf3b16b0036AD05c3D04F7`
-- FeeModel: `0xe94398B40b9e564E23c4c7dB6115F031B135B678`
-- OutcomeToken: `0x4FA0E346dC388C5A0dFFb7E7a801463CBDfe300B`
-- Vault: `0xc97B3f5F9dac0e6cC05a7e44a791aF1Ec199392e`
-- OrderBook: `0x3D20998b135A4800cD7717D0504366F62C3DD641`
-- BatchAuction: `0x558822b9Fd5be9905200d799A85A721f78a7a0f0`
-- MarketFactory: `0x997A4Ad2249BED986463046DC070b1BB6e0E60A4`
-- PythResolver: `0x96df2608f7c8DCAA4013700502C99531C4299F69`
-- Redemption: `0xA51a642D840154536EAd35437BeaDB9ED088511d`
+- MockUSDT: `0xb242dc031998b06772C63596Bfce091c80D4c3fA`
+- FeeModel: `0x5c49f364FfE404B041e1f44cCd3801Ea9d328034`
+- OutcomeToken: `0xaCbc1Ad38cF2767Ac57c5a23105e73A7DE319AEB`
+- Vault: `0x54DB2d048547b9b9426699833f3B57ab03b5F8dc`
+- OrderBook: `0x0B8557c02CCD2E59571fDc56D16ac2b5fC3E14D2`
+- BatchAuction: `0xd378411231665898E2cdB4c0e1cD723f6C696DA3`
+- MarketFactory: `0x9d6FC94A14a393Dd7b3F2FfBa0110D06010aD4a2`
+- PythResolver: `0x10CCAbaE996AE13403DbD9a6b1C38456D7B08bE9`
+- Redemption: `0x0eB52824d38E5682B876A79166C8B1045A0BBb2B`
 - Pyth Core: `0xd7308b14BF4008e7C7196eC35610B1427C5702EA`
 
 ## Tests
 
 ```bash
 cd contracts
-forge test        # 249 tests
+forge test        # 267 tests
 forge test -vvv   # verbose output
 ```
 
