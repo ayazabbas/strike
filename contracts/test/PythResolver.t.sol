@@ -37,12 +37,12 @@ contract PythResolverTest is Test {
         vm.startPrank(admin);
         vault = new Vault(admin, address(usdt));
         token = new OutcomeToken(admin);
-        FeeModel fm = new FeeModel(admin, 20, 0, 5e18, 1e17, admin);
+        FeeModel fm = new FeeModel(admin, 20, admin);
         book = new OrderBook(admin, address(vault), address(fm), address(token));
 
         mockPyth = new MockPyth(120, 1);
 
-        factory = new MarketFactory(admin, address(book), address(token), address(0x99));
+        factory = new MarketFactory(admin, address(book), address(token));
 
         book.grantRole(book.OPERATOR_ROLE(), address(factory));
         vault.grantRole(vault.PROTOCOL_ROLE(), address(book));
@@ -272,6 +272,73 @@ contract PythResolverTest is Test {
         vm.expectRevert("PythResolver: zero factory");
         new PythResolver(address(mockPyth), address(0));
     }
+
+    // =========================================================================
+    // Admin functions
+    // =========================================================================
+
+    function test_SetPendingAdmin_Basic() public {
+        address newAdmin = address(0x50);
+        vm.prank(admin);
+        resolver.setPendingAdmin(newAdmin);
+        assertEq(resolver.pendingAdmin(), newAdmin);
+    }
+
+    function test_SetPendingAdmin_RevertIfNotAdmin() public {
+        vm.expectRevert("PythResolver: not admin");
+        vm.prank(resolver1);
+        resolver.setPendingAdmin(resolver1);
+    }
+
+    function test_AcceptAdmin_Basic() public {
+        address newAdmin = address(0x50);
+        vm.prank(admin);
+        resolver.setPendingAdmin(newAdmin);
+
+        vm.prank(newAdmin);
+        resolver.acceptAdmin();
+
+        assertEq(resolver.admin(), newAdmin);
+        assertEq(resolver.pendingAdmin(), address(0));
+    }
+
+    function test_AcceptAdmin_RevertIfNotPendingAdmin() public {
+        address newAdmin = address(0x50);
+        vm.prank(admin);
+        resolver.setPendingAdmin(newAdmin);
+
+        vm.expectRevert("PythResolver: not pending admin");
+        vm.prank(resolver1);
+        resolver.acceptAdmin();
+    }
+
+    function test_SetConfThreshold_Basic() public {
+        vm.prank(admin);
+        resolver.setConfThreshold(500);
+        assertEq(resolver.confThresholdBps(), 500);
+    }
+
+    function test_SetConfThreshold_RevertIfNotAdmin() public {
+        vm.expectRevert("PythResolver: not admin");
+        vm.prank(resolver1);
+        resolver.setConfThreshold(500);
+    }
+
+    function test_SetConfThreshold_RevertIfTooLow() public {
+        vm.expectRevert("PythResolver: threshold too low");
+        vm.prank(admin);
+        resolver.setConfThreshold(9);
+    }
+
+    function test_SetConfThreshold_RevertIfTooHigh() public {
+        vm.expectRevert("PythResolver: bps exceeds 10000");
+        vm.prank(admin);
+        resolver.setConfThreshold(10001);
+    }
+
+    // =========================================================================
+    // Fuzz
+    // =========================================================================
 
     function testFuzz_Resolution_StrikeBoundary(int64 price, uint64 conf) public {
         price = int64(bound(int256(price), 40000_00000000, 60000_00000000));

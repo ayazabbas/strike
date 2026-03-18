@@ -126,6 +126,6 @@ contract VaultHandler is Test {
             isMarket[mId] = true;
         }
 
-        vault.addToMarketPool(actor, mId, amount);
+        vault.settleFill(actor, mId, amount, address(0x1), 0, 0, false);
     }
 }

@@ -24,8 +24,6 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
     // Constants
     // -------------------------------------------------------------------------
 
-    uint256 public constant MIN_TICK = 1;
-    uint256 public constant MAX_TICK = 99;
     uint256 public constant MAX_ORDERS_PER_BATCH = 400;
 
     // -------------------------------------------------------------------------
@@ -141,7 +139,7 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
         require(m.active, "OrderBook: market not active");
         require(!m.halted, "OrderBook: market halted");
         require(block.timestamp < m.expiryTime, "OrderBook: market expired");
-        require(tick >= MIN_TICK && tick <= MAX_TICK, "OrderBook: tick out of range");
+        require(tick >= 1 && tick <= SegmentTree.MAX_TICK, "OrderBook: tick out of range");
         require(lots > 0, "OrderBook: zero lots");
         require(lots >= m.minLots, "OrderBook: below min lots");
         require(lots <= type(uint64).max, "OrderBook: lots overflow");
@@ -315,7 +313,7 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
         require(batchOrderIds[marketId][batchId].length + params.length <= MAX_ORDERS_PER_BATCH, "OrderBook: batch overflow");
 
         for (uint256 i = 0; i < params.length; i++) {
-            require(params[i].tick >= MIN_TICK && params[i].tick <= MAX_TICK, "OrderBook: tick out of range");
+            require(params[i].tick >= 1 && params[i].tick <= SegmentTree.MAX_TICK, "OrderBook: tick out of range");
             require(params[i].lots > 0, "OrderBook: zero lots");
             require(params[i].lots >= m.minLots, "OrderBook: below min lots");
 
@@ -357,7 +355,7 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
             require(batchOrderIds[marketId][batchId].length + params.length <= MAX_ORDERS_PER_BATCH, "OrderBook: batch overflow");
 
             for (uint256 i = 0; i < params.length; i++) {
-                require(params[i].tick >= MIN_TICK && params[i].tick <= MAX_TICK, "OrderBook: tick out of range");
+                require(params[i].tick >= 1 && params[i].tick <= SegmentTree.MAX_TICK, "OrderBook: tick out of range");
                 require(params[i].lots > 0, "OrderBook: zero lots");
                 require(params[i].lots >= m.minLots, "OrderBook: below min lots");
 

@@ -37,6 +37,7 @@ contract DeployTestnetScript is Script {
         uint256 pk = vm.envUint("PRIVATE_KEY");
         address deployer = vm.addr(pk);
         address usdtAddr = vm.envAddress("USDT_ADDRESS");
+        address keeper = vm.envOr("KEEPER_ADDRESS", deployer);
 
         address pythAddr = block.chainid == 97
             ? PYTH_BSC_TESTNET
@@ -56,7 +57,7 @@ contract DeployTestnetScript is Script {
 
         vm.startBroadcast(pk);
 
-        FeeModel feeModel = new FeeModel(deployer, 20, 0, 5e18, 1e17, deployer);
+        FeeModel feeModel = new FeeModel(deployer, 20, deployer);
         d.feeModel = address(feeModel);
 
         OutcomeToken outcomeToken = new OutcomeToken(deployer);
@@ -71,7 +72,7 @@ contract DeployTestnetScript is Script {
         BatchAuction batchAuction = new BatchAuction(deployer, address(orderBook), address(vault), address(outcomeToken));
         d.batchAuction = address(batchAuction);
 
-        MarketFactory factory = new MarketFactory(deployer, address(orderBook), address(outcomeToken), deployer);
+        MarketFactory factory = new MarketFactory(deployer, address(orderBook), address(outcomeToken));
         d.factory = address(factory);
 
         PythResolver pythResolver = new PythResolver(pythAddr, address(factory));
@@ -90,7 +91,9 @@ contract DeployTestnetScript is Script {
         outcomeToken.grantRole(outcomeToken.MINTER_ROLE(), address(redemption));
         outcomeToken.grantRole(outcomeToken.ESCROW_ROLE(), address(batchAuction));
         factory.grantRole(factory.ADMIN_ROLE(), address(pythResolver));
+        factory.grantRole(factory.ADMIN_ROLE(), keeper);
         factory.grantRole(factory.MARKET_CREATOR_ROLE(), deployer);
+        factory.grantRole(factory.MARKET_CREATOR_ROLE(), keeper);
 
         vm.stopBroadcast();
 

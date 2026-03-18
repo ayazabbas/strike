@@ -28,7 +28,6 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
     /// @notice Default market parameters
     uint256 public defaultBatchInterval = 60; // seconds
     uint128 public defaultMinLots = 1;
-    address public feeCollector;
 
     /// @notice Market metadata stored by the factory
     struct MarketMeta {
@@ -72,23 +71,20 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
     event MarketStateChanged(uint256 indexed factoryMarketId, MarketState newState);
     event FactoryPaused(bool paused);
     event DefaultParamsUpdated(uint256 batchInterval, uint128 minLots);
-    event FeeCollectorUpdated(address indexed collector);
 
     // -------------------------------------------------------------------------
     // Constructor
     // -------------------------------------------------------------------------
 
-    constructor(address admin, address _orderBook, address _outcomeToken, address _feeCollector) {
+    constructor(address admin, address _orderBook, address _outcomeToken) {
         require(_orderBook != address(0), "MarketFactory: zero orderBook");
         require(_outcomeToken != address(0), "MarketFactory: zero outcomeToken");
-        require(_feeCollector != address(0), "MarketFactory: zero feeCollector");
 
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(ADMIN_ROLE, admin);
 
         orderBook = OrderBook(_orderBook);
         outcomeToken = OutcomeToken(_outcomeToken);
-        feeCollector = _feeCollector;
     }
 
     // -------------------------------------------------------------------------
@@ -233,12 +229,6 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
         defaultBatchInterval = _batchInterval;
         defaultMinLots = _minLots;
         emit DefaultParamsUpdated(_batchInterval, _minLots);
-    }
-
-    function setFeeCollector(address _collector) external onlyRole(ADMIN_ROLE) {
-        require(_collector != address(0), "MarketFactory: zero collector");
-        feeCollector = _collector;
-        emit FeeCollectorUpdated(_collector);
     }
 
     // -------------------------------------------------------------------------

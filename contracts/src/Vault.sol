@@ -90,15 +90,6 @@ contract Vault is ReentrancyGuard, AccessControl {
         emit Unlocked(user, amount);
     }
 
-    function transferCollateral(address from, address to, uint256 amount) external onlyRole(PROTOCOL_ROLE) {
-        require(amount > 0, "Vault: zero amount");
-        require(locked[from] >= amount, "Vault: insufficient locked balance");
-        locked[from] -= amount;
-        balance[from] -= amount;
-        balance[to] += amount;
-        emit CollateralTransferred(from, to, amount);
-    }
-
     // -------------------------------------------------------------------------
     // Settlement (combined operation for gas efficiency)
     // -------------------------------------------------------------------------
@@ -141,15 +132,6 @@ contract Vault is ReentrancyGuard, AccessControl {
     // -------------------------------------------------------------------------
     // Market pool
     // -------------------------------------------------------------------------
-
-    function addToMarketPool(address user, uint256 marketId, uint256 amount) external onlyRole(PROTOCOL_ROLE) {
-        require(amount > 0, "Vault: zero amount");
-        require(locked[user] >= amount, "Vault: insufficient locked balance");
-        locked[user] -= amount;
-        balance[user] -= amount;
-        marketPool[marketId] += amount;
-        emit AddedToMarketPool(marketId, amount);
-    }
 
     function redeemFromPool(uint256 marketId, address to, uint256 amount) external onlyRole(PROTOCOL_ROLE) nonReentrant {
         require(amount > 0, "Vault: zero amount");

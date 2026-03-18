@@ -28,9 +28,6 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
     /// @notice marketId => batchId => BatchResult
     mapping(uint256 => mapping(uint256 => BatchResult)) public batchResults;
 
-    /// @notice marketId => timestamp of last batch clear
-    mapping(uint256 => uint256) public lastClearTime;
-
     // -------------------------------------------------------------------------
     // Events
     // -------------------------------------------------------------------------
@@ -108,7 +105,6 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
         });
 
         batchResults[marketId][currentBatchId] = result;
-        lastClearTime[marketId] = block.timestamp;
 
         // Advance batch FIRST — new orders go to currentBatchId+1
         orderBook.advanceBatch(marketId);

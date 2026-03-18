@@ -36,9 +36,6 @@ contract DeployScript is Script {
         FeeModel feeModel = new FeeModel(
             deployer,
             20,            // 0.20% uniform fee
-            0,             // clearing bounty disabled
-            5e18,          // resolver bounty (5 USDT)
-            1e17,          // pruner bounty (0.1 USDT)
             deployer       // protocol fee collector
         );
 
@@ -66,8 +63,7 @@ contract DeployScript is Script {
         MarketFactory factory = new MarketFactory(
             deployer,
             address(orderBook),
-            address(outcomeToken),
-            deployer // fee collector
+            address(outcomeToken)
         );
 
         // 9. PythResolver

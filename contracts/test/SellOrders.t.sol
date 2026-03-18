@@ -44,12 +44,12 @@ contract SellOrdersTest is Test {
         vault = new Vault(admin, address(usdt));
         token = new OutcomeToken(admin);
         // Zero-fee model for clean accounting in tests
-        feeModel = new FeeModel(admin, 0, 0, 5e18, 1e17, feeCollector);
+        feeModel = new FeeModel(admin, 0, feeCollector);
         book = new OrderBook(admin, address(vault), address(feeModel), address(token));
         auction = new BatchAuction(admin, address(book), address(vault), address(token));
 
         mockPyth = new MockPyth(120, 1);
-        factory = new MarketFactory(admin, address(book), address(token), feeCollector);
+        factory = new MarketFactory(admin, address(book), address(token));
         resolver = new PythResolver(address(mockPyth), address(factory));
         redemption = new Redemption(address(factory), address(token), address(vault));
 

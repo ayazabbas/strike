@@ -217,28 +217,6 @@ contract VaultTest is Test {
         vault.unlock(user1, 2 ether);
     }
 
-    function test_TransferCollateral_Basic() public {
-        vm.prank(protocol);
-        vault.depositFor(user1, 10 ether);
-        vm.prank(protocol);
-        vault.lock(user1, 5 ether);
-        vm.prank(protocol);
-        vault.transferCollateral(user1, user2, 5 ether);
-        assertEq(vault.balance(user1), 5 ether);
-        assertEq(vault.locked(user1), 0);
-        assertEq(vault.balance(user2), 5 ether);
-    }
-
-    function test_TransferCollateral_RevertIfInsufficientLocked() public {
-        vm.prank(protocol);
-        vault.depositFor(user1, 5 ether);
-        vm.prank(protocol);
-        vault.lock(user1, 3 ether);
-        vm.expectRevert("Vault: insufficient locked balance");
-        vm.prank(protocol);
-        vault.transferCollateral(user1, user2, 4 ether);
-    }
-
     function test_Emergency_ActivatesMode() public {
         vm.prank(admin);
         vault.activateEmergency();
@@ -293,6 +271,82 @@ contract VaultTest is Test {
         vm.expectRevert("Vault: no balance");
         vm.prank(user1);
         vault.emergencyWithdraw();
+    }
+
+    function test_EmergencyDrainPool_Basic() public {
+        // Fund a market pool via settleFill
+        vm.prank(protocol);
+        vault.depositFor(user1, 10 ether);
+        vm.prank(protocol);
+        vault.lock(user1, 5 ether);
+        vm.prank(protocol);
+        vault.settleFill(user1, 1, 5 ether, admin, 0, 0, false);
+        assertEq(vault.marketPool(1), 5 ether);
+
+        // Activate emergency
+        vm.prank(admin);
+        vault.activateEmergency();
+        vm.warp(block.timestamp + vault.EMERGENCY_TIMELOCK() + 1);
+
+        uint256 balBefore = usdt.balanceOf(admin);
+        vm.prank(admin);
+        vault.emergencyDrainPool(1, admin);
+
+        assertEq(vault.marketPool(1), 0);
+        assertEq(usdt.balanceOf(admin) - balBefore, 5 ether);
+    }
+
+    function test_EmergencyDrainPool_RevertIfNotAdmin() public {
+        vm.prank(admin);
+        vault.activateEmergency();
+        vm.warp(block.timestamp + vault.EMERGENCY_TIMELOCK() + 1);
+
+        vm.expectRevert();
+        vm.prank(unauthorized);
+        vault.emergencyDrainPool(1, unauthorized);
+    }
+
+    function test_EmergencyDrainPool_RevertIfNotEmergency() public {
+        vm.expectRevert("Vault: not in emergency mode");
+        vm.prank(admin);
+        vault.emergencyDrainPool(1, admin);
+    }
+
+    function test_EmergencyDrainPool_RevertBeforeTimelock() public {
+        vm.prank(protocol);
+        vault.depositFor(user1, 5 ether);
+        vm.prank(protocol);
+        vault.lock(user1, 5 ether);
+        vm.prank(protocol);
+        vault.settleFill(user1, 1, 5 ether, admin, 0, 0, false);
+
+        vm.prank(admin);
+        vault.activateEmergency();
+        vm.warp(block.timestamp + 3 days);
+
+        vm.expectRevert("Vault: timelock not elapsed");
+        vm.prank(admin);
+        vault.emergencyDrainPool(1, admin);
+    }
+
+    function test_EmergencyDrainPool_RevertIfEmptyPool() public {
+        vm.prank(admin);
+        vault.activateEmergency();
+        vm.warp(block.timestamp + vault.EMERGENCY_TIMELOCK() + 1);
+
+        vm.expectRevert("Vault: empty market pool");
+        vm.prank(admin);
+        vault.emergencyDrainPool(1, admin);
+    }
+
+    function test_EmergencyDrainPool_RevertZeroRecipient() public {
+        vm.prank(admin);
+        vault.activateEmergency();
+        vm.warp(block.timestamp + vault.EMERGENCY_TIMELOCK() + 1);
+
+        vm.expectRevert("Vault: zero recipient");
+        vm.prank(admin);
+        vault.emergencyDrainPool(1, address(0));
     }
 
     function test_Available_ZeroWithNoDeposit() public view {

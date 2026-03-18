@@ -9,9 +9,6 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 ///         Fee schedule
 ///         ------------
 ///         feeBps             — uniform fee in basis points (e.g. 20 = 0.20%)
-///         clearingBountyBps  — bounty for clearing a batch (0 = disabled)
-///         resolverBounty     — fixed amount per market resolution
-///         prunerBounty       — fixed amount per pruned order
 ///         protocolFeeCollector — address that receives protocol fee share
 contract FeeModel is AccessControl {
     uint256 public constant MAX_BPS = 10_000;
@@ -21,9 +18,6 @@ contract FeeModel is AccessControl {
     // -------------------------------------------------------------------------
 
     uint256 public feeBps;
-    uint256 public clearingBountyBps;
-    uint256 public resolverBounty;
-    uint256 public prunerBounty;
     address public protocolFeeCollector;
 
     // -------------------------------------------------------------------------
@@ -31,8 +25,6 @@ contract FeeModel is AccessControl {
     // -------------------------------------------------------------------------
 
     event FeeBpsUpdated(uint256 feeBps);
-    event ClearingBountyUpdated(uint256 clearingBountyBps);
-    event BountiesUpdated(uint256 resolverBounty, uint256 prunerBounty);
     event ProtocolFeeCollectorUpdated(address indexed collector);
 
     // -------------------------------------------------------------------------
@@ -42,21 +34,14 @@ contract FeeModel is AccessControl {
     constructor(
         address admin,
         uint256 _feeBps,
-        uint256 _clearingBountyBps,
-        uint256 _resolverBounty,
-        uint256 _prunerBounty,
         address _protocolFeeCollector
     ) {
         require(_feeBps <= MAX_BPS, "FeeModel: fee > 100%");
-        require(_clearingBountyBps <= MAX_BPS, "FeeModel: bounty > 100%");
         require(_protocolFeeCollector != address(0), "FeeModel: zero collector");
 
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
 
         feeBps = _feeBps;
-        clearingBountyBps = _clearingBountyBps;
-        resolverBounty = _resolverBounty;
-        prunerBounty = _prunerBounty;
         protocolFeeCollector = _protocolFeeCollector;
     }
 
@@ -77,18 +62,6 @@ contract FeeModel is AccessControl {
         require(_feeBps <= MAX_BPS, "FeeModel: fee > 100%");
         feeBps = _feeBps;
         emit FeeBpsUpdated(_feeBps);
-    }
-
-    function setClearingBounty(uint256 _clearingBountyBps) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        require(_clearingBountyBps <= MAX_BPS, "FeeModel: bounty > 100%");
-        clearingBountyBps = _clearingBountyBps;
-        emit ClearingBountyUpdated(_clearingBountyBps);
-    }
-
-    function setBounties(uint256 _resolverBounty, uint256 _prunerBounty) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        resolverBounty = _resolverBounty;
-        prunerBounty = _prunerBounty;
-        emit BountiesUpdated(_resolverBounty, _prunerBounty);
     }
 
     function setProtocolFeeCollector(address _collector) external onlyRole(DEFAULT_ADMIN_ROLE) {

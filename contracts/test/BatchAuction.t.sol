@@ -31,7 +31,7 @@ contract BatchAuctionTest is Test {
 
         vm.startPrank(admin);
         vault = new Vault(admin, address(usdt));
-        feeModel = new FeeModel(admin, 20, 0, 5e18, 1e17, admin);
+        feeModel = new FeeModel(admin, 20, admin);
         token = new OutcomeToken(admin);
         book = new OrderBook(admin, address(vault), address(feeModel), address(token));
         auction = new BatchAuction(admin, address(book), address(vault), address(token));

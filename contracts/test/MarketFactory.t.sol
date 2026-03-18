@@ -20,8 +20,6 @@ contract MarketFactoryTest is Test {
     address public admin = address(0x1);
     address public user1 = address(0x3);
     address public user2 = address(0x4);
-    address public feeCollector = address(0x99);
-
     bytes32 public constant PRICE_ID = bytes32(uint256(0xB7C));
     int64 public constant STRIKE_PRICE = int64(50000_00000000);
 
@@ -31,10 +29,10 @@ contract MarketFactoryTest is Test {
         vm.startPrank(admin);
         vault = new Vault(admin, address(usdt));
         token = new OutcomeToken(admin);
-        FeeModel fm = new FeeModel(admin, 20, 0, 5e18, 1e17, admin);
+        FeeModel fm = new FeeModel(admin, 20, admin);
         book = new OrderBook(admin, address(vault), address(fm), address(token));
 
-        factory = new MarketFactory(admin, address(book), address(token), feeCollector);
+        factory = new MarketFactory(admin, address(book), address(token));
 
         book.grantRole(book.OPERATOR_ROLE(), address(factory));
         vault.grantRole(vault.PROTOCOL_ROLE(), address(book));
@@ -45,22 +43,16 @@ contract MarketFactoryTest is Test {
     function test_Constructor_SetsImmutables() public view {
         assertEq(address(factory.orderBook()), address(book));
         assertEq(address(factory.outcomeToken()), address(token));
-        assertEq(factory.feeCollector(), feeCollector);
     }
 
     function test_Constructor_RevertZeroOrderBook() public {
         vm.expectRevert("MarketFactory: zero orderBook");
-        new MarketFactory(admin, address(0), address(token), feeCollector);
+        new MarketFactory(admin, address(0), address(token));
     }
 
     function test_Constructor_RevertZeroOutcomeToken() public {
         vm.expectRevert("MarketFactory: zero outcomeToken");
-        new MarketFactory(admin, address(book), address(0), feeCollector);
-    }
-
-    function test_Constructor_RevertZeroFeeCollector() public {
-        vm.expectRevert("MarketFactory: zero feeCollector");
-        new MarketFactory(admin, address(book), address(token), address(0));
+        new MarketFactory(admin, address(book), address(0));
     }
 
     function test_CreateMarket_Basic() public {
@@ -212,19 +204,6 @@ contract MarketFactoryTest is Test {
         factory.setDefaultParams(120, 5);
         assertEq(factory.defaultBatchInterval(), 120);
         assertEq(factory.defaultMinLots(), 5);
-    }
-
-    function test_SetFeeCollector() public {
-        address newCollector = address(0x88);
-        vm.prank(admin);
-        factory.setFeeCollector(newCollector);
-        assertEq(factory.feeCollector(), newCollector);
-    }
-
-    function test_SetFeeCollector_RevertZero() public {
-        vm.expectRevert("MarketFactory: zero collector");
-        vm.prank(admin);
-        factory.setFeeCollector(address(0));
     }
 
     function test_AdminControls_RevertIfNotAdmin() public {
