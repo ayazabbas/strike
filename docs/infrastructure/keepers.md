@@ -44,7 +44,7 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now strike-batch-keeper strike-resolution-keeper
 ```
 
-Note: The pruning keeper is no longer needed in V2. Markets expire naturally and `clearBatch()` handles all settlement atomically.
+Note: No pruning keeper is needed. Markets expire naturally and `clearBatch()` handles all settlement atomically.
 
 ## Monitoring
 

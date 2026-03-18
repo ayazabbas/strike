@@ -19,30 +19,35 @@ Preserved on the `poc` branch.
 - [x] OutcomeToken (ERC-1155)
 - [x] Segment tree library
 - [x] Collateral vault
-- [x] Fee model (maker/taker)
+- [x] Fee model (uniform 20 bps)
 - [x] Unit tests (40+)
 
 ### Phase 1B — Orderbook & Batch Auction
 - [x] Order types (GoodTilCancel, GoodTilBatch)
 - [x] OrderBook contract
 - [x] BatchAuction clearing engine
-- [x] Claim-based settlement
-- [x] Order expiry & pruning
+- [x] Atomic inline settlement (clearBatch settles all orders in one tx)
 - [x] Integration tests (50+)
 
 ### Phase 1C — Market Lifecycle & Resolution
-- [x] MarketFactory v2
+- [x] MarketFactory with full state machine
 - [x] PythResolver with finality gate + challenge window
-- [x] Market state machine
 - [x] Outcome token redemption
 - [x] Full protocol tests (40+)
 
-*309 tests passing across all contract modules.*
+### Phase 1D — Sell Orders & Batch Operations
+- [x] SellYes / SellNo order sides (4-sided orderbook)
+- [x] Token custody — OrderBook is ERC1155Holder
+- [x] `burnEscrow()` with ESCROW_ROLE on OutcomeToken
+- [x] `placeOrders()` — batch order placement with single vault deposit
+- [x] `replaceOrders()` — atomic cancel+place with net settlement
+- [x] `OrderParam` struct for batch operations
+
+*292 tests passing across all contract modules.*
 
 ### Phase 2 — Keeper & Indexer Infrastructure
 - [x] Batch clearing keeper
 - [x] Market resolution keeper
-- [x] Order pruning keeper
 - [x] Event indexer + REST API + WebSocket
 - [x] Telegram bot integration
 
@@ -54,12 +59,11 @@ Preserved on the `poc` branch.
 
 ### Phase 4 — Integration, Hardening & Deployment
 - [ ] End-to-end integration tests
-- [ ] **Inline settlement** — fold `claimFills` logic into `clearBatch` so orders are settled atomically when the batch clears. Removes the separate claim step entirely. Users place an order, walk away, and tokens/refunds just appear.
 - [ ] Gas optimization pass
 - [ ] Security hardening (Slither, Mythril)
 - [ ] Private submission support (BEP-322)
-- [ ] BSC testnet deployment + soak test
-- [ ] Documentation + demo
+- [x] BSC testnet deployment + soak test
+- [x] Documentation
 
 ## 🔮 Future
 
