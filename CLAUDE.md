@@ -2,9 +2,9 @@
 
 ## Project Overview
 
-Strike is a fully on-chain prediction market protocol on BNB Chain. Traders buy and sell binary outcome tokens (YES/NO) on whether an asset's price will be above or below a strike price at expiry. Uses Frequency Batch Auctions (FBA) for fair price discovery.
+Strike is a fully on-chain prediction market protocol (v1) on BNB Chain. Traders buy and sell binary outcome tokens (YES/NO) on whether an asset's price will be above or below a strike price at expiry. Uses Frequent Batch Auctions (FBA) for fair price discovery.
 
-## V2 Contract Architecture
+## Contract Architecture
 
 8 core contracts + 1 library, all singletons with per-market state via mappings:
 
@@ -20,46 +20,41 @@ Strike is a fully on-chain prediction market protocol on BNB Chain. Traders buy 
 | **Redemption** | Post-resolution token redemption for USDT |
 | **SegmentTree** | Library for O(log N) clearing tick computation |
 
-## Key V7 Design Decisions (SellYes/SellNo)
+## Key Design Decisions
 
 - **4-sided orderbook**: `Side` enum has `Bid`, `Ask`, `SellYes`, `SellNo`. SellYes/SellNo let token holders sell back into the book.
 - **Token custody**: OrderBook is `ERC1155Holder`. Sell orders transfer tokens in; cancel/non-fill returns them; fill burns them via `burnEscrow`.
-- **placeOrder signature changed**: `(marketId, side, orderType, tick, lots)` — note `orderType` is now 3rd param (was 4th).
-- **SellYes payout**: at clearing tick, `lots * clearingTick / 100 * LOT_SIZE` USDT from pool.
-- **SellNo payout**: at clearing tick, `lots * (100 - clearingTick) / 100 * LOT_SIZE` USDT from pool.
-- **User flow**: approve `OutcomeToken.setApprovalForAll(OrderBook, true)` once, then place SellYes/SellNo orders.
-- **ESCROW_ROLE**: new role on OutcomeToken, granted to BatchAuction. Used by `burnEscrow()`.
-
-## Key V2 Design Decisions
-
-- **USDT collateral** (not BNB): 1 YES + 1 NO = 1 USDT. LOT_SIZE = 1e18. Users approve Vault before trading.
+- **placeOrder signature**: `(marketId, side, orderType, tick, lots)` — orderType is 3rd param.
+- **Batch order functions**: `placeOrders(OrderParam[])` for batch placement, `replaceOrders(cancelIds, OrderParam[])` for atomic cancel+place, `cancelOrders(orderIds)` for batch cancel.
+- **USDT collateral**: 1 YES + 1 NO = 1 USDT. LOT_SIZE = 1e16 ($0.01/lot). Users approve Vault before trading.
 - **Atomic clearBatch(marketId)**: No orderIds param. Contract reads `batchOrderIds[marketId][batchId]` internally. No separate claim step.
 - **Clearing price settlement**: All fills pay the clearing tick, not their limit tick. Excess refund = (locked at order tick) - (cost at clearing tick).
 - **Uniform 20bps fee**: No maker/taker. `clearingBountyBps` exists but set to 0.
 - **Batch overflow**: MAX_ORDERS_PER_BATCH = 400, spills to next batch when full.
 - **GTC/GTB**: GTC rolls unfilled remainder to next batch. GTB auto-expires if unfilled.
-- **No pruning**: Markets expire naturally. No pruneExpiredOrder function.
-- **No on-chain batch interval enforcement**: Keeper decides clearing cadence.
 - **Permissioned market creation**: Requires MARKET_CREATOR_ROLE (no creation bond).
+- **ESCROW_ROLE**: Role on OutcomeToken, granted to BatchAuction. Used by `burnEscrow()`.
+- **SellYes payout**: at clearing tick, `lots * clearingTick / 100 * LOT_SIZE` USDT from pool.
+- **SellNo payout**: at clearing tick, `lots * (100 - clearingTick) / 100 * LOT_SIZE` USDT from pool.
 
-## BSC Testnet V7 Addresses (deployed 2026-03-15, SellYes/SellNo)
+## BSC Testnet Addresses (v1)
 
 - MockUSDT: `0xb242dc031998b06772C63596Bfce091c80D4c3fA`
-- FeeModel: `0x5c49f364FfE404B041e1f44cCd3801Ea9d328034`
-- OutcomeToken: `0xaCbc1Ad38cF2767Ac57c5a23105e73A7DE319AEB`
-- Vault: `0x54DB2d048547b9b9426699833f3B57ab03b5F8dc`
-- OrderBook: `0x0B8557c02CCD2E59571fDc56D16ac2b5fC3E14D2`
-- BatchAuction: `0xd378411231665898E2cdB4c0e1cD723f6C696DA3`
-- MarketFactory: `0x9d6FC94A14a393Dd7b3F2FfBa0110D06010aD4a2`
-- PythResolver: `0x10CCAbaE996AE13403DbD9a6b1C38456D7B08bE9`
-- Redemption: `0x0eB52824d38E5682B876A79166C8B1045A0BBb2B`
+- FeeModel: `0xf5b6889a56f9d95c059be028e682f802aee6c074`
+- OutcomeToken: `0xc398678d4eb9b5a67dd3b2ff9cd6c517140fcf65`
+- Vault: `0x04606a6f4909d0e9d9d763083d7649a2229eb679`
+- OrderBook: `0x9675bab261a6f168dd76fedb6d8706021e338c16`
+- BatchAuction: `0x62224a55d05175eaeb22fc6263355c820c77e849`
+- MarketFactory: `0xf3ad14f117348de4886c29764fdcaf9c62794535`
+- PythResolver: `0x5e7b8bb9d18bc620a19cea78caaf51e1ab8afa92`
+- Redemption: `0xd181cc898bbbf4d2ddaebf6f245f043dd8f93704`
 - Pyth Core: `0xd7308b14BF4008e7C7196eC35610B1427C5702EA`
 
 ## Tests
 
 ```bash
 cd contracts
-forge test        # 267 tests
+forge test        # 292 tests
 forge test -vvv   # verbose output
 ```
 
