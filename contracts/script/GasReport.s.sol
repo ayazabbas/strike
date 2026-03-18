@@ -6,9 +6,6 @@ import "../src/Vault.sol";
 import "../src/OrderBook.sol";
 import "../src/BatchAuction.sol";
 import "../src/MarketFactory.sol";
-import "../src/PythResolver.sol";
-import "../src/Redemption.sol";
-import "../src/OutcomeToken.sol";
 import "../src/ITypes.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 

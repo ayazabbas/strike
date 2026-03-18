@@ -61,7 +61,7 @@ contract FeeModel is AccessControl {
     }
 
     // -------------------------------------------------------------------------
-    // Pure calculations
+    // Fee calculations
     // -------------------------------------------------------------------------
 
     /// @notice Returns the uniform fee for a given trade amount.

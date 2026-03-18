@@ -230,7 +230,7 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
         }
     }
 
-    /// @dev V2.1 settle amounts: pool gets full filledCollateral, fee from locked excess.
+    /// @dev Settle amounts: pool gets full filledCollateral, fee from locked excess.
     function _settleAmounts(OrderInfo memory o, BatchResult memory result, uint256 filledLots)
         internal
         view
@@ -247,7 +247,7 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
 
         s.filledCollateral = _collateral(s.filledLots, result.clearingTick, o.side);
         s.protocolFee = obFee.calculateFee(s.filledCollateral);
-        s.toPool = s.filledCollateral; // V2.1: full amount goes to pool (no fee deduction)
+        s.toPool = s.filledCollateral;
 
         s.excessRefund = (lockedForFilled + lockedFeeForFilled) - s.filledCollateral - s.protocolFee;
 

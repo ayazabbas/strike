@@ -54,21 +54,7 @@ echo "Gas price assumption: 1 gwei (BNB Chain typical)"
 echo "BNB price assumption: \$$BNB_USD"
 echo ""
 
-# ─── 1. Vault Operations ───
-echo "── Vault ──"
-
-GAS=$(send_gas $VAULT "deposit()" --value 5ether --private-key $TRADER_A_PK)
-record "Vault.deposit (5 BNB)" $GAS
-
-GAS=$(send_gas $VAULT "deposit()" --value 5ether --private-key $TRADER_B_PK)
-record "Vault.deposit (Trader B, 5 BNB)" $GAS
-
-GAS=$(send_gas $VAULT "withdraw(uint256)" 100000000000000000 --private-key $TRADER_A_PK)
-record "Vault.withdraw (0.1 BNB)" $GAS
-
-echo ""
-
-# ─── 2. Market Creation ───
+# ─── 1. Market Creation ───
 echo "── Market Creation ──"
 
 GAS=$(send_gas $FACTORY "createMarket(bytes32,int64,uint256,uint256,uint128)" \
@@ -149,34 +135,7 @@ record "clearBatch (4 orders, 2 crossing at tick 60)" $GAS
 
 echo ""
 
-# ─── 6. Claim Fills ───
-echo "── Claim Fills ──"
-
-GAS=$(send_gas $BATCH "claimFills(uint256)" $ORDER_BID60 --private-key $TRADER_A_PK)
-record "claimFills (BID full fill, mints YES tokens)" $GAS
-
-GAS=$(send_gas $BATCH "claimFills(uint256)" $ORDER_ASK60 --private-key $TRADER_B_PK)
-record "claimFills (ASK full fill, mints NO tokens)" $GAS
-
-GAS=$(send_gas $BATCH "claimFills(uint256)" $ORDER_BID55 --private-key $TRADER_A_PK)
-record "claimFills (no fill — tick below clearing)" $GAS
-
-echo ""
-
-# ─── 7. Prune Expired GTB ───
-echo "── Prune ──"
-
-# Need another batch clear for GTB to be expired
-cast rpc evm_increaseTime 61 --rpc-url $RPC > /dev/null 2>&1
-cast rpc evm_mine --rpc-url $RPC > /dev/null 2>&1
-send_gas $BATCH "clearBatch(uint256)" $NEW_MKT --private-key $DEPLOYER_PK > /dev/null
-
-GAS=$(send_gas $BATCH "pruneExpiredOrder(uint256)" $ORDER_GTB --private-key $DEPLOYER_PK)
-record "pruneExpiredOrder (GTB, 5 lots)" $GAS
-
-echo ""
-
-# ─── 8. Market Resolution (if we can) ───
+# ─── 6. Market Resolution ───
 echo "── Resolution ──"
 
 # Close the market first (advance to expiry)
@@ -207,6 +166,5 @@ echo ""
 echo "Notes:"
 echo "  - Gas price: 1 gwei (BNB Chain average, can spike to 3-5 gwei)"
 echo "  - BNB: \$$BNB_USD"
-echo "  - Inline settlement would combine clearBatch + N×claimFills into one tx"
-echo "  - Keeper cost per batch = clearBatch + (N × claimFills) under current design"
-echo "  - With inline settlement: keeper cost = just the combined clearBatch tx"
+echo "  - Settlement is atomic within clearBatch (no separate claim step)"
+echo "  - Keeper cost per batch = single clearBatch tx"

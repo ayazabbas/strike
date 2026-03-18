@@ -383,11 +383,9 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
     // Cancel order
     // -------------------------------------------------------------------------
 
-    function cancelOrder(uint256 orderId) external nonReentrant {
+    /// @dev Core cancel logic: zeroes lots, updates tree, returns tokens or USDT.
+    function _cancelCore(uint256 orderId, address recipient) internal {
         Order storage o = orders[orderId];
-        require(o.owner == msg.sender, "OrderBook: not owner");
-        require(o.lots > 0, "OrderBook: already cancelled/filled");
-
         uint256 lots = o.lots;
         uint256 tick = o.tick;
         uint256 marketId = o.marketId;
@@ -395,7 +393,6 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
 
         o.lots = 0;
 
-        // Update segment tree
         if (side == Side.Bid || side == Side.SellNo) {
             bidTrees[marketId].update(tick, -int256(lots));
         } else {
@@ -403,27 +400,27 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
         }
 
         if (side == Side.SellYes || side == Side.SellNo) {
-            // Sell order: return outcome tokens
-            bool isYes = (side == Side.SellYes);
-            uint256 tokenId = isYes
+            uint256 tokenId = (side == Side.SellYes)
                 ? outcomeToken.yesTokenId(marketId)
                 : outcomeToken.noTokenId(marketId);
-            outcomeToken.safeTransferFrom(address(this), msg.sender, tokenId, lots, "");
+            outcomeToken.safeTransferFrom(address(this), recipient, tokenId, lots, "");
         } else {
-            // Buy order: return USDT collateral + fee
-            uint256 collateral;
-            if (side == Side.Bid) {
-                collateral = (lots * LOT_SIZE * tick) / 100;
-            } else {
-                collateral = (lots * LOT_SIZE * (100 - tick)) / 100;
-            }
-            uint256 fee = feeModel.calculateFee(collateral);
-            uint256 totalReturn = collateral + fee;
-            vault.unlock(msg.sender, totalReturn);
-            vault.withdrawTo(msg.sender, totalReturn);
+            uint256 collateral = (side == Side.Bid)
+                ? (lots * LOT_SIZE * tick) / 100
+                : (lots * LOT_SIZE * (100 - tick)) / 100;
+            uint256 totalReturn = collateral + feeModel.calculateFee(collateral);
+            vault.unlock(recipient, totalReturn);
+            vault.withdrawTo(recipient, totalReturn);
         }
 
-        emit OrderCancelled(orderId, marketId, msg.sender);
+        emit OrderCancelled(orderId, marketId, recipient);
+    }
+
+    function cancelOrder(uint256 orderId) external nonReentrant {
+        Order storage o = orders[orderId];
+        require(o.owner == msg.sender, "OrderBook: not owner");
+        require(o.lots > 0, "OrderBook: already cancelled/filled");
+        _cancelCore(orderId, msg.sender);
     }
 
     /// @notice Batch cancel multiple orders owned by the caller.
@@ -432,44 +429,9 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
     function cancelOrders(uint256[] calldata orderIds) external nonReentrant {
         for (uint256 i = 0; i < orderIds.length; i++) {
             Order storage o = orders[orderIds[i]];
-
             if (o.lots == 0) continue;
-
             require(o.owner == msg.sender, "OrderBook: not owner");
-
-            uint256 lots = o.lots;
-            uint256 tick = o.tick;
-            uint256 marketId = o.marketId;
-            Side side = o.side;
-
-            o.lots = 0;
-
-            if (side == Side.Bid || side == Side.SellNo) {
-                bidTrees[marketId].update(tick, -int256(lots));
-            } else {
-                askTrees[marketId].update(tick, -int256(lots));
-            }
-
-            if (side == Side.SellYes || side == Side.SellNo) {
-                bool isYes = (side == Side.SellYes);
-                uint256 tokenId = isYes
-                    ? outcomeToken.yesTokenId(marketId)
-                    : outcomeToken.noTokenId(marketId);
-                outcomeToken.safeTransferFrom(address(this), msg.sender, tokenId, lots, "");
-            } else {
-                uint256 collateral;
-                if (side == Side.Bid) {
-                    collateral = (lots * LOT_SIZE * tick) / 100;
-                } else {
-                    collateral = (lots * LOT_SIZE * (100 - tick)) / 100;
-                }
-                uint256 fee = feeModel.calculateFee(collateral);
-                uint256 totalReturn = collateral + fee;
-                vault.unlock(msg.sender, totalReturn);
-                vault.withdrawTo(msg.sender, totalReturn);
-            }
-
-            emit OrderCancelled(orderIds[i], marketId, msg.sender);
+            _cancelCore(orderIds[i], msg.sender);
         }
     }
 
@@ -478,44 +440,9 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
     function cancelExpiredOrder(uint256 orderId) external nonReentrant {
         Order storage o = orders[orderId];
         require(o.lots > 0, "OrderBook: already cancelled/filled");
-
         Market storage m = markets[o.marketId];
         require(block.timestamp > m.expiryTime, "OrderBook: market not expired");
-
-        address owner = o.owner;
-        uint256 lots = o.lots;
-        uint256 tick = o.tick;
-        uint256 marketId = o.marketId;
-        Side side = o.side;
-
-        o.lots = 0;
-
-        if (side == Side.Bid || side == Side.SellNo) {
-            bidTrees[marketId].update(tick, -int256(lots));
-        } else {
-            askTrees[marketId].update(tick, -int256(lots));
-        }
-
-        if (side == Side.SellYes || side == Side.SellNo) {
-            bool isYes = (side == Side.SellYes);
-            uint256 tokenId = isYes
-                ? outcomeToken.yesTokenId(marketId)
-                : outcomeToken.noTokenId(marketId);
-            outcomeToken.safeTransferFrom(address(this), owner, tokenId, lots, "");
-        } else {
-            uint256 collateral;
-            if (side == Side.Bid) {
-                collateral = (lots * LOT_SIZE * tick) / 100;
-            } else {
-                collateral = (lots * LOT_SIZE * (100 - tick)) / 100;
-            }
-            uint256 fee = feeModel.calculateFee(collateral);
-            uint256 totalReturn = collateral + fee;
-            vault.unlock(owner, totalReturn);
-            vault.withdrawTo(owner, totalReturn);
-        }
-
-        emit OrderCancelled(orderId, marketId, owner);
+        _cancelCore(orderId, o.owner);
     }
 
     /// @notice Batch cancel expired orders. Anyone can call.
@@ -525,41 +452,7 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
             if (o.lots == 0) continue;
             Market storage m = markets[o.marketId];
             if (block.timestamp <= m.expiryTime) continue;
-
-            address owner = o.owner;
-            uint256 lots = o.lots;
-            uint256 tick = o.tick;
-            uint256 marketId = o.marketId;
-            Side side = o.side;
-
-            o.lots = 0;
-
-            if (side == Side.Bid || side == Side.SellNo) {
-                bidTrees[marketId].update(tick, -int256(lots));
-            } else {
-                askTrees[marketId].update(tick, -int256(lots));
-            }
-
-            if (side == Side.SellYes || side == Side.SellNo) {
-                bool isYes = (side == Side.SellYes);
-                uint256 tokenId = isYes
-                    ? outcomeToken.yesTokenId(marketId)
-                    : outcomeToken.noTokenId(marketId);
-                outcomeToken.safeTransferFrom(address(this), owner, tokenId, lots, "");
-            } else {
-                uint256 collateral;
-                if (side == Side.Bid) {
-                    collateral = (lots * LOT_SIZE * tick) / 100;
-                } else {
-                    collateral = (lots * LOT_SIZE * (100 - tick)) / 100;
-                }
-                uint256 fee = feeModel.calculateFee(collateral);
-                uint256 totalReturn = collateral + fee;
-                vault.unlock(owner, totalReturn);
-                vault.withdrawTo(owner, totalReturn);
-            }
-
-            emit OrderCancelled(orderIds[i], marketId, owner);
+            _cancelCore(orderIds[i], o.owner);
         }
     }
 

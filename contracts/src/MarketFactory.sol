@@ -188,6 +188,7 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
         meta.settlementPrice = settlementPrice;
 
         // Move from closed to resolved
+        _removeFromClosed(factoryMarketId);
         resolvedMarkets.push(factoryMarketId);
 
         emit MarketStateChanged(factoryMarketId, MarketState.Resolved);

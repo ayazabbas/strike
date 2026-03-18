@@ -20,7 +20,6 @@ library SegmentTree {
     // -------------------------------------------------------------------------
 
     uint256 internal constant LEAVES = 128; // next power-of-2 >= 99
-    uint256 internal constant SIZE = 256; // 2 * LEAVES (1-indexed → [1, 255])
     uint256 internal constant MAX_TICK = 99;
 
     // -------------------------------------------------------------------------
