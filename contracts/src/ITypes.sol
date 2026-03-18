@@ -50,6 +50,14 @@ struct BatchResult {
     uint40 timestamp;    // 5 bytes — block.timestamp of clearing
 }
 
+/// @notice Parameters for batch order placement.
+struct OrderParam {
+    Side side;
+    OrderType orderType;
+    uint8 tick;
+    uint64 lots;
+}
+
 /// @notice Market lifecycle states.
 enum MarketState {
     Open,      // orders accepted, batches clear

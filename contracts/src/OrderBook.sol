@@ -213,6 +213,173 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
     }
 
     // -------------------------------------------------------------------------
+    // Internal helpers for batch operations
+    // -------------------------------------------------------------------------
+
+    function _cancelForReplace(uint256 orderId, address caller) internal returns (uint256 refund) {
+        Order storage o = orders[orderId];
+        if (o.lots == 0) return 0;
+        require(o.owner == caller, "OrderBook: not owner");
+
+        uint256 lots = o.lots;
+        uint256 tick = o.tick;
+        uint256 mktId = o.marketId;
+        Side side = o.side;
+        o.lots = 0;
+
+        if (side == Side.Bid || side == Side.SellNo) {
+            bidTrees[mktId].update(tick, -int256(lots));
+        } else {
+            askTrees[mktId].update(tick, -int256(lots));
+        }
+
+        if (side == Side.SellYes || side == Side.SellNo) {
+            uint256 tokenId = (side == Side.SellYes)
+                ? outcomeToken.yesTokenId(mktId)
+                : outcomeToken.noTokenId(mktId);
+            outcomeToken.safeTransferFrom(address(this), caller, tokenId, lots, "");
+        } else {
+            uint256 collateral = (side == Side.Bid)
+                ? (lots * LOT_SIZE * tick) / 100
+                : (lots * LOT_SIZE * (100 - tick)) / 100;
+            refund = collateral + feeModel.calculateFee(collateral);
+        }
+
+        emit OrderCancelled(orderId, mktId, caller);
+    }
+
+    function _placeOne(
+        uint256 marketId,
+        uint32 batchId,
+        OrderParam calldata p,
+        address caller
+    ) internal returns (uint64 oid, uint256 deposit) {
+        oid = nextOrderId++;
+        orders[oid] = Order({
+            owner: caller,
+            side: p.side,
+            orderType: p.orderType,
+            tick: p.tick,
+            lots: p.lots,
+            id: oid,
+            marketId: uint32(marketId),
+            batchId: batchId,
+            timestamp: uint40(block.timestamp)
+        });
+
+        if (p.side == Side.SellYes || p.side == Side.SellNo) {
+            uint256 tokenId = (p.side == Side.SellYes)
+                ? outcomeToken.yesTokenId(marketId)
+                : outcomeToken.noTokenId(marketId);
+            outcomeToken.safeTransferFrom(caller, address(this), tokenId, p.lots, "");
+            if (p.side == Side.SellYes) {
+                askTrees[marketId].update(p.tick, int256(uint256(p.lots)));
+            } else {
+                bidTrees[marketId].update(p.tick, int256(uint256(p.lots)));
+            }
+        } else {
+            uint256 collateral = (p.side == Side.Bid)
+                ? (uint256(p.lots) * LOT_SIZE * p.tick) / 100
+                : (uint256(p.lots) * LOT_SIZE * (100 - uint256(p.tick))) / 100;
+            deposit = collateral + feeModel.calculateFee(collateral);
+            if (p.side == Side.Bid) {
+                bidTrees[marketId].update(p.tick, int256(uint256(p.lots)));
+            } else {
+                askTrees[marketId].update(p.tick, int256(uint256(p.lots)));
+            }
+        }
+
+        batchOrderIds[marketId][batchId].push(oid);
+        emit OrderPlaced(oid, marketId, caller, p.side, p.tick, p.lots, batchId);
+    }
+
+    // -------------------------------------------------------------------------
+    // Batch place orders
+    // -------------------------------------------------------------------------
+
+    function placeOrders(uint256 marketId, OrderParam[] calldata params) external nonReentrant returns (uint256[] memory orderIds) {
+        Market storage m = markets[marketId];
+        require(m.active, "OrderBook: market not active");
+        require(!m.halted, "OrderBook: market halted");
+        require(block.timestamp < m.expiryTime, "OrderBook: market expired");
+        require(params.length > 0, "OrderBook: invalid batch size");
+        require(marketId <= type(uint32).max, "OrderBook: marketId overflow");
+
+        orderIds = new uint256[](params.length);
+        uint256 totalDeposit;
+
+        uint256 batchId = m.currentBatchId;
+        if (batchOrderIds[marketId][batchId].length + params.length > MAX_ORDERS_PER_BATCH) {
+            batchId = batchId + 1;
+        }
+        require(batchOrderIds[marketId][batchId].length + params.length <= MAX_ORDERS_PER_BATCH, "OrderBook: batch overflow");
+
+        for (uint256 i = 0; i < params.length; i++) {
+            require(params[i].tick >= MIN_TICK && params[i].tick <= MAX_TICK, "OrderBook: tick out of range");
+            require(params[i].lots > 0, "OrderBook: zero lots");
+            require(params[i].lots >= m.minLots, "OrderBook: below min lots");
+
+            (uint64 oid, uint256 deposit) = _placeOne(marketId, uint32(batchId), params[i], msg.sender);
+            orderIds[i] = oid;
+            totalDeposit += deposit;
+        }
+
+        if (totalDeposit > 0) {
+            vault.depositFor(msg.sender, totalDeposit);
+            vault.lock(msg.sender, totalDeposit);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Replace orders (atomic cancel + place with net settlement)
+    // -------------------------------------------------------------------------
+
+    function replaceOrders(uint256[] calldata cancelIds, uint256 marketId, OrderParam[] calldata params) external nonReentrant returns (uint256[] memory orderIds) {
+        Market storage m = markets[marketId];
+        require(m.active, "OrderBook: market not active");
+        require(!m.halted, "OrderBook: market halted");
+        require(block.timestamp < m.expiryTime, "OrderBook: market expired");
+        require(marketId <= type(uint32).max, "OrderBook: marketId overflow");
+
+        uint256 totalRefund;
+        for (uint256 i = 0; i < cancelIds.length; i++) {
+            totalRefund += _cancelForReplace(cancelIds[i], msg.sender);
+        }
+
+        orderIds = new uint256[](params.length);
+        uint256 totalDeposit;
+
+        if (params.length > 0) {
+            uint256 batchId = m.currentBatchId;
+            if (batchOrderIds[marketId][batchId].length + params.length > MAX_ORDERS_PER_BATCH) {
+                batchId = batchId + 1;
+            }
+            require(batchOrderIds[marketId][batchId].length + params.length <= MAX_ORDERS_PER_BATCH, "OrderBook: batch overflow");
+
+            for (uint256 i = 0; i < params.length; i++) {
+                require(params[i].tick >= MIN_TICK && params[i].tick <= MAX_TICK, "OrderBook: tick out of range");
+                require(params[i].lots > 0, "OrderBook: zero lots");
+                require(params[i].lots >= m.minLots, "OrderBook: below min lots");
+
+                (uint64 oid, uint256 deposit) = _placeOne(marketId, uint32(batchId), params[i], msg.sender);
+                orderIds[i] = oid;
+                totalDeposit += deposit;
+            }
+        }
+
+        // Net settlement
+        if (totalDeposit > totalRefund) {
+            uint256 netDeposit = totalDeposit - totalRefund;
+            vault.depositFor(msg.sender, netDeposit);
+            vault.lock(msg.sender, netDeposit);
+        } else if (totalRefund > totalDeposit) {
+            uint256 netRefund = totalRefund - totalDeposit;
+            vault.unlock(msg.sender, netRefund);
+            vault.withdrawTo(msg.sender, netRefund);
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Cancel order
     // -------------------------------------------------------------------------
 
