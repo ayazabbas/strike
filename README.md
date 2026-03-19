@@ -65,6 +65,25 @@ All backend services are written in **Rust** (axum, sqlx, alloy-rs, tokio).
 
 Next.js + shadcn/ui + wagmi/viem. SIWE authentication, RainbowKit wallet connection.
 
+### SDK
+
+The **[Strike SDK](https://docs.strike.pm/sdk/overview)** (`strike-sdk` on [crates.io](https://crates.io/crates/strike-sdk)) lets you build trading bots and integrations in Rust. On-chain first — all live data comes directly from BSC via RPC/WSS.
+
+```rust
+use strike_sdk::prelude::*;
+
+let client = StrikeClient::new(StrikeConfig::bsc_testnet())
+    .with_private_key("0x...")
+    .build()?;
+
+client.orders().place(market_id, &[
+    OrderParam::bid(50, 1000),
+    OrderParam::ask(60, 1000),
+]).await?;
+```
+
+📖 [SDK Docs](https://docs.strike.pm/sdk/overview) · 📦 [crates.io](https://crates.io/crates/strike-sdk) · 📂 [`sdk/rust/`](sdk/rust/)
+
 ## Development
 
 ### Prerequisites
@@ -85,27 +104,27 @@ forge test
 ### Run Tests
 
 ```bash
-# All 244 contract tests
+# All 302 contract tests
 forge test -vvv
 
 # Specific test
 forge test --match-test testClearBatch -vvv
 ```
 
-## Contract Addresses (BSC Testnet — V4)
+## Contract Addresses (BSC Testnet)
 
 | Contract | Address |
 |----------|---------|
-| MarketFactory | `0x4460F2Bc7d4405fc3DBd9344F40D5A0f4a4dF4f0` |
-| OrderBook | `0x31EFda3d089CB5150b6aee57adDA3a7Aa97151A3` |
-| BatchAuction | `0xF22db29C2Fe828c5F31C6764d042b39419CBD3fd` |
-| Vault | `0xe19bB1799ed8C369980cb346014c68f83df1C294` |
-| OutcomeToken | `0x2C7E4d5b838D61141252b1c4c09618478C561f49` |
-| Redemption | `0xdBd7dFFEbf8F7a2a3772832D03Ed0a87a57Fb776` |
-| FeeModel | `0x958AA4E008765C1146b46701c5286eB5c57bd7E3` |
-| PythResolver | `0x9ffc6b4A6D86034fDD9a3758bC25361BFC994972` |
-| MockUSDT | `0x35c2731E24d88198cDc0128dD42fC2Ee969fB3fa` |
+| MarketFactory | `0x6415619262033090EA0C2De913a3a6d9FC1d9DE9` |
+| OrderBook | `0xB59e3d709Bd8Df10418D47E7d2CF045B02D06E32` |
+| BatchAuction | `0x414D9da55d61835fD7Bb127978a2c49B8F09BdD5` |
+| Vault | `0xc9aA051e0BB2E0Fbb8Bfe4e4BB9ffa5Bf690023b` |
+| OutcomeToken | `0x427CFce18cC5278f2546F88ab02c6a0749228A45` |
+| Redemption | `0x4b55f917Ab45028d4C75f3dA400B50D81209593b` |
+| FeeModel | `0xa044FF6E4385c3d671E47aa9E31cb91a50a3F276` |
+| PythResolver | `0xDcb807de5Ba5F3af04286a9dC1F6f3eb33066b92` |
+| MockUSDT | `0xb242dc031998b06772C63596Bfce091c80D4c3fA` |
 
 ## History
 
-The original v0 was built as a hackathon MVP using a parimutuel pool model with a Telegram bot interface. That code is preserved in the [`poc`](https://github.com/ayazabbas/strike/tree/poc) branch. V2 is a complete rewrite with a proper CLOB, batch auctions, and a web frontend.
+The original prototype was built as a hackathon MVP using a parimutuel pool model with a Telegram bot interface. That code is preserved in the [`poc`](https://github.com/ayazabbas/strike/tree/poc) branch. The current version is a complete rewrite with a proper CLOB, batch auctions, and a web frontend.
