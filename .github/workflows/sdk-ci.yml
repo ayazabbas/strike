@@ -1,0 +1,53 @@
+name: SDK CI
+
+on:
+  push:
+    paths:
+      - 'sdk/rust/**'
+  pull_request:
+    paths:
+      - 'sdk/rust/**'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            sdk/rust/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('sdk/rust/Cargo.lock') }}
+
+      - name: Format check
+        working-directory: sdk/rust
+        run: cargo fmt --check
+
+      - name: Clippy
+        working-directory: sdk/rust
+        run: cargo clippy -- -D warnings
+
+      - name: Build
+        working-directory: sdk/rust
+        run: cargo build
+
+      - name: Test
+        working-directory: sdk/rust
+        run: cargo test
+
+      - name: Doc check
+        working-directory: sdk/rust
+        run: cargo doc --no-deps

@@ -1,0 +1,34 @@
+[package]
+name = "strike-sdk"
+version = "0.1.0"
+edition = "2021"
+description = "Rust SDK for Strike prediction markets on BNB Chain"
+license = "MIT"
+repository = "https://github.com/ayazabbas/strike"
+keywords = ["prediction-markets", "bnb-chain", "defi", "trading"]
+categories = ["api-bindings", "cryptography::cryptocurrencies"]
+
+[features]
+default = ["nonce-manager"]
+nonce-manager = []
+
+[dependencies]
+alloy = { version = "1", features = [
+    "full",
+    "sol-types",
+    "contract",
+    "provider-http",
+    "provider-ws",
+    "signer-local",
+    "json-abi",
+] }
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+eyre = "0.6"
+tracing = "0.1"
+futures-util = "0.3"
+reqwest = { version = "0.12", features = ["json"] }
+
+[dev-dependencies]
+tracing-subscriber = "0.3"
