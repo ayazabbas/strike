@@ -37,6 +37,14 @@ The trading page (`/market/:id`) is where the action happens.
 - **Order type:** toggle — GoodTilCancel (GTC), GoodTilBatch (GTB)
 - **Submit:** single transaction, status toast tracks confirmation
 
+### Market Orders & Slippage
+
+In **market mode**, the frontend places a limit order at a tick derived from the best available price plus a slippage tolerance (default 5%, configurable in the order form). This ensures your order fills at or better than your worst acceptable price.
+
+In **limit mode**, your tick is your exact price protection — the order will only fill at the clearing price if it's at or better than your tick. No separate slippage setting is needed.
+
+In both cases, all fills settle at the batch clearing price, never at a worse price than your tick. See [Batch Auctions](../protocol/batch-auctions.md#price-protection) for details.
+
 ## Batch Info Bar
 
 - Countdown to next batch clearing

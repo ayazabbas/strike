@@ -39,6 +39,14 @@ This is simpler than requiring askers to hold outcome tokens, and provides symme
 
 All fills settle at the **clearing tick**, not each order's limit tick. A bid placed at tick 70 that clears at tick 55 pays only 55% per lot — the excess 15% is refunded. This ensures all participants in a batch trade at the same fair price.
 
+## Price Protection
+
+Limit orders provide built-in price protection. Your order will never fill at a price worse than your tick — if the clearing price exceeds your limit, your order simply doesn't fill and your collateral is returned (or rolls to the next batch for GTC orders).
+
+This is fundamentally different from AMM-style slippage. In continuous AMMs, price can move between when you submit a trade and when it executes. In a batch auction, all orders are collected first and cleared together at a single uniform price. There is no "front-running window" — everyone in the batch gets the same deal.
+
+To express willingness to pay more for guaranteed fills, place your order at a tick further from the expected clearing price. The difference between your tick and the actual clearing price is refunded automatically.
+
 ## Fill Logic
 
 | Order Position | Result |
