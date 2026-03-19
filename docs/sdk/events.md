@@ -129,7 +129,7 @@ for (market_id, (bids, asks)) in &open_orders {
 }
 ```
 
-This scans `OrderPlaced` and `OrderCancelled` events from `from_block` to the latest block, returning only orders that haven't been cancelled. Scans in 3,000-block chunks (BSC RPC limit) and skips chunks on RPC errors.
+This scans `OrderPlaced` and `OrderCancelled` events from `from_block` to the latest block, returning only orders that haven't been cancelled.
 
 ## Typical Bot Pattern
 

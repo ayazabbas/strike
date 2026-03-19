@@ -1,16 +1,6 @@
 # Indexer Client
 
-The [Strike indexer](../infrastructure/indexer.md) provides REST endpoints for querying aggregated market state. Use it for startup snapshots — fetching all markets, orderbook levels, and open positions. For live data, use [event streaming](events.md) or direct RPC reads.
-
-## When to Use
-
-| Use case | Indexer | RPC/WSS |
-|----------|---------|---------|
-| Fetch all markets on startup | Yes | No (no batch query on-chain) |
-| Get orderbook snapshot | Yes | Possible but expensive |
-| Get open orders for a wallet | Yes | Use `scan_orders()` |
-| Live event stream | No | Yes |
-| Place/cancel orders | No | Yes |
+The Strike indexer provides REST endpoints for querying aggregated market state. Use it for startup snapshots — fetching all markets, orderbook levels, and open positions. For live data, use [event streaming](events.md).
 
 ## Get Markets
 
@@ -107,7 +97,7 @@ pub struct IndexerOrder {
 
 ## Configuration
 
-The indexer URL is set in `StrikeConfig` and defaults to `https://strike-indexer.fly.dev` for testnet. Override it with the builder:
+The indexer URL is set in `StrikeConfig` with a default for each network. Override it with the builder:
 
 ```rust
 let client = StrikeClient::new(StrikeConfig::bsc_testnet())

@@ -67,8 +67,6 @@ for o in &orders {
 
 This calls `OrderBook.placeOrders()` on-chain. The returned `Vec<PlacedOrder>` contains the order IDs parsed from `OrderPlaced` events in the transaction receipt.
 
-Gas estimate: ~350,000 per order.
-
 ## Cancelling Orders
 
 Cancel one or multiple orders:
@@ -83,8 +81,6 @@ client.orders().cancel_one(order_id).await?;
 ```
 
 `cancel()` calls `OrderBook.cancelOrders()` (batch). `cancel_one()` calls `OrderBook.cancelOrder()` (single). Both unlock collateral or return custodied tokens.
-
-Gas estimate: ~100,000 per cancel (batch), ~200,000 for single.
 
 ## Replacing Orders (Atomic Cancel + Place)
 

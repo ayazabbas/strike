@@ -4,7 +4,7 @@
 
 - Rust 1.75+ with cargo
 - BSC testnet tBNB for gas (from a [BNB faucet](https://www.bnbchain.org/en/testnet-faucet))
-- Testnet USDT for collateral (see [Deployment Guide](../deployment-guide.md) for faucet details)
+- Testnet USDT for collateral (mint from the [faucet](https://app.strike.pm/faucet))
 
 ## Read-Only: Fetch Markets
 

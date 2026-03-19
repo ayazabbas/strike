@@ -83,7 +83,7 @@ println!("YES: {yes}, NO: {no}");
 client.redeem().redeem(market_id, amount).await?;
 ```
 
-This calls `Redemption.redeem(factoryMarketId, amount)` on-chain. Gas estimate: ~300,000.
+This calls `Redemption.redeem(factoryMarketId, amount)` on-chain.
 
 ## Collateral Model Summary
 
