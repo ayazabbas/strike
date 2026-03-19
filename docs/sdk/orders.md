@@ -30,6 +30,14 @@ Each lot is `LOT_SIZE = 1e16 wei = $0.01` of collateral. 100 lots at tick 50 loc
 | `GoodTilCancelled` (GTC) | Rolls unfilled remainder to the next [batch](../protocol/batch-auctions.md) |
 | `GoodTilBatch` (GTB) | Expires at end of current batch if unfilled |
 
+### Price Protection (Slippage)
+
+Your tick **is** your price protection. In a batch auction, all fills in a batch settle at the same uniform clearing price. Your order will never fill at a price worse than your tick — if the clearing price exceeds your limit, your order simply doesn't fill.
+
+This is fundamentally different from AMM slippage. There's no risk of price movement between submission and execution because orders are collected and cleared together. Set your tick to the worst price you're willing to accept.
+
+For example, if the current best ask is at tick 55 and you're comfortable paying up to 60 cents for a YES token, place a bid at tick 60. You'll pay the clearing price (which could be 55, 57, or anything ≤ 60), never more.
+
 ## OrderParam Constructors
 
 `OrderParam` has convenience constructors that default to GTC:
