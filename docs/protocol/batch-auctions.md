@@ -39,7 +39,7 @@ This is simpler than requiring askers to hold outcome tokens, and provides symme
 
 All fills settle at the **clearing tick**, not each order's limit tick. A bid placed at tick 70 that clears at tick 55 pays only 55% per lot — the excess 15% is refunded. This ensures all participants in a batch trade at the same fair price.
 
-## Price Protection
+## Anti-MEV Price Protection
 
 Limit orders provide built-in price protection. Your order will never fill at a price worse than your tick — if the clearing price exceeds your limit, your order simply doesn't fill and your collateral is returned (or rolls to the next batch for GTC orders).
 

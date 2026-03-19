@@ -30,7 +30,7 @@ Each lot is `LOT_SIZE = 1e16 wei = $0.01` of collateral. 100 lots at tick 50 loc
 | `GoodTilCancelled` (GTC) | Rolls unfilled remainder to the next [batch](../protocol/batch-auctions.md) |
 | `GoodTilBatch` (GTB) | Expires at end of current batch if unfilled |
 
-### Price Protection (Slippage)
+### Anti-MEV Price Protection
 
 Your tick **is** your price protection. In a batch auction, all fills in a batch settle at the same uniform clearing price. Your order will never fill at a price worse than your tick — if the clearing price exceeds your limit, your order simply doesn't fill.
 
