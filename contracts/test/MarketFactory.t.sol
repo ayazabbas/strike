@@ -57,7 +57,7 @@ contract MarketFactoryTest is Test {
 
     function test_CreateMarket_Basic() public {
         vm.prank(user1);
-        uint256 id = factory.createMarket(PRICE_ID, STRIKE_PRICE, 3600, 60, 1);
+        uint256 id = factory.createMarket(PRICE_ID, STRIKE_PRICE, block.timestamp + 3600, 60, 1);
         assertEq(id, 1);
 
         (bytes32 priceId, , uint256 expiryTime, address creator, MarketState state, , , uint256 obId)
@@ -71,16 +71,17 @@ contract MarketFactoryTest is Test {
     }
 
     function test_CreateMarket_EmitsEvent() public {
+        uint256 expiry = block.timestamp + 3600;
         vm.expectEmit(true, true, false, true);
-        emit MarketFactory.MarketCreated(1, 1, PRICE_ID, STRIKE_PRICE, block.timestamp + 3600, user1);
+        emit MarketFactory.MarketCreated(1, 1, PRICE_ID, STRIKE_PRICE, expiry, user1);
         vm.prank(user1);
-        factory.createMarket(PRICE_ID, STRIKE_PRICE, 3600, 60, 1);
+        factory.createMarket(PRICE_ID, STRIKE_PRICE, expiry, 60, 1);
     }
 
     function test_CreateMarket_IncrementsId() public {
         vm.startPrank(user1);
-        uint256 id1 = factory.createMarket(PRICE_ID, STRIKE_PRICE, 3600, 60, 1);
-        uint256 id2 = factory.createMarket(PRICE_ID, STRIKE_PRICE, 7200, 60, 1);
+        uint256 id1 = factory.createMarket(PRICE_ID, STRIKE_PRICE, block.timestamp + 3600, 60, 1);
+        uint256 id2 = factory.createMarket(PRICE_ID, STRIKE_PRICE, block.timestamp + 7200, 60, 1);
         vm.stopPrank();
         assertEq(id1, 1);
         assertEq(id2, 2);
@@ -88,14 +89,14 @@ contract MarketFactoryTest is Test {
 
     function test_CreateMarket_TracksActive() public {
         vm.prank(user1);
-        factory.createMarket(PRICE_ID, STRIKE_PRICE, 3600, 60, 1);
+        factory.createMarket(PRICE_ID, STRIKE_PRICE, block.timestamp + 3600, 60, 1);
         assertEq(factory.getActiveMarketCount(), 1);
         assertEq(factory.activeMarkets(0), 1);
     }
 
     function test_CreateMarket_UsesDefaults() public {
         vm.prank(user1);
-        uint256 id = factory.createMarket(PRICE_ID, STRIKE_PRICE, 3600, 0, 0);
+        uint256 id = factory.createMarket(PRICE_ID, STRIKE_PRICE, block.timestamp + 3600, 0, 0);
         (, , , , , , , uint256 obId) = factory.marketMeta(id);
         (, , , , uint32 minLots, uint32 batchInterval, ) = book.markets(obId);
         assertEq(batchInterval, 60);
@@ -107,43 +108,43 @@ contract MarketFactoryTest is Test {
         factory.pauseFactory(true);
         vm.expectRevert("MarketFactory: paused");
         vm.prank(user1);
-        factory.createMarket(PRICE_ID, STRIKE_PRICE, 3600, 60, 1);
+        factory.createMarket(PRICE_ID, STRIKE_PRICE, block.timestamp + 3600, 60, 1);
     }
 
     function test_CreateMarket_RevertIfNotCreatorRole() public {
         vm.expectRevert();
         vm.prank(user2);
-        factory.createMarket(PRICE_ID, STRIKE_PRICE, 3600, 60, 1);
+        factory.createMarket(PRICE_ID, STRIKE_PRICE, block.timestamp + 3600, 60, 1);
     }
 
-    function test_CreateMarket_RevertIfZeroDuration() public {
-        vm.expectRevert("MarketFactory: zero duration");
+    function test_CreateMarket_RevertIfExpiryInPast() public {
+        vm.expectRevert("MarketFactory: expiry in the past");
         vm.prank(user1);
-        factory.createMarket(PRICE_ID, STRIKE_PRICE, 0, 0, 1);
+        factory.createMarket(PRICE_ID, STRIKE_PRICE, block.timestamp - 1, 0, 1);
     }
 
     function test_CreateMarket_RevertIfZeroPriceId() public {
         vm.expectRevert("MarketFactory: zero priceId");
         vm.prank(user1);
-        factory.createMarket(bytes32(0), STRIKE_PRICE, 3600, 60, 1);
+        factory.createMarket(bytes32(0), STRIKE_PRICE, block.timestamp + 3600, 60, 1);
     }
 
     function test_CreateMarket_RevertIfDurationBelowBatchInterval() public {
         vm.expectRevert("MarketFactory: duration must exceed batchInterval");
         vm.prank(user1);
-        factory.createMarket(PRICE_ID, STRIKE_PRICE, 600, 601, 1);
+        factory.createMarket(PRICE_ID, STRIKE_PRICE, block.timestamp + 600, 601, 1);
     }
 
     function test_CreateMarket_ShortDurationAllowed() public {
         // Short durations (e.g. 5 min) should be allowed — no minimum enforced
         vm.prank(user1);
-        uint256 id = factory.createMarket(PRICE_ID, STRIKE_PRICE, 300, 12, 1);
+        uint256 id = factory.createMarket(PRICE_ID, STRIKE_PRICE, block.timestamp + 300, 12, 1);
         assertGt(id, 0);
     }
 
     function test_CloseMarket_Basic() public {
         vm.prank(user1);
-        uint256 id = factory.createMarket(PRICE_ID, STRIKE_PRICE, 3600, 60, 1);
+        uint256 id = factory.createMarket(PRICE_ID, STRIKE_PRICE, block.timestamp + 3600, 60, 1);
         vm.warp(block.timestamp + 3600);
         factory.closeMarket(id);
 
@@ -155,14 +156,14 @@ contract MarketFactoryTest is Test {
 
     function test_CloseMarket_RevertIfNotExpired() public {
         vm.prank(user1);
-        uint256 id = factory.createMarket(PRICE_ID, STRIKE_PRICE, 3600, 60, 1);
+        uint256 id = factory.createMarket(PRICE_ID, STRIKE_PRICE, block.timestamp + 3600, 60, 1);
         vm.expectRevert("MarketFactory: not expired");
         factory.closeMarket(id);
     }
 
     function test_CloseMarket_RevertIfAlreadyClosed() public {
         vm.prank(user1);
-        uint256 id = factory.createMarket(PRICE_ID, STRIKE_PRICE, 3600, 60, 1);
+        uint256 id = factory.createMarket(PRICE_ID, STRIKE_PRICE, block.timestamp + 3600, 60, 1);
         vm.warp(block.timestamp + 3600);
         factory.closeMarket(id);
         vm.expectRevert("MarketFactory: not open");
@@ -171,7 +172,7 @@ contract MarketFactoryTest is Test {
 
     function test_CancelMarket_Basic() public {
         vm.prank(user1);
-        uint256 id = factory.createMarket(PRICE_ID, STRIKE_PRICE, 3600, 60, 1);
+        uint256 id = factory.createMarket(PRICE_ID, STRIKE_PRICE, block.timestamp + 3600, 60, 1);
         vm.warp(block.timestamp + 3600);
         factory.closeMarket(id);
         vm.warp(block.timestamp + 24 hours);
@@ -183,7 +184,7 @@ contract MarketFactoryTest is Test {
 
     function test_CancelMarket_RevertIfTooEarly() public {
         vm.prank(user1);
-        uint256 id = factory.createMarket(PRICE_ID, STRIKE_PRICE, 3600, 60, 1);
+        uint256 id = factory.createMarket(PRICE_ID, STRIKE_PRICE, block.timestamp + 3600, 60, 1);
         vm.warp(block.timestamp + 3600);
         factory.closeMarket(id);
         vm.expectRevert("MarketFactory: too early to cancel");
@@ -218,7 +219,7 @@ contract MarketFactoryTest is Test {
 
     function test_StateTransition_FullLifecycle() public {
         vm.prank(user1);
-        uint256 id = factory.createMarket(PRICE_ID, STRIKE_PRICE, 3600, 60, 1);
+        uint256 id = factory.createMarket(PRICE_ID, STRIKE_PRICE, block.timestamp + 3600, 60, 1);
         assertEq(uint256(factory.getMarketState(id)), uint256(MarketState.Open));
 
         vm.warp(block.timestamp + 3600);
@@ -236,9 +237,9 @@ contract MarketFactoryTest is Test {
 
     function test_GetActiveMarketCount_MultipleMarkets() public {
         vm.startPrank(user1);
-        factory.createMarket(PRICE_ID, STRIKE_PRICE, 3600, 60, 1);
-        factory.createMarket(PRICE_ID, STRIKE_PRICE, 7200, 60, 1);
-        factory.createMarket(PRICE_ID, STRIKE_PRICE, 10800, 60, 1);
+        factory.createMarket(PRICE_ID, STRIKE_PRICE, block.timestamp + 3600, 60, 1);
+        factory.createMarket(PRICE_ID, STRIKE_PRICE, block.timestamp + 7200, 60, 1);
+        factory.createMarket(PRICE_ID, STRIKE_PRICE, block.timestamp + 10800, 60, 1);
         vm.stopPrank();
 
         assertEq(factory.getActiveMarketCount(), 3);

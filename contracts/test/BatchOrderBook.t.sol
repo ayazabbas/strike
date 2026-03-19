@@ -79,7 +79,7 @@ contract BatchOrderBookTest is Test {
 
     function _createMarket(uint256 duration) internal returns (uint256 fmId, uint256 obId) {
         vm.prank(user1);
-        fmId = factory.createMarket(PRICE_ID, STRIKE_PRICE, duration, 60, 1);
+        fmId = factory.createMarket(PRICE_ID, STRIKE_PRICE, block.timestamp + duration, 60, 1);
         (, , , , , , , uint256 _obId) = factory.marketMeta(fmId);
         obId = _obId;
     }

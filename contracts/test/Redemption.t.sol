@@ -89,7 +89,7 @@ contract RedemptionTest is Test {
 
     function _createAndFillMarket() internal returns (uint256 fmId, uint256 obId) {
         vm.prank(user1);
-        fmId = factory.createMarket(PRICE_ID, STRIKE_PRICE, 3600, 60, 1);
+        fmId = factory.createMarket(PRICE_ID, STRIKE_PRICE, block.timestamp + 3600, 60, 1);
         (, , , , , , , uint256 _obId) = factory.marketMeta(fmId);
         obId = _obId;
 

@@ -58,7 +58,7 @@ contract PythResolverTest is Test {
         vm.deal(user1, 100 ether);
 
         vm.prank(user1);
-        marketId = factory.createMarket(PRICE_ID, STRIKE_PRICE, 3600, 60, 1);
+        marketId = factory.createMarket(PRICE_ID, STRIKE_PRICE, block.timestamp + 3600, 60, 1);
         (, , expiryTime, , , , , ) = factory.marketMeta(marketId);
     }
 

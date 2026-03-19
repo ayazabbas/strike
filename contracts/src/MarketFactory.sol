@@ -94,25 +94,25 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
     /// @notice Create a new binary outcome market.
     /// @param priceId     Pyth price feed ID for resolution.
     /// @param strikePrice Resolution threshold: price >= strikePrice → YES wins.
-    /// @param duration    Duration in seconds from now until market expiry.
+    /// @param expiryTime  Unix timestamp when the market expires.
     /// @param batchInterval Seconds between batch auctions (0 = use default).
     /// @param minLots     Minimum order size in lots (0 = use default).
     /// @return factoryMarketId The new market's factory ID.
     function createMarket(
         bytes32 priceId,
         int64 strikePrice,
-        uint256 duration,
+        uint256 expiryTime,
         uint256 batchInterval,
         uint128 minLots
     ) external onlyRole(MARKET_CREATOR_ROLE) nonReentrant returns (uint256 factoryMarketId) {
         require(!paused, "MarketFactory: paused");
-        require(duration > 0, "MarketFactory: zero duration");
+        require(expiryTime > block.timestamp, "MarketFactory: expiry in the past");
         require(priceId != bytes32(0), "MarketFactory: zero priceId");
         require(strikePrice > 0, "MarketFactory: zero strikePrice");
 
         uint256 interval = batchInterval > 0 ? batchInterval : defaultBatchInterval;
         uint128 lots = minLots > 0 ? minLots : defaultMinLots;
-        uint256 expiryTime = block.timestamp + duration;
+        uint256 duration = expiryTime - block.timestamp;
 
         require(duration > interval, "MarketFactory: duration must exceed batchInterval");
 
