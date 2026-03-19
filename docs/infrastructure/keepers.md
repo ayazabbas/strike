@@ -30,20 +30,6 @@ Resolves expired markets with Pyth oracle data.
 - Handles fallback window extension if initial fetch has no data
 - Claims resolver bounty on success
 
-## Deployment
-
-All keepers run as systemd services:
-
-```bash
-# Install
-cd keeper && npm install && npm run build
-
-# Systemd
-sudo cp deploy/systemd/strike-*.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now strike-batch-keeper strike-resolution-keeper
-```
-
 Note: No pruning keeper is needed. Markets expire naturally and `clearBatch()` handles all settlement atomically.
 
 ## Monitoring
