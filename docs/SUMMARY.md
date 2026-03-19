@@ -15,6 +15,17 @@
 * [Oracle Resolution](protocol/oracle-resolution.md)
 * [Fees & Incentives](protocol/fees-and-incentives.md)
 
+## SDK
+
+* [Overview](sdk/overview.md)
+* [Quick Start](sdk/quickstart.md)
+* [Client Configuration](sdk/client.md)
+* [Placing & Managing Orders](sdk/orders.md)
+* [Real-Time Events](sdk/events.md)
+* [Vault & Outcome Tokens](sdk/vault-and-tokens.md)
+* [Indexer Client](sdk/indexer.md)
+* [Example Bots](sdk/examples.md)
+
 ## Smart Contracts
 
 * [Architecture](contracts/architecture.md)
@@ -46,17 +57,6 @@
 * [Deployment Guide](deployment-guide.md)
 * [Developer Integration](developer-integration.md)
 * [Local Devnet Setup](devnet-setup.md)
-
-## SDK
-
-* [Overview](sdk/overview.md)
-* [Quick Start](sdk/quickstart.md)
-* [Client Configuration](sdk/client.md)
-* [Placing & Managing Orders](sdk/orders.md)
-* [Real-Time Events](sdk/events.md)
-* [Vault & Outcome Tokens](sdk/vault-and-tokens.md)
-* [Indexer Client](sdk/indexer.md)
-* [Example Bots](sdk/examples.md)
 
 ## Technical
 
