@@ -326,7 +326,8 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
         }
         require(batchOrderIds[marketId][batchId].length + params.length <= MAX_ORDERS_PER_BATCH, "OrderBook: batch overflow");
 
-        for (uint256 i = 0; i < params.length; i++) {
+        uint256 paramsLen = params.length;
+        for (uint256 i = 0; i < paramsLen; ) {
             require(params[i].tick >= 1 && params[i].tick <= SegmentTree.MAX_TICK, "OrderBook: tick out of range");
             require(params[i].lots > 0, "OrderBook: zero lots");
             require(params[i].lots >= m.minLots, "OrderBook: below min lots");
@@ -334,6 +335,7 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
             (uint64 oid, uint256 deposit) = _placeOne(marketId, uint32(batchId), params[i], msg.sender);
             orderIds[i] = oid;
             totalDeposit += deposit;
+            unchecked { ++i; }
         }
 
         if (totalDeposit > 0) {
@@ -354,8 +356,10 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
         require(marketId <= type(uint32).max, "OrderBook: marketId overflow");
 
         uint256 totalRefund;
-        for (uint256 i = 0; i < cancelIds.length; i++) {
+        uint256 cancelLen = cancelIds.length;
+        for (uint256 i = 0; i < cancelLen; ) {
             totalRefund += _cancelForReplace(cancelIds[i], msg.sender);
+            unchecked { ++i; }
         }
 
         orderIds = new uint256[](params.length);
@@ -368,7 +372,8 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
             }
             require(batchOrderIds[marketId][batchId].length + params.length <= MAX_ORDERS_PER_BATCH, "OrderBook: batch overflow");
 
-            for (uint256 i = 0; i < params.length; i++) {
+            uint256 paramsLen2 = params.length;
+            for (uint256 i = 0; i < paramsLen2; ) {
                 require(params[i].tick >= 1 && params[i].tick <= SegmentTree.MAX_TICK, "OrderBook: tick out of range");
                 require(params[i].lots > 0, "OrderBook: zero lots");
                 require(params[i].lots >= m.minLots, "OrderBook: below min lots");
@@ -376,6 +381,7 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
                 (uint64 oid, uint256 deposit) = _placeOne(marketId, uint32(batchId), params[i], msg.sender);
                 orderIds[i] = oid;
                 totalDeposit += deposit;
+                unchecked { ++i; }
             }
         }
 
@@ -444,11 +450,13 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
     /// @dev Skips already-cancelled/filled orders (lots == 0) silently.
     ///      Reverts the whole batch if any order is not owned by msg.sender.
     function cancelOrders(uint256[] calldata orderIds) external nonReentrant {
-        for (uint256 i = 0; i < orderIds.length; i++) {
+        uint256 len = orderIds.length;
+        for (uint256 i = 0; i < len; ) {
             Order storage o = orders[orderIds[i]];
-            if (o.lots == 0) continue;
+            if (o.lots == 0) { unchecked { ++i; } continue; }
             require(o.owner == msg.sender, "OrderBook: not owner");
             _cancelCore(orderIds[i], msg.sender);
+            unchecked { ++i; }
         }
     }
 
@@ -464,12 +472,14 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
 
     /// @notice Batch cancel expired orders. Anyone can call.
     function cancelExpiredOrders(uint256[] calldata orderIds) external nonReentrant {
-        for (uint256 i = 0; i < orderIds.length; i++) {
+        uint256 len = orderIds.length;
+        for (uint256 i = 0; i < len; ) {
             Order storage o = orders[orderIds[i]];
-            if (o.lots == 0) continue;
+            if (o.lots == 0) { unchecked { ++i; } continue; }
             Market storage m = markets[o.marketId];
-            if (block.timestamp <= m.expiryTime) continue;
+            if (block.timestamp <= m.expiryTime) { unchecked { ++i; } continue; }
             _cancelCore(orderIds[i], o.owner);
+            unchecked { ++i; }
         }
     }
 

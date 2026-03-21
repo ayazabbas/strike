@@ -55,17 +55,21 @@ library SegmentTree {
 
         uint256 idx = _leafIndex(tick);
 
-        // Walk up from leaf to root, updating each ancestor.
-        while (idx >= 1) {
-            if (delta >= 0) {
-                tree.nodes[idx] += uint256(delta);
-            } else {
-                uint256 abs = uint256(-delta);
-                require(tree.nodes[idx] >= abs, "SegmentTree: underflow");
-                tree.nodes[idx] -= abs;
+        if (delta >= 0) {
+            uint256 absDelta = uint256(delta);
+            while (idx >= 1) {
+                unchecked { tree.nodes[idx] += absDelta; }
+                if (idx == 1) break;
+                idx >>= 1;
             }
-            if (idx == 1) break;
-            idx >>= 1; // parent
+        } else {
+            uint256 absDelta = uint256(-delta);
+            require(tree.nodes[idx] >= absDelta, "SegmentTree: underflow");
+            while (idx >= 1) {
+                unchecked { tree.nodes[idx] -= absDelta; }
+                if (idx == 1) break;
+                idx >>= 1;
+            }
         }
     }
 
