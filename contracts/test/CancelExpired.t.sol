@@ -45,7 +45,7 @@ contract CancelExpiredTest is Test {
         usdt.approve(address(vault), type(uint256).max);
 
         vm.prank(operator);
-        marketId = book.registerMarket(1, 60, block.timestamp + 3600);
+        marketId = book.registerMarket(1, 60, block.timestamp + 3600, false);
     }
 
     function test_CancelExpiredOrder_Single() public {
@@ -108,7 +108,7 @@ contract CancelExpiredTest is Test {
     function test_CancelExpiredOrders_SkipsNonExpired() public {
         // Create two markets: one that will expire and one that won't
         vm.prank(operator);
-        uint256 market2 = book.registerMarket(1, 60, block.timestamp + 7200);
+        uint256 market2 = book.registerMarket(1, 60, block.timestamp + 7200, false);
 
         vm.prank(user1);
         uint256 id1 = book.placeOrder(marketId, Side.Bid, OrderType.GoodTilCancel, 50, 10);

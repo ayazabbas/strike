@@ -59,7 +59,7 @@ contract PythResolverTest is Test {
 
         vm.prank(user1);
         marketId = factory.createMarket(PRICE_ID, STRIKE_PRICE, block.timestamp + 3600, 60, 1);
-        (, , expiryTime, , , , , ) = factory.marketMeta(marketId);
+        (, , expiryTime, , , , , , ) = factory.marketMeta(marketId);
     }
 
     function _createPriceUpdate(bytes32 priceId, int64 price, uint64 conf, uint64 publishTime)
@@ -210,7 +210,7 @@ contract PythResolverTest is Test {
         vm.warp(block.timestamp + 90);
         resolver.finalizeResolution(marketId);
 
-        (, , , , , bool outcomeYes, , ) = factory.marketMeta(marketId);
+        (, , , , , bool outcomeYes, , , ) = factory.marketMeta(marketId);
         assertTrue(outcomeYes);
     }
 
@@ -224,7 +224,7 @@ contract PythResolverTest is Test {
         vm.warp(block.timestamp + 90);
         resolver.finalizeResolution(marketId);
 
-        (, , , , , bool outcomeYes, , ) = factory.marketMeta(marketId);
+        (, , , , , bool outcomeYes, , , ) = factory.marketMeta(marketId);
         assertFalse(outcomeYes);
     }
 
@@ -383,7 +383,7 @@ contract PythResolverTest is Test {
         vm.warp(block.timestamp + 45);
         resolver.finalizeResolution(marketId);
 
-        (, , , , , bool outcomeYes, , ) = factory.marketMeta(marketId);
+        (, , , , , bool outcomeYes, , , ) = factory.marketMeta(marketId);
         assertFalse(outcomeYes); // NO wins since challenge price < strike
     }
 
@@ -406,7 +406,7 @@ contract PythResolverTest is Test {
         vm.warp(block.timestamp + 90);
         resolver.finalizeResolution(marketId);
 
-        (, , , , MarketState state, bool outcomeYes, int64 settlementPrice, ) = factory.marketMeta(marketId);
+        (, , , , MarketState state, bool outcomeYes, int64 settlementPrice, , ) = factory.marketMeta(marketId);
         assertEq(uint256(state), uint256(MarketState.Resolved));
         assertEq(settlementPrice, price);
 

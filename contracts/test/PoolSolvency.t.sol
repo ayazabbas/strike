@@ -85,12 +85,12 @@ contract PoolSolvencyTest is Test {
     function _createMarket() internal returns (uint256 fmId, uint256 obId) {
         vm.prank(admin);
         fmId = factory.createMarket(PRICE_ID, STRIKE_PRICE, block.timestamp + 7200, 60, 1);
-        (, , , , , , , uint256 _obId) = factory.marketMeta(fmId);
+        (, , , , , , , uint256 _obId, ) = factory.marketMeta(fmId);
         obId = _obId;
     }
 
     function _resolveMarket(uint256 fmId, bool yesWins) internal {
-        (, , uint256 expiry, , , , , ) = factory.marketMeta(fmId);
+        (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
         vm.warp(expiry);
         factory.closeMarket(fmId);
 

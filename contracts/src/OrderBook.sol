@@ -82,7 +82,7 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
     // Market management
     // -------------------------------------------------------------------------
 
-    function registerMarket(uint256 minLots, uint256 batchInterval, uint256 expiryTime) external onlyRole(OPERATOR_ROLE) returns (uint256 marketId) {
+    function registerMarket(uint256 minLots, uint256 batchInterval, uint256 expiryTime, bool useInternalPositions) external onlyRole(OPERATOR_ROLE) returns (uint256 marketId) {
         require(minLots <= type(uint32).max, "OrderBook: minLots overflow");
         require(batchInterval <= type(uint32).max, "OrderBook: batchInterval overflow");
         require(expiryTime <= type(uint40).max, "OrderBook: expiryTime overflow");
@@ -96,7 +96,8 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
             currentBatchId: 1,
             minLots: uint32(minLots),
             batchInterval: uint32(batchInterval),
-            expiryTime: uint40(expiryTime)
+            expiryTime: uint40(expiryTime),
+            useInternalPositions: useInternalPositions
         });
         emit MarketRegistered(marketId, minLots);
     }
@@ -171,12 +172,15 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
         }
 
         if (isSell) {
-            // Sell order: lock outcome tokens instead of USDT
             bool isYes = (side == Side.SellYes);
-            uint256 tokenId = isYes
-                ? outcomeToken.yesTokenId(marketId)
-                : outcomeToken.noTokenId(marketId);
-            outcomeToken.safeTransferFrom(msg.sender, address(this), tokenId, lots, "");
+            if (m.useInternalPositions) {
+                vault.lockPosition(msg.sender, marketId, uint128(lots), isYes);
+            } else {
+                uint256 tokenId = isYes
+                    ? outcomeToken.yesTokenId(marketId)
+                    : outcomeToken.noTokenId(marketId);
+                outcomeToken.safeTransferFrom(msg.sender, address(this), tokenId, lots, "");
+            }
 
             // SellYes sits on the ask side, SellNo sits on the bid side
             if (side == Side.SellYes) {
@@ -232,10 +236,15 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
         }
 
         if (side == Side.SellYes || side == Side.SellNo) {
-            uint256 tokenId = (side == Side.SellYes)
-                ? outcomeToken.yesTokenId(mktId)
-                : outcomeToken.noTokenId(mktId);
-            outcomeToken.safeTransferFrom(address(this), caller, tokenId, lots, "");
+            bool isYes = (side == Side.SellYes);
+            if (markets[mktId].useInternalPositions) {
+                vault.unlockPosition(caller, mktId, uint128(lots), isYes);
+            } else {
+                uint256 tokenId = isYes
+                    ? outcomeToken.yesTokenId(mktId)
+                    : outcomeToken.noTokenId(mktId);
+                outcomeToken.safeTransferFrom(address(this), caller, tokenId, lots, "");
+            }
         } else {
             uint256 collateral = (side == Side.Bid)
                 ? (lots * LOT_SIZE * tick) / 100
@@ -266,10 +275,15 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
         });
 
         if (p.side == Side.SellYes || p.side == Side.SellNo) {
-            uint256 tokenId = (p.side == Side.SellYes)
-                ? outcomeToken.yesTokenId(marketId)
-                : outcomeToken.noTokenId(marketId);
-            outcomeToken.safeTransferFrom(caller, address(this), tokenId, p.lots, "");
+            bool isYes = (p.side == Side.SellYes);
+            if (markets[marketId].useInternalPositions) {
+                vault.lockPosition(caller, marketId, uint128(p.lots), isYes);
+            } else {
+                uint256 tokenId = isYes
+                    ? outcomeToken.yesTokenId(marketId)
+                    : outcomeToken.noTokenId(marketId);
+                outcomeToken.safeTransferFrom(caller, address(this), tokenId, p.lots, "");
+            }
             if (p.side == Side.SellYes) {
                 askTrees[marketId].update(p.tick, int256(uint256(p.lots)));
             } else {
@@ -398,10 +412,15 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
         }
 
         if (side == Side.SellYes || side == Side.SellNo) {
-            uint256 tokenId = (side == Side.SellYes)
-                ? outcomeToken.yesTokenId(marketId)
-                : outcomeToken.noTokenId(marketId);
-            outcomeToken.safeTransferFrom(address(this), recipient, tokenId, lots, "");
+            bool isYes = (side == Side.SellYes);
+            if (markets[marketId].useInternalPositions) {
+                vault.unlockPosition(recipient, marketId, uint128(lots), isYes);
+            } else {
+                uint256 tokenId = isYes
+                    ? outcomeToken.yesTokenId(marketId)
+                    : outcomeToken.noTokenId(marketId);
+                outcomeToken.safeTransferFrom(address(this), recipient, tokenId, lots, "");
+            }
         } else {
             uint256 collateral = (side == Side.Bid)
                 ? (lots * LOT_SIZE * tick) / 100

@@ -92,7 +92,7 @@ contract IntegrationTest is Test {
     }
 
     function _getObId(uint256 fmId) internal view returns (uint256) {
-        (, , , , , , , uint256 obId) = factory.marketMeta(fmId);
+        (, , , , , , , uint256 obId, ) = factory.marketMeta(fmId);
         return obId;
     }
 
@@ -141,7 +141,7 @@ contract IntegrationTest is Test {
         assertLe(result.clearingTick, 60);
         assertGt(result.matchedLots, 0);
 
-        (, , uint256 expiry, , , , , ) = factory.marketMeta(fmId);
+        (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
         vm.warp(expiry);
         factory.closeMarket(fmId);
         assertEq(uint256(factory.getMarketState(fmId)), uint256(MarketState.Closed));
@@ -180,7 +180,7 @@ contract IntegrationTest is Test {
 
     function test_Cancellation_NoResolution() public {
         uint256 fmId = _createMarket(3600);
-        (, , uint256 expiry, , , , , ) = factory.marketMeta(fmId);
+        (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
         vm.warp(expiry);
         factory.closeMarket(fmId);
 
@@ -196,7 +196,7 @@ contract IntegrationTest is Test {
 
     function test_Challenge_TwoResolvers() public {
         uint256 fmId = _createMarket(3600);
-        (, , uint256 expiry, , , , , ) = factory.marketMeta(fmId);
+        (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
         vm.warp(expiry);
         factory.closeMarket(fmId);
 
@@ -227,7 +227,7 @@ contract IntegrationTest is Test {
         BatchAuction za = _createZeroFeeAuction();
         uint256 fmId = _createMarket(3600);
         uint256 obId = _getObId(fmId);
-        (, , uint256 expiry, , , , , ) = factory.marketMeta(fmId);
+        (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
 
         vm.prank(user1);
         book.placeOrder(obId, Side.Bid, OrderType.GoodTilCancel, 60, 10);
@@ -267,7 +267,7 @@ contract IntegrationTest is Test {
         BatchAuction za = _createZeroFeeAuction();
         uint256 fmId = _createMarket(3600);
         uint256 obId = _getObId(fmId);
-        (, , uint256 expiry, , , , , ) = factory.marketMeta(fmId);
+        (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
 
         vm.prank(user1);
         book.placeOrder(obId, Side.Bid, OrderType.GoodTilCancel, 60, 10);
@@ -289,7 +289,7 @@ contract IntegrationTest is Test {
         vm.warp(block.timestamp + 90);
         resolver.finalizeResolution(fmId);
 
-        (, , , , , bool outcomeYes, , ) = factory.marketMeta(fmId);
+        (, , , , , bool outcomeYes, , , ) = factory.marketMeta(fmId);
         assertFalse(outcomeYes);
 
         uint256 user2BalBefore = usdt.balanceOf(user2);
@@ -308,7 +308,7 @@ contract IntegrationTest is Test {
         BatchAuction za = _createZeroFeeAuction();
         uint256 fmId = _createMarket(3600);
         uint256 obId = _getObId(fmId);
-        (, , uint256 expiry, , , , , ) = factory.marketMeta(fmId);
+        (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
 
         vm.prank(user1);
         book.placeOrder(obId, Side.Bid, OrderType.GoodTilCancel, 60, 5);
@@ -366,23 +366,23 @@ contract IntegrationTest is Test {
     function test_MarketCreation_RegistersInOrderBook() public {
         uint256 fmId = _createMarket(3600);
         uint256 obId = _getObId(fmId);
-        (uint32 mId, bool active, , , , , ) = book.markets(obId);
+        (uint32 mId, bool active, , , , , , ) = book.markets(obId);
         assertEq(mId, obId);
         assertTrue(active);
     }
 
     function test_CloseMarket_DeactivatesOrderBook() public {
         uint256 fmId = _createMarket(3600);
-        (, , uint256 expiry, , , , , uint256 obId) = factory.marketMeta(fmId);
+        (, , uint256 expiry, , , , , uint256 obId, ) = factory.marketMeta(fmId);
         vm.warp(expiry);
         factory.closeMarket(fmId);
-        (, bool active, , , , , ) = book.markets(obId);
+        (, bool active, , , , , , ) = book.markets(obId);
         assertFalse(active);
     }
 
     function test_CannotPlaceOrderAfterClose() public {
         uint256 fmId = _createMarket(3600);
-        (, , uint256 expiry, , , , , uint256 obId) = factory.marketMeta(fmId);
+        (, , uint256 expiry, , , , , uint256 obId, ) = factory.marketMeta(fmId);
         vm.warp(expiry);
         factory.closeMarket(fmId);
 
@@ -393,7 +393,7 @@ contract IntegrationTest is Test {
 
     function test_CancelMarket_FromOpenState() public {
         uint256 fmId = _createMarket(3600);
-        (, , uint256 expiry, , , , , ) = factory.marketMeta(fmId);
+        (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
         vm.warp(expiry + 24 hours);
         factory.cancelMarket(fmId);
         assertEq(uint256(factory.getMarketState(fmId)), uint256(MarketState.Cancelled));

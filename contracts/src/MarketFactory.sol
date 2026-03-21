@@ -39,6 +39,7 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
         bool outcomeYes;       // true = YES won (only valid in Resolved state)
         int64 settlementPrice; // price at resolution
         uint256 orderBookMarketId; // ID in the OrderBook
+        bool useInternalPositions; // true = internal position tracking (no ERC1155)
     }
 
     /// @notice factoryMarketId => MarketMeta
@@ -105,6 +106,27 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
         uint256 batchInterval,
         uint128 minLots
     ) external onlyRole(MARKET_CREATOR_ROLE) nonReentrant returns (uint256 factoryMarketId) {
+        return _createMarket(priceId, strikePrice, expiryTime, batchInterval, minLots, false);
+    }
+
+    function createMarketWithPositions(
+        bytes32 priceId,
+        int64 strikePrice,
+        uint256 expiryTime,
+        uint256 batchInterval,
+        uint128 minLots
+    ) external onlyRole(MARKET_CREATOR_ROLE) nonReentrant returns (uint256 factoryMarketId) {
+        return _createMarket(priceId, strikePrice, expiryTime, batchInterval, minLots, true);
+    }
+
+    function _createMarket(
+        bytes32 priceId,
+        int64 strikePrice,
+        uint256 expiryTime,
+        uint256 batchInterval,
+        uint128 minLots,
+        bool useInternalPositions
+    ) internal returns (uint256 factoryMarketId) {
         require(!paused, "MarketFactory: paused");
         require(expiryTime > block.timestamp, "MarketFactory: expiry in the past");
         require(priceId != bytes32(0), "MarketFactory: zero priceId");
@@ -119,7 +141,7 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
         factoryMarketId = nextFactoryMarketId++;
 
         // Register in OrderBook (requires OPERATOR_ROLE on OrderBook)
-        uint256 obMarketId = orderBook.registerMarket(lots, interval, expiryTime);
+        uint256 obMarketId = orderBook.registerMarket(lots, interval, expiryTime, useInternalPositions);
 
         marketMeta[factoryMarketId] = MarketMeta({
             priceId: priceId,
@@ -129,7 +151,8 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
             state: MarketState.Open,
             outcomeYes: false,
             settlementPrice: 0,
-            orderBookMarketId: obMarketId
+            orderBookMarketId: obMarketId,
+            useInternalPositions: useInternalPositions
         });
 
         // Track as active

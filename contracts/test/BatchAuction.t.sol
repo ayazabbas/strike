@@ -57,7 +57,7 @@ contract BatchAuctionTest is Test {
 
     function _setupMarket() internal returns (uint256) {
         vm.prank(operator);
-        return book.registerMarket(1, 3, block.timestamp + 3600);
+        return book.registerMarket(1, 3, block.timestamp + 3600, false);
     }
 
     function _calcCollateral(Side side, uint256 tick, uint256 lots) internal pure returns (uint256) {
@@ -112,7 +112,7 @@ contract BatchAuctionTest is Test {
         uint256 mId = _setupMarket();
         auction.clearBatch(mId);
 
-        (, , , uint32 batchId, , , ) = book.markets(mId);
+        (, , , uint32 batchId, , , , ) = book.markets(mId);
         assertEq(batchId, 2);
     }
 

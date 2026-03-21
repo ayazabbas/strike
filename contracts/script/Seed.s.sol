@@ -18,7 +18,7 @@ contract SeedScript is Script {
         IERC20 usdt = IERC20(vm.envAddress("USDT_ADDR"));
 
         // Get orderBook market ID from factory market #1
-        (,,,,,,, uint256 obMarketId) = factory.marketMeta(1);
+        (,,,,,,,uint256 obMarketId,) = factory.marketMeta(1);
         require(obMarketId > 0, "Seed: no market found");
 
         console.log("Seeding market (OB ID):", obMarketId);

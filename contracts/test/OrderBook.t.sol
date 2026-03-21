@@ -65,9 +65,9 @@ contract OrderBookTest is Test {
 
     function test_RegisterMarket_Basic() public {
         vm.prank(operator);
-        uint256 id = book.registerMarket(10, 3, block.timestamp + 3600);
+        uint256 id = book.registerMarket(10, 3, block.timestamp + 3600, false);
 
-        (uint32 mId, bool active, bool halted, uint32 batchId, uint32 minLots, , ) = book.markets(id);
+        (uint32 mId, bool active, bool halted, uint32 batchId, uint32 minLots, , , ) = book.markets(id);
         assertEq(mId, 1);
         assertTrue(active);
         assertFalse(halted);
@@ -79,13 +79,13 @@ contract OrderBookTest is Test {
         vm.expectEmit(true, false, false, true);
         emit OrderBook.MarketRegistered(1, 5);
         vm.prank(operator);
-        book.registerMarket(5, 3, block.timestamp + 3600);
+        book.registerMarket(5, 3, block.timestamp + 3600, false);
     }
 
     function test_RegisterMarket_IncrementsId() public {
         vm.startPrank(operator);
-        uint256 id1 = book.registerMarket(0, 3, block.timestamp + 3600);
-        uint256 id2 = book.registerMarket(0, 3, block.timestamp + 3600);
+        uint256 id1 = book.registerMarket(0, 3, block.timestamp + 3600, false);
+        uint256 id2 = book.registerMarket(0, 3, block.timestamp + 3600, false);
         vm.stopPrank();
         assertEq(id1, 1);
         assertEq(id2, 2);
@@ -94,7 +94,7 @@ contract OrderBookTest is Test {
     function test_RegisterMarket_RevertIfNotOperator() public {
         vm.expectRevert();
         vm.prank(unauthorized);
-        book.registerMarket(0, 3, block.timestamp + 3600);
+        book.registerMarket(0, 3, block.timestamp + 3600, false);
     }
 
     // =========================================================================
@@ -103,16 +103,16 @@ contract OrderBookTest is Test {
 
     function test_HaltMarket_Basic() public {
         vm.startPrank(operator);
-        uint256 id = book.registerMarket(0, 3, block.timestamp + 3600);
+        uint256 id = book.registerMarket(0, 3, block.timestamp + 3600, false);
         book.haltMarket(id);
         vm.stopPrank();
-        (, , bool halted, , , , ) = book.markets(id);
+        (, , bool halted, , , , , ) = book.markets(id);
         assertTrue(halted);
     }
 
     function test_HaltMarket_RevertIfAlreadyHalted() public {
         vm.startPrank(operator);
-        uint256 id = book.registerMarket(0, 3, block.timestamp + 3600);
+        uint256 id = book.registerMarket(0, 3, block.timestamp + 3600, false);
         book.haltMarket(id);
         vm.expectRevert("OrderBook: already halted");
         book.haltMarket(id);
@@ -121,17 +121,17 @@ contract OrderBookTest is Test {
 
     function test_ResumeMarket_Basic() public {
         vm.startPrank(operator);
-        uint256 id = book.registerMarket(0, 3, block.timestamp + 3600);
+        uint256 id = book.registerMarket(0, 3, block.timestamp + 3600, false);
         book.haltMarket(id);
         book.resumeMarket(id);
         vm.stopPrank();
-        (, , bool halted, , , , ) = book.markets(id);
+        (, , bool halted, , , , , ) = book.markets(id);
         assertFalse(halted);
     }
 
     function test_ResumeMarket_RevertIfNotHalted() public {
         vm.startPrank(operator);
-        uint256 id = book.registerMarket(0, 3, block.timestamp + 3600);
+        uint256 id = book.registerMarket(0, 3, block.timestamp + 3600, false);
         vm.expectRevert("OrderBook: not halted");
         book.resumeMarket(id);
         vm.stopPrank();
@@ -139,16 +139,16 @@ contract OrderBookTest is Test {
 
     function test_DeactivateMarket_Basic() public {
         vm.startPrank(operator);
-        uint256 id = book.registerMarket(0, 3, block.timestamp + 3600);
+        uint256 id = book.registerMarket(0, 3, block.timestamp + 3600, false);
         book.deactivateMarket(id);
         vm.stopPrank();
-        (, bool active, , , , , ) = book.markets(id);
+        (, bool active, , , , , , ) = book.markets(id);
         assertFalse(active);
     }
 
     function test_DeactivateMarket_RevertIfAlreadyInactive() public {
         vm.startPrank(operator);
-        uint256 id = book.registerMarket(0, 3, block.timestamp + 3600);
+        uint256 id = book.registerMarket(0, 3, block.timestamp + 3600, false);
         book.deactivateMarket(id);
         vm.expectRevert("OrderBook: market not active");
         book.deactivateMarket(id);
@@ -161,7 +161,7 @@ contract OrderBookTest is Test {
 
     function _setupMarket() internal returns (uint256 marketId) {
         vm.prank(operator);
-        marketId = book.registerMarket(1, 3, block.timestamp + 3600);
+        marketId = book.registerMarket(1, 3, block.timestamp + 3600, false);
     }
 
     function _calcCollateral(Side side, uint256 tick, uint256 lots) internal pure returns (uint256) {
@@ -325,7 +325,7 @@ contract OrderBookTest is Test {
 
     function test_PlaceOrder_RevertIfBelowMinLots() public {
         vm.prank(operator);
-        uint256 mId = book.registerMarket(5, 3, block.timestamp + 3600);
+        uint256 mId = book.registerMarket(5, 3, block.timestamp + 3600, false);
 
         vm.expectRevert("OrderBook: below min lots");
         vm.prank(user1);
@@ -334,7 +334,7 @@ contract OrderBookTest is Test {
 
     function test_PlaceOrder_RevertIfMarketExpired() public {
         vm.prank(operator);
-        uint256 mId = book.registerMarket(1, 3, block.timestamp + 5);
+        uint256 mId = book.registerMarket(1, 3, block.timestamp + 5, false);
 
         vm.warp(block.timestamp + 5);
 

@@ -80,7 +80,7 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
     /// @return result The BatchResult for this batch.
     function clearBatch(uint256 marketId) external nonReentrant returns (BatchResult memory result) {
         // Check if we're continuing settlement of a previous batch
-        (uint32 id, bool active, bool halted, uint32 currentBatchId, , , ) = orderBook.markets(marketId);
+        (uint32 id, bool active, bool halted, uint32 currentBatchId, , , , ) = orderBook.markets(marketId);
         require(id != 0, "BatchAuction: market not found");
 
         // Check if there's a batch with pending settlement (batch before current)
@@ -171,6 +171,11 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
     // -------------------------------------------------------------------------
     // Internal helpers
     // -------------------------------------------------------------------------
+
+    function _isInternalPositions(uint256 marketId) internal view returns (bool) {
+        (, , , , , , , bool useInternal) = orderBook.markets(marketId);
+        return useInternal;
+    }
 
     function _collateral(uint256 lots, uint256 tick, Side side) internal pure returns (uint256) {
         if (side == Side.Bid || side == Side.SellYes) {
@@ -325,12 +330,16 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
                 orderBook.updateTreeVolume(o.marketId, o.side, o.tick, -int256(o.lots));
 
                 if (isSell) {
-                    // GTB non-participating sell: return tokens
+                    // GTB non-participating sell: return tokens/positions
                     bool isYes = (o.side == Side.SellYes);
-                    uint256 tokenId = isYes
-                        ? outcomeToken.yesTokenId(o.marketId)
-                        : outcomeToken.noTokenId(o.marketId);
-                    orderBook.transferEscrowTokens(o.owner, tokenId, o.lots);
+                    if (_isInternalPositions(o.marketId)) {
+                        vault.unlockPosition(o.owner, o.marketId, uint128(o.lots), isYes);
+                    } else {
+                        uint256 tokenId = isYes
+                            ? outcomeToken.yesTokenId(o.marketId)
+                            : outcomeToken.noTokenId(o.marketId);
+                        orderBook.transferEscrowTokens(o.owner, tokenId, o.lots);
+                    }
                 } else {
                     // GTB non-participating buy: return USDT
                     uint256 collateral = _collateral(o.lots, o.tick, o.side);
@@ -388,9 +397,13 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
             _tryRollOrCancel(orderId, o, result.batchId + 1);
         }
 
-        // Mint outcome tokens
+        // Credit outcome tokens or internal positions
         if (s.filledLots > 0) {
-            outcomeToken.mintSingle(o.owner, o.marketId, s.filledLots, o.side == Side.Bid);
+            if (_isInternalPositions(o.marketId)) {
+                vault.creditPosition(o.owner, o.marketId, uint128(s.filledLots), o.side == Side.Bid);
+            } else {
+                outcomeToken.mintSingle(o.owner, o.marketId, s.filledLots, o.side == Side.Bid);
+            }
         }
 
         uint256 released = (fullyFilled || o.orderType == OrderType.GoodTilBatch)
@@ -403,18 +416,22 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
         uint256 filledLots = precomputedFill;
         uint256 unfilledLots = o.lots - filledLots;
         bool fullyFilled = filledLots == o.lots;
-
         bool isYes = (o.side == Side.SellYes);
-        uint256 tokenId = isYes
-            ? outcomeToken.yesTokenId(o.marketId)
-            : outcomeToken.noTokenId(o.marketId);
+        bool isInternal = _isInternalPositions(o.marketId);
 
         // Compute seller payout at clearing price
         uint256 payout = _collateral(filledLots, result.clearingTick, o.side);
 
-        // Burn filled tokens from OrderBook custody
+        // Consume filled tokens/positions
         if (filledLots > 0) {
-            outcomeToken.burnEscrow(address(orderBook), tokenId, filledLots);
+            if (isInternal) {
+                vault.consumeLockedPosition(o.owner, o.marketId, uint128(filledLots), isYes);
+            } else {
+                uint256 tokenId = isYes
+                    ? outcomeToken.yesTokenId(o.marketId)
+                    : outcomeToken.noTokenId(o.marketId);
+                outcomeToken.burnEscrow(address(orderBook), tokenId, filledLots);
+            }
         }
 
         // Pay seller from market pool
@@ -425,9 +442,16 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
         if (fullyFilled || o.orderType == OrderType.GoodTilBatch) {
             orderBook.reduceOrderLots(orderId, o.lots);
             orderBook.updateTreeVolume(o.marketId, o.side, o.tick, -int256(o.lots));
-            // Return unfilled tokens to seller
+            // Return unfilled tokens/positions to seller
             if (unfilledLots > 0) {
-                orderBook.transferEscrowTokens(o.owner, tokenId, unfilledLots);
+                if (isInternal) {
+                    vault.unlockPosition(o.owner, o.marketId, uint128(unfilledLots), isYes);
+                } else {
+                    uint256 tokenId = isYes
+                        ? outcomeToken.yesTokenId(o.marketId)
+                        : outcomeToken.noTokenId(o.marketId);
+                    orderBook.transferEscrowTokens(o.owner, tokenId, unfilledLots);
+                }
             }
         } else {
             // GTC partial fill: reduce filled, roll remainder

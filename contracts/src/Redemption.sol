@@ -63,19 +63,19 @@ contract Redemption is ReentrancyGuard {
             MarketState state,
             bool outcomeYes,
             ,
-            uint256 orderBookMarketId
+            uint256 orderBookMarketId,
+            bool useInternalPositions
         ) = factory.marketMeta(factoryMarketId);
 
         require(state == MarketState.Resolved, "Redemption: not resolved");
 
-        // Burn winning outcome tokens
-        outcomeToken.redeem(msg.sender, orderBookMarketId, amount, outcomeYes);
-
-        // Each outcome token represents 1 lot = LOT_SIZE worth of collateral
-        uint256 payout = amount * LOT_SIZE;
-
-        // Pay out from the market's redemption pool
-        vault.redeemFromPool(orderBookMarketId, msg.sender, payout);
+        if (useInternalPositions) {
+            vault.redeemPosition(msg.sender, orderBookMarketId, uint128(amount), outcomeYes);
+        } else {
+            outcomeToken.redeem(msg.sender, orderBookMarketId, amount, outcomeYes);
+            uint256 payout = amount * LOT_SIZE;
+            vault.redeemFromPool(orderBookMarketId, msg.sender, payout);
+        }
 
         emit Redeemed(factoryMarketId, msg.sender, amount, outcomeYes);
     }

@@ -5,6 +5,7 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "./ITypes.sol";
 
 /// @title Vault
 /// @notice Holds ERC20 collateral (USDT) as internal escrow for the Strike CLOB protocol.
@@ -23,6 +24,14 @@ contract Vault is ReentrancyGuard, AccessControl {
     mapping(address => uint256) public balance;
     mapping(address => uint256) public locked;
     mapping(uint256 => uint256) public marketPool;
+
+    // Internal position tracking (for markets with useInternalPositions = true)
+    struct Position {
+        uint128 yesLots;
+        uint128 noLots;
+    }
+    mapping(address => mapping(uint256 => Position)) public positions;
+    mapping(address => mapping(uint256 => Position)) public lockedPositions;
 
     bool public emergencyMode;
     uint256 public emergencyActivatedAt;
@@ -172,6 +181,68 @@ contract Vault is ReentrancyGuard, AccessControl {
         locked[msg.sender] = 0;
         collateralToken.safeTransfer(msg.sender, total);
         emit EmergencyWithdrawn(msg.sender, total);
+    }
+
+    // -------------------------------------------------------------------------
+    // Internal position tracking
+    // -------------------------------------------------------------------------
+
+    function creditPosition(address user, uint256 marketId, uint128 lots, bool isYes) external onlyRole(PROTOCOL_ROLE) {
+        if (isYes) {
+            positions[user][marketId].yesLots += lots;
+        } else {
+            positions[user][marketId].noLots += lots;
+        }
+    }
+
+    function lockPosition(address user, uint256 marketId, uint128 lots, bool isYes) external onlyRole(PROTOCOL_ROLE) {
+        if (isYes) {
+            require(positions[user][marketId].yesLots >= lots, "Vault: insufficient YES position");
+            positions[user][marketId].yesLots -= lots;
+            lockedPositions[user][marketId].yesLots += lots;
+        } else {
+            require(positions[user][marketId].noLots >= lots, "Vault: insufficient NO position");
+            positions[user][marketId].noLots -= lots;
+            lockedPositions[user][marketId].noLots += lots;
+        }
+    }
+
+    function unlockPosition(address user, uint256 marketId, uint128 lots, bool isYes) external onlyRole(PROTOCOL_ROLE) {
+        if (isYes) {
+            require(lockedPositions[user][marketId].yesLots >= lots, "Vault: insufficient locked YES");
+            lockedPositions[user][marketId].yesLots -= lots;
+            positions[user][marketId].yesLots += lots;
+        } else {
+            require(lockedPositions[user][marketId].noLots >= lots, "Vault: insufficient locked NO");
+            lockedPositions[user][marketId].noLots -= lots;
+            positions[user][marketId].noLots += lots;
+        }
+    }
+
+    function consumeLockedPosition(address user, uint256 marketId, uint128 lots, bool isYes) external onlyRole(PROTOCOL_ROLE) {
+        if (isYes) {
+            require(lockedPositions[user][marketId].yesLots >= lots, "Vault: insufficient locked YES");
+            lockedPositions[user][marketId].yesLots -= lots;
+        } else {
+            require(lockedPositions[user][marketId].noLots >= lots, "Vault: insufficient locked NO");
+            lockedPositions[user][marketId].noLots -= lots;
+        }
+    }
+
+    function redeemPosition(address user, uint256 marketId, uint128 lots, bool isYes) external onlyRole(PROTOCOL_ROLE) nonReentrant {
+        require(lots > 0, "Vault: zero lots");
+        if (isYes) {
+            require(positions[user][marketId].yesLots >= lots, "Vault: insufficient YES position");
+            positions[user][marketId].yesLots -= lots;
+        } else {
+            require(positions[user][marketId].noLots >= lots, "Vault: insufficient NO position");
+            positions[user][marketId].noLots -= lots;
+        }
+        uint256 payout = uint256(lots) * LOT_SIZE;
+        require(marketPool[marketId] >= payout, "Vault: insufficient market pool");
+        marketPool[marketId] -= payout;
+        collateralToken.safeTransfer(user, payout);
+        emit RedeemedFromPool(marketId, user, payout);
     }
 
     // -------------------------------------------------------------------------

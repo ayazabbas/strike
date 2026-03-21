@@ -68,7 +68,7 @@ enum MarketState {
 }
 
 /// @notice Market descriptor stored in OrderBook.
-///         Packed into 1 storage slot (was 6).
+///         Packed into 1 storage slot (24 bytes).
 struct Market {
     uint32 id;             // 4 bytes — market ID
     bool active;           // 1 byte  — true if trading is open
@@ -77,4 +77,5 @@ struct Market {
     uint32 minLots;        // 4 bytes — minimum order size in lots
     uint32 batchInterval;  // 4 bytes — seconds between batch auctions
     uint40 expiryTime;     // 5 bytes — timestamp when market expires
+    bool useInternalPositions; // 1 byte — true = internal positions, false = ERC1155
 }

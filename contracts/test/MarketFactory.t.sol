@@ -60,7 +60,7 @@ contract MarketFactoryTest is Test {
         uint256 id = factory.createMarket(PRICE_ID, STRIKE_PRICE, block.timestamp + 3600, 60, 1);
         assertEq(id, 1);
 
-        (bytes32 priceId, , uint256 expiryTime, address creator, MarketState state, , , uint256 obId)
+        (bytes32 priceId, , uint256 expiryTime, address creator, MarketState state, , , uint256 obId, )
             = factory.marketMeta(id);
 
         assertEq(priceId, PRICE_ID);
@@ -97,8 +97,8 @@ contract MarketFactoryTest is Test {
     function test_CreateMarket_UsesDefaults() public {
         vm.prank(user1);
         uint256 id = factory.createMarket(PRICE_ID, STRIKE_PRICE, block.timestamp + 3600, 0, 0);
-        (, , , , , , , uint256 obId) = factory.marketMeta(id);
-        (, , , , uint32 minLots, uint32 batchInterval, ) = book.markets(obId);
+        (, , , , , , , uint256 obId, ) = factory.marketMeta(id);
+        (, , , , uint32 minLots, uint32 batchInterval, , ) = book.markets(obId);
         assertEq(batchInterval, 60);
         assertEq(minLots, 1);
     }
@@ -148,7 +148,7 @@ contract MarketFactoryTest is Test {
         vm.warp(block.timestamp + 3600);
         factory.closeMarket(id);
 
-        (, , , , MarketState state, , , ) = factory.marketMeta(id);
+        (, , , , MarketState state, , , , ) = factory.marketMeta(id);
         assertTrue(state == MarketState.Closed);
         assertEq(factory.getActiveMarketCount(), 0);
         assertEq(factory.getClosedMarketCount(), 1);
@@ -178,7 +178,7 @@ contract MarketFactoryTest is Test {
         vm.warp(block.timestamp + 24 hours);
         factory.cancelMarket(id);
 
-        (, , , , MarketState state, , , ) = factory.marketMeta(id);
+        (, , , , MarketState state, , , , ) = factory.marketMeta(id);
         assertTrue(state == MarketState.Cancelled);
     }
 

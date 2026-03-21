@@ -80,13 +80,13 @@ contract BatchOrderBookTest is Test {
     function _createMarket(uint256 duration) internal returns (uint256 fmId, uint256 obId) {
         vm.prank(user1);
         fmId = factory.createMarket(PRICE_ID, STRIKE_PRICE, block.timestamp + duration, 60, 1);
-        (, , , , , , , uint256 _obId) = factory.marketMeta(fmId);
+        (, , , , , , , uint256 _obId, ) = factory.marketMeta(fmId);
         obId = _obId;
     }
 
     function _setupSimpleMarket() internal returns (uint256 obId) {
         vm.prank(operator);
-        obId = book.registerMarket(1, 3, block.timestamp + 3600);
+        obId = book.registerMarket(1, 3, block.timestamp + 3600, false);
     }
 
     function _calcCollateral(Side side, uint256 tick, uint256 lots) internal pure returns (uint256) {
@@ -275,7 +275,7 @@ contract BatchOrderBookTest is Test {
 
     function test_PlaceOrders_RevertOnExpiredMarket() public {
         vm.prank(operator);
-        uint256 mId = book.registerMarket(1, 3, block.timestamp + 5);
+        uint256 mId = book.registerMarket(1, 3, block.timestamp + 5, false);
         vm.warp(block.timestamp + 5);
 
         OrderParam[] memory params = new OrderParam[](1);
@@ -355,7 +355,7 @@ contract BatchOrderBookTest is Test {
 
         // Method 2: single placeOrders
         vm.prank(operator);
-        uint256 mId2 = book.registerMarket(1, 3, block.timestamp + 3600);
+        uint256 mId2 = book.registerMarket(1, 3, block.timestamp + 3600, false);
 
         OrderParam[] memory params = new OrderParam[](4);
         params[0] = _op(Side.Bid, OrderType.GoodTilCancel, 50, 10);
@@ -527,7 +527,7 @@ contract BatchOrderBookTest is Test {
 
     function test_ReplaceOrders_RevertOnExpiredMarket() public {
         vm.prank(operator);
-        uint256 mId = book.registerMarket(1, 3, block.timestamp + 60);
+        uint256 mId = book.registerMarket(1, 3, block.timestamp + 60, false);
 
         vm.prank(user1);
         uint256 oid1 = book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 50, 10);
@@ -696,7 +696,7 @@ contract BatchOrderBookTest is Test {
 
         // Setup for method 2
         vm.prank(operator);
-        uint256 mId2 = book.registerMarket(1, 3, block.timestamp + 3600);
+        uint256 mId2 = book.registerMarket(1, 3, block.timestamp + 3600, false);
 
         vm.startPrank(user2);
         uint256 oid1b = book.placeOrder(mId2, Side.Bid, OrderType.GoodTilCancel, 50, 10);
