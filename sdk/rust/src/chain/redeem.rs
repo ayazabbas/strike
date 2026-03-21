@@ -10,7 +10,7 @@ use tracing::info;
 
 use crate::chain::send_tx;
 use crate::config::StrikeConfig;
-use crate::contracts::{OutcomeToken, RedemptionContract};
+use crate::contracts::{OutcomeToken, RedemptionContract, Vault};
 use crate::error::{Result, StrikeError};
 use crate::nonce::NonceSender;
 
@@ -69,6 +69,19 @@ impl<'a> RedeemClient<'a> {
 
         info!(market_id, tx = %receipt.transaction_hash, gas_used = receipt.gas_used, "redemption confirmed");
         Ok(())
+    }
+
+    /// Check internal vault positions for a market. Returns `(yes_lots, no_lots)`.
+    ///
+    /// For v1.1 markets that use internal position tracking instead of ERC1155.
+    pub async fn internal_positions(&self, market_id: u64, owner: Address) -> Result<(u128, u128)> {
+        let vault = Vault::new(self.config.addresses.vault, self.provider);
+        let result = vault
+            .positions(owner, U256::from(market_id))
+            .call()
+            .await
+            .map_err(|e| StrikeError::Contract(e.to_string()))?;
+        Ok((result.yesLots, result.noLots))
     }
 
     /// Check balances of YES and NO tokens for a market. Returns `(yes_balance, no_balance)`.
