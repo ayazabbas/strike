@@ -67,6 +67,7 @@
 ## Coming Soon
 
 * [AI-Resolved Markets](coming-soon/ai-resolved-markets.md)
+* [Leveraged Positions](coming-soon/leveraged-positions.md)
 
 ## Project
 
