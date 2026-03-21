@@ -105,7 +105,7 @@ contract PoolSolvencyTest is Test {
         vm.prank(users[0]);
         resolver.resolveMarket{value: 1}(fmId, updateData);
 
-        vm.roll(block.number + 4);
+        vm.warp(block.timestamp + 91);
         resolver.finalizeResolution(fmId);
     }
 

@@ -113,7 +113,7 @@ contract RedemptionTest is Test {
         vm.prank(user3);
         resolver.resolveMarket{value: 1}(fmId, updateData);
 
-        vm.roll(block.number + 3);
+        vm.warp(block.timestamp + 90);
         resolver.finalizeResolution(fmId);
     }
 

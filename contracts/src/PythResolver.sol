@@ -19,7 +19,7 @@ contract PythResolver is ReentrancyGuard {
     // Constants
     // -------------------------------------------------------------------------
 
-    uint256 public constant FINALITY_BLOCKS = 3;
+    uint256 public constant FINALITY_PERIOD = 90; // seconds
     uint256 public constant FALLBACK_WINDOW = 60; // seconds per window
     uint256 public constant MAX_FALLBACK_WINDOWS = 5;
     uint256 public constant CANCEL_DEADLINE = 24 hours;
@@ -44,7 +44,7 @@ contract PythResolver is ReentrancyGuard {
     struct PendingResolution {
         int64 price;
         uint256 publishTime;
-        uint256 resolvedAtBlock;
+        uint256 resolvedAtTimestamp;
         address resolver;
         bool finalized;
     }
@@ -196,11 +196,11 @@ contract PythResolver is ReentrancyGuard {
     ) internal {
         PendingResolution storage pending = pendingResolutions[factoryMarketId];
 
-        if (pending.resolvedAtBlock == 0) {
+        if (pending.resolvedAtTimestamp == 0) {
             // First resolution submission
             pending.price = price;
             pending.publishTime = publishTime;
-            pending.resolvedAtBlock = block.number;
+            pending.resolvedAtTimestamp = block.timestamp;
             pending.resolver = msg.sender;
             pending.finalized = false;
 
@@ -210,16 +210,24 @@ contract PythResolver is ReentrancyGuard {
         } else {
             // Challenge: during finality wait, submit alternative data
             require(!pending.finalized, "PythResolver: already finalized");
-            require(block.number < pending.resolvedAtBlock + FINALITY_BLOCKS, "PythResolver: finality passed");
+            require(
+                block.timestamp < pending.resolvedAtTimestamp + FINALITY_PERIOD,
+                "PythResolver: finality passed"
+            );
 
             // Earliest valid publishTime wins
             require(publishTime < pending.publishTime, "PythResolver: not earlier");
 
+            // Challenge must change the outcome
+            (, int64 strikePrice, , , , , , ) = factory.marketMeta(factoryMarketId);
+            bool currentOutcome = pending.price >= strikePrice;
+            bool newOutcome = price >= strikePrice;
+            require(currentOutcome != newOutcome, "PythResolver: outcome unchanged");
+
             pending.price = price;
             pending.publishTime = publishTime;
             pending.resolver = msg.sender;
-            // Reset finality block
-            pending.resolvedAtBlock = block.number;
+            // Do NOT reset resolvedAtTimestamp — finality timer keeps running
 
             emit ResolutionChallenged(factoryMarketId, price, publishTime, msg.sender);
         }
@@ -229,10 +237,10 @@ contract PythResolver is ReentrancyGuard {
     /// @param factoryMarketId The market to finalize.
     function finalizeResolution(uint256 factoryMarketId) external nonReentrant {
         PendingResolution storage pending = pendingResolutions[factoryMarketId];
-        require(pending.resolvedAtBlock > 0, "PythResolver: no pending resolution");
+        require(pending.resolvedAtTimestamp > 0, "PythResolver: no pending resolution");
         require(!pending.finalized, "PythResolver: already finalized");
         require(
-            block.number >= pending.resolvedAtBlock + FINALITY_BLOCKS,
+            block.timestamp >= pending.resolvedAtTimestamp + FINALITY_PERIOD,
             "PythResolver: finality not reached"
         );
 

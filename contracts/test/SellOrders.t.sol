@@ -386,7 +386,7 @@ contract SellOrdersTest is Test {
         bytes[] memory updateData = _createPriceUpdate(55000_00000000, 100_00000000, publishTime);
         vm.prank(user2);
         resolver.resolveMarket{value: 1}(fmId, updateData);
-        vm.roll(block.number + 3);
+        vm.warp(block.timestamp + 90);
         resolver.finalizeResolution(fmId);
 
         // Step 4: user2 (YES holder) redeems LOT_SIZE per token
@@ -426,7 +426,7 @@ contract SellOrdersTest is Test {
         bytes[] memory updateData = _createPriceUpdate(45000_00000000, 100_00000000, publishTime);
         vm.prank(user1);
         resolver.resolveMarket{value: 1}(fmId, updateData);
-        vm.roll(block.number + 3);
+        vm.warp(block.timestamp + 90);
         resolver.finalizeResolution(fmId);
 
         // user2 (NO holder) redeems

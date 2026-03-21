@@ -85,12 +85,12 @@ contract PythResolverTest is Test {
         vm.prank(resolver1);
         resolver.resolveMarket{value: 1}(marketId, updateData);
 
-        (int64 price, uint256 pt, uint256 resolvedBlock, address res, bool fin) =
+        (int64 price, uint256 pt, uint256 resolvedAtTimestamp, address res, bool fin) =
             resolver.pendingResolutions(marketId);
 
         assertEq(price, 50000_00000000);
         assertEq(pt, publishTime);
-        assertEq(resolvedBlock, block.number);
+        assertEq(resolvedAtTimestamp, block.timestamp);
         assertEq(res, resolver1);
         assertFalse(fin);
         assertEq(uint256(factory.getMarketState(marketId)), uint256(MarketState.Resolving));
@@ -175,7 +175,7 @@ contract PythResolverTest is Test {
         vm.prank(resolver1);
         resolver.resolveMarket{value: 1}(marketId, data1);
 
-        vm.roll(block.number + 3);
+        vm.warp(block.timestamp + 90);
 
         uint64 pt2 = uint64(expiryTime + 5);
         bytes[] memory data2 = _createPriceUpdate(PRICE_ID, 48000_00000000, 100_00000000, pt2);
@@ -192,7 +192,7 @@ contract PythResolverTest is Test {
         vm.prank(resolver1);
         resolver.resolveMarket{value: 1}(marketId, updateData);
 
-        vm.roll(block.number + 3);
+        vm.warp(block.timestamp + 90);
         resolver.finalizeResolution(marketId);
 
         assertEq(uint256(factory.getMarketState(marketId)), uint256(MarketState.Resolved));
@@ -207,7 +207,7 @@ contract PythResolverTest is Test {
 
         vm.prank(resolver1);
         resolver.resolveMarket{value: 1}(marketId, updateData);
-        vm.roll(block.number + 3);
+        vm.warp(block.timestamp + 90);
         resolver.finalizeResolution(marketId);
 
         (, , , , , bool outcomeYes, , ) = factory.marketMeta(marketId);
@@ -221,7 +221,7 @@ contract PythResolverTest is Test {
 
         vm.prank(resolver1);
         resolver.resolveMarket{value: 1}(marketId, updateData);
-        vm.roll(block.number + 3);
+        vm.warp(block.timestamp + 90);
         resolver.finalizeResolution(marketId);
 
         (, , , , , bool outcomeYes, , ) = factory.marketMeta(marketId);
@@ -250,7 +250,7 @@ contract PythResolverTest is Test {
         bytes[] memory updateData = _createPriceUpdate(PRICE_ID, 50000_00000000, 100_00000000, publishTime);
         vm.prank(resolver1);
         resolver.resolveMarket{value: 1}(marketId, updateData);
-        vm.roll(block.number + 3);
+        vm.warp(block.timestamp + 90);
         resolver.finalizeResolution(marketId);
 
         vm.expectRevert("PythResolver: already finalized");
@@ -337,6 +337,57 @@ contract PythResolverTest is Test {
     }
 
     // =========================================================================
+    // Outcome-unchanged challenge
+    // =========================================================================
+
+    function test_Challenge_RevertIfOutcomeUnchanged() public {
+        _closeMarket();
+        // First resolution: price above strike → YES
+        uint64 pt1 = uint64(expiryTime + 30);
+        bytes[] memory data1 = _createPriceUpdate(PRICE_ID, 60000_00000000, 100_00000000, pt1);
+        vm.prank(resolver1);
+        resolver.resolveMarket{value: 1}(marketId, data1);
+
+        // Challenge with price still above strike → still YES → revert
+        uint64 pt2 = uint64(expiryTime + 10);
+        bytes[] memory data2 = _createPriceUpdate(PRICE_ID, 55000_00000000, 100_00000000, pt2);
+        vm.expectRevert("PythResolver: outcome unchanged");
+        vm.prank(resolver2);
+        resolver.resolveMarket{value: 1}(marketId, data2);
+    }
+
+    function test_Challenge_DoesNotResetFinalityTimer() public {
+        _closeMarket();
+        // First resolution: price above strike → YES
+        uint64 pt1 = uint64(expiryTime + 30);
+        bytes[] memory data1 = _createPriceUpdate(PRICE_ID, 60000_00000000, 100_00000000, pt1);
+        vm.prank(resolver1);
+        resolver.resolveMarket{value: 1}(marketId, data1);
+
+        (, , uint256 originalTimestamp, , ) = resolver.pendingResolutions(marketId);
+
+        // Warp 45s into the 90s window
+        vm.warp(block.timestamp + 45);
+
+        // Challenge with price below strike → NO (outcome changes)
+        uint64 pt2 = uint64(expiryTime + 10);
+        bytes[] memory data2 = _createPriceUpdate(PRICE_ID, 40000_00000000, 100_00000000, pt2);
+        vm.prank(resolver2);
+        resolver.resolveMarket{value: 1}(marketId, data2);
+
+        // Timer should NOT have been reset
+        (, , uint256 newTimestamp, , ) = resolver.pendingResolutions(marketId);
+        assertEq(newTimestamp, originalTimestamp);
+
+        // Can finalize after remaining 45s
+        vm.warp(block.timestamp + 45);
+        resolver.finalizeResolution(marketId);
+
+        (, , , , , bool outcomeYes, , ) = factory.marketMeta(marketId);
+        assertFalse(outcomeYes); // NO wins since challenge price < strike
+    }
+
+    // =========================================================================
     // Fuzz
     // =========================================================================
 
@@ -352,7 +403,7 @@ contract PythResolverTest is Test {
         vm.prank(resolver1);
         resolver.resolveMarket{value: 1}(marketId, updateData);
 
-        vm.roll(block.number + 3);
+        vm.warp(block.timestamp + 90);
         resolver.finalizeResolution(marketId);
 
         (, , , , MarketState state, bool outcomeYes, int64 settlementPrice, ) = factory.marketMeta(marketId);

@@ -153,7 +153,7 @@ contract IntegrationTest is Test {
         resolver.resolveMarket{value: 1}(fmId, updateData);
         assertEq(uint256(factory.getMarketState(fmId)), uint256(MarketState.Resolving));
 
-        vm.roll(block.number + 3);
+        vm.warp(block.timestamp + 90);
         resolver.finalizeResolution(fmId);
         assertEq(uint256(factory.getMarketState(fmId)), uint256(MarketState.Resolved));
     }
@@ -215,7 +215,7 @@ contract IntegrationTest is Test {
         assertEq(pt, pt2);
         assertEq(res, user3);
 
-        vm.roll(block.number + 3);
+        vm.warp(block.timestamp + 90);
         resolver.finalizeResolution(fmId);
     }
 
@@ -248,7 +248,7 @@ contract IntegrationTest is Test {
         vm.prank(user3);
         resolver.resolveMarket{value: 1}(fmId, updateData);
 
-        vm.roll(block.number + 3);
+        vm.warp(block.timestamp + 90);
         resolver.finalizeResolution(fmId);
 
         uint256 user1BalBefore = usdt.balanceOf(user1);
@@ -286,7 +286,7 @@ contract IntegrationTest is Test {
         bytes[] memory updateData = _createPriceUpdate(40000_00000000, 100_00000000, publishTime);
         vm.prank(user3);
         resolver.resolveMarket{value: 1}(fmId, updateData);
-        vm.roll(block.number + 3);
+        vm.warp(block.timestamp + 90);
         resolver.finalizeResolution(fmId);
 
         (, , , , , bool outcomeYes, , ) = factory.marketMeta(fmId);
