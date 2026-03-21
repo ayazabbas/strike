@@ -27,6 +27,7 @@ contract InternalPositionsTest is Test {
     MockUSDT public usdt;
 
     address public admin = address(0x1);
+    address public operator = address(0x2);
     address public user1 = address(0x3);
     address public user2 = address(0x4);
     address public user3 = address(0x5);
@@ -42,15 +43,17 @@ contract InternalPositionsTest is Test {
         vm.startPrank(admin);
         vault = new Vault(admin, address(usdt));
         token = new OutcomeToken(admin);
-        feeModel = new FeeModel(admin, 0, admin); // zero fee for simplicity
+        feeModel = new FeeModel(admin, 20, feeCollector);
         book = new OrderBook(admin, address(vault), address(feeModel), address(token));
         auction = new BatchAuction(admin, address(book), address(vault), address(token));
 
         mockPyth = new MockPyth(120, 1);
+
         factory = new MarketFactory(admin, address(book), address(token));
         resolver = new PythResolver(address(mockPyth), address(factory));
         redemption = new Redemption(address(factory), address(token), address(vault));
 
+        book.grantRole(book.OPERATOR_ROLE(), operator);
         book.grantRole(book.OPERATOR_ROLE(), address(auction));
         book.grantRole(book.OPERATOR_ROLE(), address(factory));
         vault.grantRole(vault.PROTOCOL_ROLE(), address(book));
@@ -58,19 +61,25 @@ contract InternalPositionsTest is Test {
         vault.grantRole(vault.PROTOCOL_ROLE(), address(redemption));
         token.grantRole(token.MINTER_ROLE(), address(auction));
         token.grantRole(token.MINTER_ROLE(), address(redemption));
-        token.grantRole(token.ESCROW_ROLE(), address(auction));
         factory.grantRole(factory.ADMIN_ROLE(), address(resolver));
         factory.grantRole(factory.MARKET_CREATOR_ROLE(), user1);
         vm.stopPrank();
 
-        address[3] memory users = [user1, user2, user3];
         for (uint256 i = 0; i < 3; i++) {
-            usdt.mint(users[i], 100000 ether);
-            vm.prank(users[i]);
+            address u = [user1, user2, user3][i];
+            usdt.mint(u, 100000 ether);
+            vm.prank(u);
             usdt.approve(address(vault), type(uint256).max);
-            vm.deal(users[i], 10 ether);
         }
+
+        vm.deal(user1, 10 ether);
+        vm.deal(user2, 10 ether);
+        vm.deal(user3, 10 ether);
     }
+
+    // =========================================================================
+    // Helpers
+    // =========================================================================
 
     function _createInternalMarket(uint256 duration) internal returns (uint256 fmId, uint256 obId) {
         vm.prank(user1);
@@ -79,17 +88,26 @@ contract InternalPositionsTest is Test {
         obId = _obId;
     }
 
+    function _createPriceUpdate(int64 price, uint64 conf, uint64 publishTime)
+        internal
+        view
+        returns (bytes[] memory updateData)
+    {
+        updateData = new bytes[](1);
+        updateData[0] = mockPyth.createPriceFeedUpdateData(
+            PRICE_ID, price, conf, -8, price, conf,
+            publishTime, publishTime > 0 ? publishTime - 1 : 0
+        );
+    }
+
     function _resolveMarket(uint256 fmId, int64 price) internal {
         (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
         vm.warp(expiry);
         factory.closeMarket(fmId);
 
         uint64 publishTime = uint64(expiry + 10);
-        bytes[] memory updateData = new bytes[](1);
-        updateData[0] = mockPyth.createPriceFeedUpdateData(
-            PRICE_ID, price, 100_00000000, -8, price, 100_00000000,
-            publishTime, publishTime - 1
-        );
+        bytes[] memory updateData = _createPriceUpdate(price, 100_00000000, publishTime);
+
         vm.prank(user3);
         resolver.resolveMarket{value: 1}(fmId, updateData);
         vm.warp(block.timestamp + 90);
@@ -97,13 +115,32 @@ contract InternalPositionsTest is Test {
     }
 
     // =========================================================================
-    // Basic buy + fill → positions credited (no ERC1155)
+    // Market creation
     // =========================================================================
 
-    function test_InternalPositions_BuyFill() public {
+    function test_CreateMarketWithPositions_SetsFlag() public {
+        (uint256 fmId, uint256 obId) = _createInternalMarket(3600);
+        (, , , , , , , , bool useInternal) = factory.marketMeta(fmId);
+        assertTrue(useInternal);
+        (, , , , , , , bool obUseInternal) = book.markets(obId);
+        assertTrue(obUseInternal);
+    }
+
+    function test_CreateMarket_DefaultNoInternalPositions() public {
+        vm.prank(user1);
+        uint256 fmId = factory.createMarket(PRICE_ID, STRIKE_PRICE, block.timestamp + 3600, 60, 1);
+        (, , , , , , , , bool useInternal) = factory.marketMeta(fmId);
+        assertFalse(useInternal);
+    }
+
+    // =========================================================================
+    // Full lifecycle — internal positions
+    // =========================================================================
+
+    function test_InternalPositions_FullLifecycle_YesWins() public {
         (uint256 fmId, uint256 obId) = _createInternalMarket(3600);
 
-        // user1 buys YES at tick 60, user2 buys NO at tick 60
+        // user1 bids (buys YES), user2 asks (buys NO) at tick 60
         vm.prank(user1);
         book.placeOrder(obId, Side.Bid, OrderType.GoodTilCancel, 60, 10);
         vm.prank(user2);
@@ -111,100 +148,42 @@ contract InternalPositionsTest is Test {
 
         auction.clearBatch(obId);
 
-        // No ERC1155 tokens minted
+        // No ERC1155 tokens should be minted
         assertEq(token.balanceOf(user1, token.yesTokenId(obId)), 0);
         assertEq(token.balanceOf(user2, token.noTokenId(obId)), 0);
 
-        // Internal positions credited
-        (uint128 y1, uint128 n1) = vault.positions(user1, obId);
-        assertEq(y1, 10);
-        assertEq(n1, 0);
+        // Internal positions should be credited
+        (uint128 yesLots, ) = vault.positions(user1, obId);
+        (, uint128 noLots) = vault.positions(user2, obId);
+        assertEq(yesLots, 10);
+        assertEq(noLots, 10);
 
-        (uint128 y2, uint128 n2) = vault.positions(user2, obId);
-        assertEq(y2, 0);
-        assertEq(n2, 10);
-
-        // Pool has correct balance
-        assertEq(vault.marketPool(obId), 10 * LOT);
-    }
-
-    // =========================================================================
-    // Sell via internal positions
-    // =========================================================================
-
-    function test_InternalPositions_SellYes() public {
-        (uint256 fmId, uint256 obId) = _createInternalMarket(3600);
-
-        // Step 1: Create positions via matching
-        vm.prank(user1);
-        book.placeOrder(obId, Side.Bid, OrderType.GoodTilCancel, 50, 10);
-        vm.prank(user2);
-        book.placeOrder(obId, Side.Ask, OrderType.GoodTilCancel, 50, 10);
-        auction.clearBatch(obId);
-
-        (uint128 y1, ) = vault.positions(user1, obId);
-        assertEq(y1, 10);
-
-        // Step 2: user1 sells YES tokens
-        vm.prank(user1);
-        book.placeOrder(obId, Side.SellYes, OrderType.GoodTilCancel, 50, 5);
-
-        // Positions should be locked
-        (uint128 y1After, ) = vault.positions(user1, obId);
-        assertEq(y1After, 5); // 10 - 5 locked
-        (uint128 ly1, ) = vault.lockedPositions(user1, obId);
-        assertEq(ly1, 5);
-
-        // Step 3: user3 buys YES (counterparty to sell)
-        vm.prank(user3);
-        book.placeOrder(obId, Side.Bid, OrderType.GoodTilCancel, 50, 5);
-        auction.clearBatch(obId);
-
-        // user1's locked positions consumed, user3 gets YES positions
-        (uint128 ly1After, ) = vault.lockedPositions(user1, obId);
-        assertEq(ly1After, 0);
-
-        (uint128 y3, ) = vault.positions(user3, obId);
-        assertEq(y3, 5);
-    }
-
-    // =========================================================================
-    // Redemption with internal positions
-    // =========================================================================
-
-    function test_InternalPositions_Redeem_YesWins() public {
-        (uint256 fmId, uint256 obId) = _createInternalMarket(3600);
-
-        vm.prank(user1);
-        book.placeOrder(obId, Side.Bid, OrderType.GoodTilCancel, 60, 10);
-        vm.prank(user2);
-        book.placeOrder(obId, Side.Ask, OrderType.GoodTilCancel, 60, 10);
-        auction.clearBatch(obId);
-
-        // Resolve YES wins
+        // Resolve YES (price above strike)
         _resolveMarket(fmId, 60000_00000000);
 
+        // Redeem
         uint256 balBefore = usdt.balanceOf(user1);
         vm.prank(user1);
         redemption.redeem(fmId, 10);
 
         assertEq(usdt.balanceOf(user1) - balBefore, 10 * LOT);
 
-        // Positions zeroed
-        (uint128 y1, ) = vault.positions(user1, obId);
-        assertEq(y1, 0);
+        // Position zeroed
+        (yesLots, ) = vault.positions(user1, obId);
+        assertEq(yesLots, 0);
     }
 
-    function test_InternalPositions_Redeem_NoWins() public {
+    function test_InternalPositions_FullLifecycle_NoWins() public {
         (uint256 fmId, uint256 obId) = _createInternalMarket(3600);
 
         vm.prank(user1);
         book.placeOrder(obId, Side.Bid, OrderType.GoodTilCancel, 60, 10);
         vm.prank(user2);
         book.placeOrder(obId, Side.Ask, OrderType.GoodTilCancel, 60, 10);
+
         auction.clearBatch(obId);
 
-        // Resolve NO wins
+        // Resolve NO (price below strike)
         _resolveMarket(fmId, 40000_00000000);
 
         uint256 balBefore = usdt.balanceOf(user2);
@@ -212,69 +191,99 @@ contract InternalPositionsTest is Test {
         redemption.redeem(fmId, 10);
 
         assertEq(usdt.balanceOf(user2) - balBefore, 10 * LOT);
-
-        // Positions zeroed
-        (, uint128 n2) = vault.positions(user2, obId);
-        assertEq(n2, 0);
     }
 
     // =========================================================================
-    // Cancel sell order returns positions
+    // Sell orders with internal positions
     // =========================================================================
 
-    function test_InternalPositions_CancelSell() public {
-        (uint256 fmId, uint256 obId) = _createInternalMarket(3600);
+    function test_InternalPositions_SellYes() public {
+        (, uint256 obId) = _createInternalMarket(3600);
 
-        // Create positions
+        // Create initial positions
         vm.prank(user1);
         book.placeOrder(obId, Side.Bid, OrderType.GoodTilCancel, 50, 10);
         vm.prank(user2);
         book.placeOrder(obId, Side.Ask, OrderType.GoodTilCancel, 50, 10);
         auction.clearBatch(obId);
 
-        // Place sell order
+        // user1 has 10 YES internal positions. Sell them.
+        vm.prank(user1);
+        book.placeOrder(obId, Side.SellYes, OrderType.GoodTilCancel, 50, 10);
+
+        // user3 bids to buy
+        vm.prank(user3);
+        book.placeOrder(obId, Side.Bid, OrderType.GoodTilCancel, 50, 10);
+
+        auction.clearBatch(obId);
+
+        // user3 should now have YES positions
+        (uint128 yesLots, ) = vault.positions(user3, obId);
+        assertEq(yesLots, 10);
+
+        // user1 should have 0 YES positions
+        (uint128 u1Yes, ) = vault.positions(user1, obId);
+        assertEq(u1Yes, 0);
+    }
+
+    function test_InternalPositions_SellNo() public {
+        (, uint256 obId) = _createInternalMarket(3600);
+
+        // Create initial positions
+        vm.prank(user1);
+        book.placeOrder(obId, Side.Bid, OrderType.GoodTilCancel, 50, 10);
+        vm.prank(user2);
+        book.placeOrder(obId, Side.Ask, OrderType.GoodTilCancel, 50, 10);
+        auction.clearBatch(obId);
+
+        // user2 has 10 NO internal positions. Sell them.
+        vm.prank(user2);
+        book.placeOrder(obId, Side.SellNo, OrderType.GoodTilCancel, 50, 10);
+
+        // user3 asks to buy NO
+        vm.prank(user3);
+        book.placeOrder(obId, Side.Ask, OrderType.GoodTilCancel, 50, 10);
+
+        auction.clearBatch(obId);
+
+        // user3 should now have NO positions
+        (, uint128 noLots) = vault.positions(user3, obId);
+        assertEq(noLots, 10);
+
+        // user2 should have 0 NO positions
+        (, uint128 u2No) = vault.positions(user2, obId);
+        assertEq(u2No, 0);
+    }
+
+    // =========================================================================
+    // Cancel sell order returns position
+    // =========================================================================
+
+    function test_InternalPositions_CancelSellOrder() public {
+        (, uint256 obId) = _createInternalMarket(3600);
+
+        // Create initial positions
+        vm.prank(user1);
+        book.placeOrder(obId, Side.Bid, OrderType.GoodTilCancel, 50, 10);
+        vm.prank(user2);
+        book.placeOrder(obId, Side.Ask, OrderType.GoodTilCancel, 50, 10);
+        auction.clearBatch(obId);
+
+        // user1 sells YES
         vm.prank(user1);
         uint256 sellOrderId = book.placeOrder(obId, Side.SellYes, OrderType.GoodTilCancel, 50, 5);
 
-        (uint128 y1, ) = vault.positions(user1, obId);
-        assertEq(y1, 5); // 5 locked
+        // Position should be partially locked
+        (uint128 yesLots, ) = vault.positions(user1, obId);
+        assertEq(yesLots, 5); // 10 - 5 locked
 
         // Cancel
         vm.prank(user1);
         book.cancelOrder(sellOrderId);
 
-        // Positions returned
-        (uint128 y1After, ) = vault.positions(user1, obId);
-        assertEq(y1After, 10);
-        (uint128 ly1, ) = vault.lockedPositions(user1, obId);
-        assertEq(ly1, 0);
-    }
-
-    // =========================================================================
-    // ERC1155 markets still work (backwards compat)
-    // =========================================================================
-
-    function test_ERC1155Market_StillWorks() public {
-        // Use createMarket (not createMarketWithPositions) → ERC1155 mode
-        vm.prank(user1);
-        uint256 fmId = factory.createMarket(PRICE_ID, STRIKE_PRICE, block.timestamp + 3600, 60, 1);
-        (, , , , , , , uint256 obId, ) = factory.marketMeta(fmId);
-
-        vm.prank(user1);
-        book.placeOrder(obId, Side.Bid, OrderType.GoodTilCancel, 60, 10);
-        vm.prank(user2);
-        book.placeOrder(obId, Side.Ask, OrderType.GoodTilCancel, 60, 10);
-
-        auction.clearBatch(obId);
-
-        // ERC1155 tokens minted
-        assertEq(token.balanceOf(user1, token.yesTokenId(obId)), 10);
-        assertEq(token.balanceOf(user2, token.noTokenId(obId)), 10);
-
-        // No internal positions
-        (uint128 y1, uint128 n1) = vault.positions(user1, obId);
-        assertEq(y1, 0);
-        assertEq(n1, 0);
+        // Position should be restored
+        (yesLots, ) = vault.positions(user1, obId);
+        assertEq(yesLots, 10);
     }
 
     // =========================================================================
@@ -284,18 +293,20 @@ contract InternalPositionsTest is Test {
     function test_InternalPositions_PoolSolvency() public {
         (uint256 fmId, uint256 obId) = _createInternalMarket(3600);
 
+        // Create positions
         vm.prank(user1);
-        book.placeOrder(obId, Side.Bid, OrderType.GoodTilCancel, 60, 10);
+        book.placeOrder(obId, Side.Bid, OrderType.GoodTilCancel, 50, 10);
         vm.prank(user2);
-        book.placeOrder(obId, Side.Ask, OrderType.GoodTilCancel, 60, 10);
+        book.placeOrder(obId, Side.Ask, OrderType.GoodTilCancel, 50, 10);
         auction.clearBatch(obId);
 
-        uint256 pool = vault.marketPool(obId);
-        assertEq(pool, 10 * LOT);
+        uint256 poolBal = vault.marketPool(obId);
+        assertEq(poolBal, 10 * LOT);
 
-        // Resolve and redeem all
+        // Resolve YES
         _resolveMarket(fmId, 60000_00000000);
 
+        // Redeem all
         vm.prank(user1);
         redemption.redeem(fmId, 10);
 

@@ -24,6 +24,7 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
     OrderBook public immutable orderBook;
     Vault public immutable vault;
     OutcomeToken public immutable outcomeToken;
+    FeeModel public immutable feeModel;
 
     /// @notice marketId => batchId => BatchResult
     mapping(uint256 => mapping(uint256 => BatchResult)) public batchResults;
@@ -66,6 +67,7 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
         orderBook = OrderBook(_orderBook);
         vault = Vault(_vault);
         outcomeToken = OutcomeToken(_outcomeToken);
+        feeModel = OrderBook(_orderBook).feeModel();
     }
 
     // -------------------------------------------------------------------------
@@ -161,8 +163,9 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
         uint256 endIdx = startIdx + SETTLE_CHUNK_SIZE;
         if (endIdx > ids.length) endIdx = ids.length;
 
-        for (uint256 i = startIdx; i < endIdx; i++) {
+        for (uint256 i = startIdx; i < endIdx; ) {
             _settleOrder(ids[i], result, fills[i]);
+            unchecked { ++i; }
         }
 
         settledUpTo[marketId][batchId] = endIdx;
@@ -239,10 +242,11 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
         // 0 = not participating, 1 = participating bid, 2 = participating ask
         uint8[] memory pType = new uint8[](ids.length);
 
-        for (uint256 i = 0; i < ids.length; i++) {
+        uint256 idsLen = ids.length;
+        for (uint256 i = 0; i < idsLen; ) {
             OrderInfo memory o = _readOrder(ids[i]);
-            if (o.lots == 0) continue;
-            if (!_orderParticipates(o.side, o.tick, result.clearingTick)) continue;
+            if (o.lots == 0) { unchecked { ++i; } continue; }
+            if (!_orderParticipates(o.side, o.tick, result.clearingTick)) { unchecked { ++i; } continue; }
 
             fills[i] = _calcFilledLots(o.lots, o.side, result);
             if (o.side == Side.Bid || o.side == Side.SellNo) {
@@ -252,15 +256,17 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
                 pType[i] = 2;
                 totalFilledAsk += fills[i];
             }
+            unchecked { ++i; }
         }
 
         // Distribute bid-side rounding remainder (+1 per order, backwards)
         if (result.totalBidLots > result.matchedLots && totalFilledBid < result.matchedLots) {
             uint256 rem = result.matchedLots - totalFilledBid;
-            for (uint256 i = ids.length; i > 0 && rem > 0; i--) {
-                if (pType[i - 1] == 1) {
-                    fills[i - 1]++;
-                    rem--;
+            for (uint256 i = idsLen; i > 0 && rem > 0; ) {
+                unchecked { --i; }
+                if (pType[i] == 1) {
+                    fills[i]++;
+                    unchecked { --rem; }
                 }
             }
         }
@@ -268,10 +274,11 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
         // Distribute ask-side rounding remainder (+1 per order, backwards)
         if (result.totalAskLots > result.matchedLots && totalFilledAsk < result.matchedLots) {
             uint256 rem = result.matchedLots - totalFilledAsk;
-            for (uint256 i = ids.length; i > 0 && rem > 0; i--) {
-                if (pType[i - 1] == 2) {
-                    fills[i - 1]++;
-                    rem--;
+            for (uint256 i = idsLen; i > 0 && rem > 0; ) {
+                unchecked { --i; }
+                if (pType[i] == 2) {
+                    fills[i]++;
+                    unchecked { --rem; }
                 }
             }
         }
@@ -287,7 +294,7 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
         uint256 unfilledLots = o.lots - s.filledLots;
 
         // Use OrderBook's feeModel for locked amounts (matches what was locked at placement)
-        FeeModel obFee = orderBook.feeModel();
+        FeeModel obFee = feeModel;
 
         uint256 lockedForFilled = _collateral(s.filledLots, o.tick, o.side);
         uint256 lockedFeeForFilled = obFee.calculateFee(lockedForFilled);
@@ -336,14 +343,14 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
                         vault.unlockPosition(o.owner, o.marketId, uint128(o.lots), isYes);
                     } else {
                         uint256 tokenId = isYes
-                            ? outcomeToken.yesTokenId(o.marketId)
-                            : outcomeToken.noTokenId(o.marketId);
+                            ? o.marketId * 2
+                            : o.marketId * 2 + 1;
                         orderBook.transferEscrowTokens(o.owner, tokenId, o.lots);
                     }
                 } else {
                     // GTB non-participating buy: return USDT
                     uint256 collateral = _collateral(o.lots, o.tick, o.side);
-                    uint256 fee = orderBook.feeModel().calculateFee(collateral);
+                    uint256 fee = feeModel.calculateFee(collateral);
                     if (collateral + fee > 0) {
                         vault.unlock(o.owner, collateral + fee);
                         vault.withdrawTo(o.owner, collateral + fee);
@@ -383,7 +390,7 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
             orderBook.updateTreeVolume(o.marketId, o.side, o.tick, -int256(o.lots));
             vault.settleFill(
                 o.owner, o.marketId, s.toPool,
-                orderBook.feeModel().protocolFeeCollector(), s.protocolFee,
+                feeModel.protocolFeeCollector(), s.protocolFee,
                 s.unfilledCollateral + s.unfilledFee + s.excessRefund, true
             );
         } else {
@@ -391,7 +398,7 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
             orderBook.updateTreeVolume(o.marketId, o.side, o.tick, -int256(s.filledLots));
             vault.settleFill(
                 o.owner, o.marketId, s.toPool,
-                orderBook.feeModel().protocolFeeCollector(), s.protocolFee,
+                feeModel.protocolFeeCollector(), s.protocolFee,
                 s.excessRefund, s.excessRefund > 0
             );
             _tryRollOrCancel(orderId, o, result.batchId + 1);
@@ -428,8 +435,8 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
                 vault.consumeLockedPosition(o.owner, o.marketId, uint128(filledLots), isYes);
             } else {
                 uint256 tokenId = isYes
-                    ? outcomeToken.yesTokenId(o.marketId)
-                    : outcomeToken.noTokenId(o.marketId);
+                    ? o.marketId * 2
+                    : o.marketId * 2 + 1;
                 outcomeToken.burnEscrow(address(orderBook), tokenId, filledLots);
             }
         }
@@ -448,8 +455,8 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
                     vault.unlockPosition(o.owner, o.marketId, uint128(unfilledLots), isYes);
                 } else {
                     uint256 tokenId = isYes
-                        ? outcomeToken.yesTokenId(o.marketId)
-                        : outcomeToken.noTokenId(o.marketId);
+                        ? o.marketId * 2
+                        : o.marketId * 2 + 1;
                     orderBook.transferEscrowTokens(o.owner, tokenId, unfilledLots);
                 }
             }
