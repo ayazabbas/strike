@@ -10,7 +10,7 @@ use tracing::info;
 
 use crate::chain::send_tx;
 use crate::config::StrikeConfig;
-use crate::contracts::MockUSDT;
+use crate::contracts::{MockUSDT, Vault};
 use crate::error::{Result, StrikeError};
 use crate::nonce::NonceSender;
 
@@ -94,5 +94,19 @@ impl<'a> VaultClient<'a> {
             .call()
             .await
             .map_err(|e| StrikeError::Contract(e.to_string()))
+    }
+
+    /// Get internal position lots for an address in a market.
+    ///
+    /// Returns `(yes_lots, no_lots)` tracked by the Vault for markets using
+    /// internal position tracking (v1.1).
+    pub async fn positions(&self, owner: Address, market_id: u64) -> Result<(u128, u128)> {
+        let vault = Vault::new(self.config.addresses.vault, self.provider);
+        let result = vault
+            .positions(owner, U256::from(market_id))
+            .call()
+            .await
+            .map_err(|e| StrikeError::Contract(e.to_string()))?;
+        Ok((result.yesLots, result.noLots))
     }
 }

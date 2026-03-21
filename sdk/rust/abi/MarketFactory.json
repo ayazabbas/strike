@@ -164,6 +164,45 @@
   },
   {
     "type": "function",
+    "name": "createMarketWithPositions",
+    "inputs": [
+      {
+        "name": "priceId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "strikePrice",
+        "type": "int64",
+        "internalType": "int64"
+      },
+      {
+        "name": "expiryTime",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "batchInterval",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "minLots",
+        "type": "uint128",
+        "internalType": "uint128"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "factoryMarketId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "defaultBatchInterval",
     "inputs": [],
     "outputs": [
@@ -357,6 +396,11 @@
         "name": "orderBookMarketId",
         "type": "uint256",
         "internalType": "uint256"
+      },
+      {
+        "name": "useInternalPositions",
+        "type": "bool",
+        "internalType": "bool"
       }
     ],
     "stateMutability": "view"

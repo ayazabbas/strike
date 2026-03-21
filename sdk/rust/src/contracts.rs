@@ -51,3 +51,9 @@ sol!(
     FeeModel,
     "abi/FeeModel.json"
 );
+
+sol!(
+    #[sol(rpc)]
+    PythResolver,
+    "abi/PythResolver.json"
+);

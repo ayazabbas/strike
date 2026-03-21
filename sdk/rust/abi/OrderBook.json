@@ -413,6 +413,11 @@
         "name": "expiryTime",
         "type": "uint40",
         "internalType": "uint40"
+      },
+      {
+        "name": "useInternalPositions",
+        "type": "bool",
+        "internalType": "bool"
       }
     ],
     "stateMutability": "view"
@@ -743,6 +748,11 @@
         "name": "expiryTime",
         "type": "uint256",
         "internalType": "uint256"
+      },
+      {
+        "name": "useInternalPositions",
+        "type": "bool",
+        "internalType": "bool"
       }
     ],
     "outputs": [
