@@ -157,14 +157,18 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
         uint256 startIdx = settledUpTo[marketId][batchId];
         if (startIdx >= ids.length) return;
 
-        // Compute fills for ALL orders (needed for correct rounding distribution)
-        uint256[] memory fills = _computeFills(ids, result);
+        // Compute fills for ALL orders (needed for correct rounding distribution).
+        // Also returns OrderInfo[] to avoid double storage reads during settlement.
+        (uint256[] memory fills, OrderInfo[] memory infos) = _computeFills(ids, result);
+
+        // Cache isInternalPositions once per chunk (avoids repeated SLOAD per order)
+        bool isInternal = _isInternalPositions(marketId);
 
         uint256 endIdx = startIdx + SETTLE_CHUNK_SIZE;
         if (endIdx > ids.length) endIdx = ids.length;
 
         for (uint256 i = startIdx; i < endIdx; ) {
-            _settleOrder(ids[i], result, fills[i]);
+            _settleOrder(ids[i], infos[i], result, fills[i], isInternal);
             unchecked { ++i; }
         }
 
@@ -227,29 +231,31 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
         info = OrderInfo(marketId, owner, side, orderType, tick, lots, batchId);
     }
 
-    /// @dev Compute fills for all orders with rounding remainder correction (Fix 4).
+    /// @dev Compute fills for all orders with rounding remainder correction.
+    ///      Also returns OrderInfo[] so callers can avoid re-reading storage.
     function _computeFills(uint256[] memory ids, BatchResult memory result)
         internal
         view
-        returns (uint256[] memory fills)
+        returns (uint256[] memory fills, OrderInfo[] memory infos)
     {
-        fills = new uint256[](ids.length);
-        if (result.matchedLots == 0) return fills;
+        uint256 idsLen = ids.length;
+        fills = new uint256[](idsLen);
+        infos = new OrderInfo[](idsLen);
+        if (result.matchedLots == 0) return (fills, infos);
 
         uint256 totalFilledBid;
         uint256 totalFilledAsk;
 
         // 0 = not participating, 1 = participating bid, 2 = participating ask
-        uint8[] memory pType = new uint8[](ids.length);
+        uint8[] memory pType = new uint8[](idsLen);
 
-        uint256 idsLen = ids.length;
         for (uint256 i = 0; i < idsLen; ) {
-            OrderInfo memory o = _readOrder(ids[i]);
-            if (o.lots == 0) { unchecked { ++i; } continue; }
-            if (!_orderParticipates(o.side, o.tick, result.clearingTick)) { unchecked { ++i; } continue; }
+            infos[i] = _readOrder(ids[i]);
+            if (infos[i].lots == 0) { unchecked { ++i; } continue; }
+            if (!_orderParticipates(infos[i].side, infos[i].tick, result.clearingTick)) { unchecked { ++i; } continue; }
 
-            fills[i] = _calcFilledLots(o.lots, o.side, result);
-            if (o.side == Side.Bid || o.side == Side.SellNo) {
+            fills[i] = _calcFilledLots(infos[i].lots, infos[i].side, result);
+            if (infos[i].side == Side.Bid || infos[i].side == Side.SellNo) {
                 pType[i] = 1;
                 totalFilledBid += fills[i];
             } else {
@@ -314,8 +320,11 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
         orderBook.pushBatchOrderId(o.marketId, nextBatchId, orderId);
     }
 
-    function _settleOrder(uint256 orderId, BatchResult memory result, uint256 precomputedFill) internal {
-        OrderInfo memory o = _readOrder(orderId);
+    function _settleOrder(uint256 orderId, OrderInfo memory o, BatchResult memory result, uint256 precomputedFill, bool isInternal) internal {
+        // If _computeFills didn't populate this order (lots == 0), read from storage as fallback
+        if (o.marketId == 0) {
+            o = _readOrder(orderId);
+        }
         require(o.marketId == result.marketId, "BatchAuction: wrong market");
 
         // Skip already-filled/cancelled orders
@@ -337,9 +346,8 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
                 orderBook.updateTreeVolume(o.marketId, o.side, o.tick, -int256(o.lots));
 
                 if (isSell) {
-                    // GTB non-participating sell: return tokens/positions
                     bool isYes = (o.side == Side.SellYes);
-                    if (_isInternalPositions(o.marketId)) {
+                    if (isInternal) {
                         vault.unlockPosition(o.owner, o.marketId, uint128(o.lots), isYes);
                     } else {
                         uint256 tokenId = isYes
@@ -348,7 +356,6 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
                         orderBook.transferEscrowTokens(o.owner, tokenId, o.lots);
                     }
                 } else {
-                    // GTB non-participating buy: return USDT
                     uint256 collateral = _collateral(o.lots, o.tick, o.side);
                     uint256 fee = feeModel.calculateFee(collateral);
                     if (collateral + fee > 0) {
@@ -357,7 +364,6 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
                     }
                 }
             } else {
-                // GTC non-participating: roll to next batch (or auto-cancel if full)
                 _tryRollOrCancel(orderId, o, result.batchId + 1);
             }
             emit OrderSettled(orderId, o.owner, 0, 0);
@@ -374,13 +380,13 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
         }
 
         if (isSell) {
-            _settleSellOrder(orderId, o, result, precomputedFill);
+            _settleSellOrder(orderId, o, result, precomputedFill, isInternal);
         } else {
-            _settleBuyOrder(orderId, o, result, precomputedFill);
+            _settleBuyOrder(orderId, o, result, precomputedFill, isInternal);
         }
     }
 
-    function _settleBuyOrder(uint256 orderId, OrderInfo memory o, BatchResult memory result, uint256 precomputedFill) internal {
+    function _settleBuyOrder(uint256 orderId, OrderInfo memory o, BatchResult memory result, uint256 precomputedFill, bool isInternal) internal {
         SettleAmounts memory s = _settleAmounts(o, result, precomputedFill);
 
         bool fullyFilled = s.filledLots == o.lots;
@@ -406,7 +412,7 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
 
         // Credit outcome tokens or internal positions
         if (s.filledLots > 0) {
-            if (_isInternalPositions(o.marketId)) {
+            if (isInternal) {
                 vault.creditPosition(o.owner, o.marketId, uint128(s.filledLots), o.side == Side.Bid);
             } else {
                 outcomeToken.mintSingle(o.owner, o.marketId, s.filledLots, o.side == Side.Bid);
@@ -419,12 +425,11 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
         emit OrderSettled(orderId, o.owner, s.filledLots, released);
     }
 
-    function _settleSellOrder(uint256 orderId, OrderInfo memory o, BatchResult memory result, uint256 precomputedFill) internal {
+    function _settleSellOrder(uint256 orderId, OrderInfo memory o, BatchResult memory result, uint256 precomputedFill, bool isInternal) internal {
         uint256 filledLots = precomputedFill;
         uint256 unfilledLots = o.lots - filledLots;
         bool fullyFilled = filledLots == o.lots;
         bool isYes = (o.side == Side.SellYes);
-        bool isInternal = _isInternalPositions(o.marketId);
 
         // Compute seller payout at clearing price
         uint256 payout = _collateral(filledLots, result.clearingTick, o.side);

@@ -64,6 +64,8 @@ library SegmentTree {
             }
         } else {
             uint256 absDelta = uint256(-delta);
+            // Leaf check guarantees all ancestors are >= absDelta (sum tree invariant:
+            // parent nodes are always >= any child), so unchecked subtraction is safe.
             require(tree.nodes[idx] >= absDelta, "SegmentTree: underflow");
             while (idx >= 1) {
                 unchecked { tree.nodes[idx] -= absDelta; }
