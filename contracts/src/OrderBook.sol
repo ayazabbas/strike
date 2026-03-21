@@ -463,11 +463,8 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
     }
 
     /// @notice Push an order ID to a batch's order list (for GTC rollover).
-    ///         Returns false if batch is full (caller should auto-cancel).
+    ///         No cap — chunked clearBatch handles arbitrarily large batches.
     function pushBatchOrderId(uint256 marketId, uint256 batchId, uint256 orderId) external onlyRole(OPERATOR_ROLE) returns (bool) {
-        if (batchOrderIds[marketId][batchId].length >= MAX_ORDERS_PER_BATCH) {
-            return false;
-        }
         batchOrderIds[marketId][batchId].push(orderId);
         return true;
     }

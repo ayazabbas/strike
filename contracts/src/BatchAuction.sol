@@ -28,6 +28,13 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
     /// @notice marketId => batchId => BatchResult
     mapping(uint256 => mapping(uint256 => BatchResult)) public batchResults;
 
+    /// @notice Tracks settlement progress for chunked clearing.
+    ///         marketId => batchId => number of orders settled so far.
+    mapping(uint256 => mapping(uint256 => uint256)) public settledUpTo;
+
+    /// @notice Maximum orders to settle per clearBatch call.
+    uint256 public constant SETTLE_CHUNK_SIZE = 400;
+
     // -------------------------------------------------------------------------
     // Events
     // -------------------------------------------------------------------------
@@ -65,15 +72,36 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
     // Batch clearing — atomic: advance + clear + settle all
     // -------------------------------------------------------------------------
 
+    /// @notice Clear a batch for a market. Supports chunked settlement:
+    ///         - First call: computes clearing price, stores BatchResult, advances batch,
+    ///           and settles up to SETTLE_CHUNK_SIZE orders.
+    ///         - Subsequent calls: settles the next chunk of orders.
+    ///         - Small batches (<=400 orders) complete in a single tx.
+    /// @return result The BatchResult for this batch.
     function clearBatch(uint256 marketId) external nonReentrant returns (BatchResult memory result) {
-        uint32 currentBatchId;
-        {
-            (uint32 id, bool active, bool halted, uint32 _batchId, , , ) = orderBook.markets(marketId);
-            require(id != 0, "BatchAuction: market not found");
-            require(active, "BatchAuction: market not active");
-            require(!halted, "BatchAuction: market halted");
-            currentBatchId = _batchId;
+        // Check if we're continuing settlement of a previous batch
+        (uint32 id, bool active, bool halted, uint32 currentBatchId, , , ) = orderBook.markets(marketId);
+        require(id != 0, "BatchAuction: market not found");
+
+        // Check if there's a batch with pending settlement (batch before current)
+        uint32 prevBatchId = currentBatchId > 1 ? currentBatchId - 1 : 0;
+        if (prevBatchId > 0) {
+            BatchResult storage prevResult = batchResults[marketId][prevBatchId];
+            if (prevResult.batchId == prevBatchId && prevResult.timestamp > 0) {
+                uint256[] memory prevIds = orderBook.getBatchOrderIds(marketId, prevBatchId);
+                uint256 settled = settledUpTo[marketId][prevBatchId];
+                if (settled < prevIds.length) {
+                    // Continue settling the previous batch
+                    result = prevResult;
+                    _settleChunk(marketId, prevBatchId, result);
+                    return result;
+                }
+            }
         }
+
+        // Phase 1: New batch clearing
+        require(active, "BatchAuction: market not active");
+        require(!halted, "BatchAuction: market halted");
 
         uint256 clearingTick = orderBook.findClearingTick(marketId);
 
@@ -111,15 +139,33 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
 
         emit BatchCleared(marketId, currentBatchId, clearingTick, matchedLots);
 
-        // Settle ALL orders in this batch atomically
-        uint256[] memory ids = orderBook.getBatchOrderIds(marketId, currentBatchId);
+        // Settle orders (first chunk)
+        _settleChunk(marketId, currentBatchId, result);
+    }
 
-        // Two-pass settlement: compute fills first (with rounding correction), then settle
+    /// @notice Returns true if the batch is fully settled.
+    function isBatchFullySettled(uint256 marketId, uint256 batchId) external view returns (bool) {
+        uint256[] memory ids = orderBook.getBatchOrderIds(marketId, batchId);
+        return settledUpTo[marketId][batchId] >= ids.length;
+    }
+
+    /// @dev Settle a chunk of orders starting from settledUpTo.
+    function _settleChunk(uint256 marketId, uint256 batchId, BatchResult memory result) internal {
+        uint256[] memory ids = orderBook.getBatchOrderIds(marketId, batchId);
+        uint256 startIdx = settledUpTo[marketId][batchId];
+        if (startIdx >= ids.length) return;
+
+        // Compute fills for ALL orders (needed for correct rounding distribution)
         uint256[] memory fills = _computeFills(ids, result);
 
-        for (uint256 i = 0; i < ids.length; i++) {
+        uint256 endIdx = startIdx + SETTLE_CHUNK_SIZE;
+        if (endIdx > ids.length) endIdx = ids.length;
+
+        for (uint256 i = startIdx; i < endIdx; i++) {
             _settleOrder(ids[i], result, fills[i]);
         }
+
+        settledUpTo[marketId][batchId] = endIdx;
     }
 
     // -------------------------------------------------------------------------
@@ -251,29 +297,9 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
         s.unfilledFee = obFee.calculateFee(s.unfilledCollateral);
     }
 
-    /// @dev Try GTC rollover; auto-cancel if next batch is full (Fix 2).
+    /// @dev Roll GTC order to next batch. No cap — chunked settlement handles large batches.
     function _tryRollOrCancel(uint256 orderId, OrderInfo memory o, uint256 nextBatchId) internal {
-        bool pushed = orderBook.pushBatchOrderId(o.marketId, nextBatchId, orderId);
-        if (!pushed) {
-            orderBook.reduceOrderLots(orderId, o.lots);
-            orderBook.updateTreeVolume(o.marketId, o.side, o.tick, -int256(o.lots));
-
-            if (_isSellOrder(o.side)) {
-                // Return outcome tokens to seller
-                bool isYes = (o.side == Side.SellYes);
-                uint256 tokenId = isYes
-                    ? outcomeToken.yesTokenId(o.marketId)
-                    : outcomeToken.noTokenId(o.marketId);
-                orderBook.transferEscrowTokens(o.owner, tokenId, o.lots);
-            } else {
-                // Return USDT collateral + fee
-                uint256 collateral = _collateral(o.lots, o.tick, o.side);
-                uint256 fee = orderBook.feeModel().calculateFee(collateral);
-                vault.unlock(o.owner, collateral + fee);
-                vault.withdrawTo(o.owner, collateral + fee);
-            }
-            emit GtcAutoCancelled(orderId, o.owner);
-        }
+        orderBook.pushBatchOrderId(o.marketId, nextBatchId, orderId);
     }
 
     function _settleOrder(uint256 orderId, BatchResult memory result, uint256 precomputedFill) internal {
