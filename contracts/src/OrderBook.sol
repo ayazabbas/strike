@@ -25,6 +25,7 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
     // -------------------------------------------------------------------------
 
     uint256 public constant MAX_ORDERS_PER_BATCH = 400;
+    uint16 public constant MAX_USER_ORDERS = 20;
 
     // -------------------------------------------------------------------------
     // State
@@ -44,6 +45,9 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
 
     /// @notice marketId => batchId => array of order IDs placed in that batch
     mapping(uint256 => mapping(uint256 => uint256[])) internal batchOrderIds;
+
+    /// @notice user => marketId => number of active orders (both active and resting)
+    mapping(address => mapping(uint256 => uint16)) public activeOrderCount;
 
     // -------------------------------------------------------------------------
     // Events
@@ -145,6 +149,9 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
         require(lots >= m.minLots, "OrderBook: below min lots");
         require(lots <= type(uint64).max, "OrderBook: lots overflow");
         require(marketId <= type(uint32).max, "OrderBook: marketId overflow");
+        require(activeOrderCount[msg.sender][marketId] < MAX_USER_ORDERS, "OrderBook: too many orders");
+
+        activeOrderCount[msg.sender][marketId]++;
 
         bool isSell = (side == Side.SellYes || side == Side.SellNo);
 
@@ -228,6 +235,10 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
         uint256 mktId = o.marketId;
         Side side = o.side;
         o.lots = 0;
+
+        if (activeOrderCount[caller][mktId] > 0) {
+            activeOrderCount[caller][mktId]--;
+        }
 
         if (side == Side.Bid || side == Side.SellNo) {
             bidTrees[mktId].update(tick, -int256(lots));
@@ -316,6 +327,9 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
         require(block.timestamp < m.expiryTime, "OrderBook: market expired");
         require(params.length > 0, "OrderBook: invalid batch size");
         require(marketId <= type(uint32).max, "OrderBook: marketId overflow");
+        require(activeOrderCount[msg.sender][marketId] + uint16(params.length) <= MAX_USER_ORDERS, "OrderBook: too many orders");
+
+        activeOrderCount[msg.sender][marketId] += uint16(params.length);
 
         orderIds = new uint256[](params.length);
         uint256 totalDeposit;
@@ -366,6 +380,9 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
         uint256 totalDeposit;
 
         if (params.length > 0) {
+            require(activeOrderCount[msg.sender][marketId] + uint16(params.length) <= MAX_USER_ORDERS, "OrderBook: too many orders");
+            activeOrderCount[msg.sender][marketId] += uint16(params.length);
+
             uint256 batchId = m.currentBatchId;
             if (batchOrderIds[marketId][batchId].length + params.length > MAX_ORDERS_PER_BATCH) {
                 batchId = batchId + 1;
@@ -410,6 +427,10 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
         Side side = o.side;
 
         o.lots = 0;
+
+        if (activeOrderCount[recipient][marketId] > 0) {
+            activeOrderCount[recipient][marketId]--;
+        }
 
         if (side == Side.Bid || side == Side.SellNo) {
             bidTrees[marketId].update(tick, -int256(lots));
@@ -539,6 +560,12 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
     /// @notice Transfer outcome tokens held in escrow to a recipient (for sell order settlement).
     function transferEscrowTokens(address to, uint256 tokenId, uint256 amount) external onlyRole(OPERATOR_ROLE) {
         outcomeToken.safeTransferFrom(address(this), to, tokenId, amount, "");
+    }
+
+    function decrementActiveOrderCount(address user, uint256 marketId) external onlyRole(OPERATOR_ROLE) {
+        if (activeOrderCount[user][marketId] > 0) {
+            activeOrderCount[user][marketId]--;
+        }
     }
 
     function advanceBatch(uint256 marketId) external onlyRole(OPERATOR_ROLE) {

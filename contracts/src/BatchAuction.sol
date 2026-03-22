@@ -342,6 +342,7 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
         // Non-participating order (precomputedFill == 0 and tick doesn't cross)
         if (precomputedFill == 0 && !_orderParticipates(o.side, o.tick, result.clearingTick)) {
             if (o.orderType == OrderType.GoodTilBatch) {
+                orderBook.decrementActiveOrderCount(o.owner, o.marketId);
                 orderBook.reduceOrderLots(orderId, o.lots);
                 orderBook.updateTreeVolume(o.marketId, o.side, o.tick, -int256(o.lots));
 
@@ -392,6 +393,7 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
         bool fullyFilled = s.filledLots == o.lots;
 
         if (fullyFilled || o.orderType == OrderType.GoodTilBatch) {
+            orderBook.decrementActiveOrderCount(o.owner, o.marketId);
             orderBook.reduceOrderLots(orderId, o.lots);
             orderBook.updateTreeVolume(o.marketId, o.side, o.tick, -int256(o.lots));
             vault.settleFill(
@@ -452,6 +454,7 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
         }
 
         if (fullyFilled || o.orderType == OrderType.GoodTilBatch) {
+            orderBook.decrementActiveOrderCount(o.owner, o.marketId);
             orderBook.reduceOrderLots(orderId, o.lots);
             orderBook.updateTreeVolume(o.marketId, o.side, o.tick, -int256(o.lots));
             // Return unfilled tokens/positions to seller

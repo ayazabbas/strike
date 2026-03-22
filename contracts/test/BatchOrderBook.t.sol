@@ -316,9 +316,13 @@ contract BatchOrderBookTest is Test {
     function test_PlaceOrders_BatchOverflowToNextBatch() public {
         uint256 mId = _setupSimpleMarket();
 
-        // Fill batch to 398
+        // Fill batch to 398 using many unique users (cap is 20 per user)
         for (uint256 i = 0; i < 398; i++) {
-            vm.prank(user1);
+            address filler = address(uint160(0xF000 + i));
+            usdt.mint(filler, 100000 ether);
+            vm.prank(filler);
+            usdt.approve(address(vault), type(uint256).max);
+            vm.prank(filler);
             book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 50, 1);
         }
 
