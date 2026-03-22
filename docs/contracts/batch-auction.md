@@ -41,7 +41,7 @@ For each order in `batchOrderIds[marketId][batchId]`:
 1. Compute pro-rata fill: `filledLots = (orderLots * matchedLots) / totalSideLots`
 2. Filled collateral calculated at **clearing tick** (not the order's limit tick)
 3. Excess refund = (collateral locked at order tick) - (cost at clearing tick)
-4. Deduct uniform fee (20 bps) on filled collateral, send to protocol fee collector
+4. Deduct fee (20 bps total, split 50/50): buy side pays `floor(fee/2)`, sell side pays `ceil(fee/2)` from USDT payout. Fees sent to protocol fee collector
 5. Mint outcome token via `mintSingle()`:
    - **Bidder** receives YES token
    - **Asker** receives NO token
@@ -63,9 +63,23 @@ All fills settle at the **clearing tick**, not the order's limit tick. This mean
 - The excess (70% - 55% = 15% per lot) is refunded to the bidder
 - Same logic applies symmetrically to asks
 
+### Chunked Settlement
+
+Large batches settle across multiple `clearBatch` calls:
+
+- **MAX_ORDERS_PER_BATCH = 1600** (up from 400 in v1.1)
+- **SETTLE_CHUNK_SIZE = 400** — each `clearBatch` call settles up to 400 orders
+- On the first call for a batch, clearing tick and matched lots are computed and stored as precomputed fills
+- Subsequent calls reuse the precomputed fills and settle the next chunk of orders
+- GTB orders that receive zero fills are cleaned up during settlement via `_tryRollOrCancel`
+
+### Resting Order Handling
+
+At the start of each `clearBatch`, `pullRestingOrders` is called to move in-range resting orders back into the segment tree before clearing. After settlement, GTC orders that are now far from the new clearing price are rolled to the resting list via `_tryRollOrCancel` instead of remaining in the active tree.
+
 ### Batch Overflow
 
-`MAX_ORDERS_PER_BATCH = 400`. When the current batch reaches 400 orders, new orders automatically spill into the next batch. Placement fails only if both the current and next batch are full.
+`MAX_ORDERS_PER_BATCH = 1600`. When the current batch reaches 1600 orders, new orders automatically spill into the next batch. Placement fails only if both the current and next batch are full.
 
 ## Events
 

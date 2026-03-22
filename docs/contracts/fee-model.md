@@ -14,7 +14,7 @@ Inherits: `AccessControl` (OpenZeppelin).
 
 **Constant:** `MAX_BPS = 10_000` (100%).
 
-No maker/taker distinction — all filled orders pay the same uniform fee on their filled collateral amount.
+No maker/taker distinction — both sides of a trade pay half the fee (50/50 split). The extra wei from integer rounding goes to the protocol (sell side pays `ceil`).
 
 ## Calculation Functions
 
@@ -24,9 +24,25 @@ No maker/taker distinction — all filled orders pay the same uniform fee on the
 function calculateFee(uint256 amount) public view returns (uint256 fee)
 ```
 
-Returns the fee for a given filled collateral amount.
+Returns the total fee for a given filled collateral amount.
 
 Formula: `fee = amount * feeBps / 10_000`
+
+### calculateHalfFee
+
+```solidity
+function calculateHalfFee(uint256 amount) public view returns (uint256 fee)
+```
+
+Returns the buy-side half of the fee: `floor(calculateFee(amount) / 2)`.
+
+### calculateOtherHalfFee
+
+```solidity
+function calculateOtherHalfFee(uint256 amount) public view returns (uint256 fee)
+```
+
+Returns the sell-side half of the fee: `calculateFee(amount) - calculateHalfFee(amount)` (i.e. `ceil(fee / 2)`). The sell-side fee is deducted from the seller's USDT payout at settlement.
 
 ## Admin Functions
 
@@ -69,6 +85,7 @@ Update the protocol fee collector address. Reverts if `_collector` is the zero a
 With default parameters (feeBps=20):
 
 - Filled collateral: 100 USDT
-- Fee: 100 * 20 / 10000 = 0.20 USDT
-- To market pool: 99.80 USDT
-- To protocol fee collector: 0.20 USDT
+- Total fee: 100 * 20 / 10000 = 0.20 USDT
+- Buy-side fee: floor(0.20 / 2) = 0.10 USDT
+- Sell-side fee: ceil(0.20 / 2) = 0.10 USDT
+- To protocol fee collector: 0.20 USDT (sum of both halves)

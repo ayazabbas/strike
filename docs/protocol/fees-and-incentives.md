@@ -2,13 +2,16 @@
 
 ## Trading Fees
 
-Strike uses a **uniform fee model**:
+Strike uses a **uniform fee model** with a **50/50 buyer–seller split**:
 
 | Parameter | Rate | Description |
 |-----------|------|-------------|
-| **Fee** | 20 bps (0.20%) | Applied to filled collateral at settlement |
+| **Total fee** | 20 bps (0.20%) | Split equally between buyer and seller |
+| **Buy-side fee** | `floor(fee / 2)` | Deducted from buyer's filled collateral at settlement |
+| **Sell-side fee** | `ceil(fee / 2)` | Deducted from seller's USDT payout at settlement |
 
-- No maker/taker distinction — all filled orders pay the same fee
+- No maker/taker distinction — both sides pay half the fee
+- The extra wei from integer rounding goes to the protocol (sell side pays `ceil`)
 - Fees are deducted during atomic batch settlement (inline with clearing)
 - All fees go to the `protocolFeeCollector` address
 - `clearingBountyBps` exists (admin-configurable) but is currently set to 0
@@ -21,13 +24,16 @@ All trading fees flow to the protocol fee collector address. This funds developm
 
 Markets can be resolved permissionlessly by anyone with valid Pyth data. The resolver bounty mechanism is configurable via FeeModel but currently set to 0.
 
-## Anti-Spam
+## Anti-Spam / DoS Prevention
 
 | Mechanism | Purpose |
 |-----------|---------|
 | **Minimum lot size** | Prevents dust orders (MIN_LOTS = 1, i.e. 1 USDT) |
 | **Full collateral locking** | Economic cost to placing orders (USDT locked until fill or cancel) |
 | **ERC-20 approval required** | Users must approve Vault before placing orders |
+| **Per-user active order cap** | MAX_USER_ORDERS = 20 per market — prevents a single address from flooding the book |
+
+The per-user order cap is tracked via an `activeOrderCount` mapping and enforced on `placeOrder`, `placeOrders`, and `replaceOrders`. Orders freed by cancellation or settlement decrement the counter.
 
 ## Cost Estimates (BSC at 0.05 gwei)
 

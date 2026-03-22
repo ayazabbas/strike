@@ -69,9 +69,28 @@ To express willingness to pay more for guaranteed fills, place your order at a t
 - **Capital efficient** — traders can express precise views at specific prices
 - **Secondary market** — outcome tokens are tradeable on the book, not locked until resolution
 
+## Resting Orders (Price-Proximity Filtering)
+
+Orders placed far from the last clearing tick (more than **PROXIMITY_THRESHOLD = 20 ticks** away) are parked in a **resting list** instead of being inserted into the segment tree. This prevents phantom volume from distant orders distorting the clearing price.
+
+- Resting orders lock collateral/tokens normally — they are real orders, just parked outside the tree
+- An `OrderResting` event is emitted (distinct from `OrderPlaced`)
+- At the start of each `clearBatch`, `pullRestingOrders` runs automatically, pulling in-range resting orders back into the segment tree (paginated: max **MAX_RESTING_PULL = 200** pulled, max **MAX_RESTING_SCAN = 400** scanned per call)
+- GTC orders that move far from price after a batch clear are rolled to the resting list via `_tryRollOrCancel`
+- Users can cancel resting orders normally
+
+## Chunked Settlement
+
+Large batches settle across multiple `clearBatch` calls:
+
+- **MAX_ORDERS_PER_BATCH = 1600** — up from 400 in v1.1
+- **SETTLE_CHUNK_SIZE = 400** — each `clearBatch` call settles up to 400 orders
+- Batches with more than 400 orders require multiple `clearBatch` calls to fully settle
+- Precomputed fills (clearing tick, matched lots) are stored on the first call and reused by subsequent chunks, ensuring correctness across calls
+
 ## Batch Overflow
 
-Each batch can hold up to **MAX_ORDERS_PER_BATCH (400)** orders. When a batch is full, new orders automatically spill into the next batch. This bounds the gas cost of `clearBatch()` while keeping order placement seamless.
+Each batch can hold up to **MAX_ORDERS_PER_BATCH (1600)** orders. When a batch is full, new orders automatically spill into the next batch. This bounds the gas cost of `clearBatch()` while keeping order placement seamless.
 
 ## Batch Cadence
 

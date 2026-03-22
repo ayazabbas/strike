@@ -19,16 +19,18 @@ All external state-changing functions use OpenZeppelin's `ReentrancyGuard`. The 
 | `setFeeCollector()` | Owner |
 
 ### Bounded Iteration
-No function iterates over unbounded sets. Segment trees provide O(log N) operations. Batch order count is capped at MAX_ORDERS_PER_BATCH (400) with automatic overflow to the next batch.
+No function iterates over unbounded sets. Segment trees provide O(log N) operations. Batch order count is capped at MAX_ORDERS_PER_BATCH (1600) with automatic overflow to the next batch. Settlement is chunked (SETTLE_CHUNK_SIZE = 400) so gas cost per `clearBatch` call remains bounded.
 
 ### Emergency Controls
 - **Pausable:** owner can pause market creation and trading protocol-wide or per-market
 - **24h auto-cancel:** markets without resolution auto-cancel, enabling full refunds
 - **Emergency withdrawal:** users can withdraw via timelock if admin is unresponsive
 
-### Anti-Spam
+### Anti-Spam / DoS Prevention
 - Minimum lot sizes prevent dust orders
 - Full collateral locking creates economic cost for spam (capital locked until fill or cancel)
+- **Per-user active order cap:** MAX_USER_ORDERS = 20 per market prevents a single address from flooding the order book
+- **Resting order list:** orders far from the clearing price (>20 ticks) are parked outside the segment tree, preventing phantom volume from distorting price discovery while still locking collateral
 
 ## Oracle Security
 
@@ -49,7 +51,12 @@ No function iterates over unbounded sets. Segment trees provide O(log N) operati
 - **Deterministic halt:** trading stops when `timeRemaining < batchInterval`, preventing last-second exploitation
 - Funds cannot be locked — cancellation/withdrawal always available
 
-## Planned Auditing
+## Auditing
+
+### Internal Audit v1.2
+An internal security audit (v1.2) was conducted covering all core contracts. Key areas reviewed include fee split logic, chunked settlement, resting order mechanics, and per-user order caps. All findings have been addressed. See `contracts/audit/` for the full report.
+
+### Static Analysis
 - Slither static analysis
 - Mythril symbolic execution
 - Aderyn / 4naly3er additional coverage

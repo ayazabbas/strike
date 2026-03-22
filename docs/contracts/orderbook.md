@@ -71,9 +71,26 @@ struct OrderParam {
 - OPERATOR_ROLE only (MarketFactory)
 - Creates new market with given parameters
 
+## Anti-Spam: Per-User Order Cap
+
+Each user is limited to **MAX_USER_ORDERS = 20** active orders per market. The `activeOrderCount[marketId][user]` mapping is incremented on placement and decremented on cancellation or settlement. Enforced in `placeOrder`, `placeOrders`, and `replaceOrders`.
+
+## Resting Orders (Price-Proximity Filtering)
+
+Orders placed more than **PROXIMITY_THRESHOLD = 20 ticks** from the last clearing tick are parked in a resting list rather than inserted into the segment tree.
+
+| Storage / Function | Description |
+|--------------------|-------------|
+| `restingOrderIds[marketId]` | Array of resting order IDs for each market |
+| `isResting[orderId]` | Whether an order is currently in the resting list |
+| `isTickFar(marketId, tick)` | Returns true if `tick` is more than PROXIMITY_THRESHOLD from the last clearing tick |
+| `pullRestingOrders(marketId)` | Moves in-range resting orders back into the segment tree (max **MAX_RESTING_PULL = 200** pulled, max **MAX_RESTING_SCAN = 400** scanned) |
+
+Resting orders still lock collateral/tokens and can be cancelled normally. An `OrderResting` event is emitted instead of `OrderPlaced`.
+
 ## Access Control
 
-- **OPERATOR_ROLE:** BatchAuction (for `reduceOrderLots`, `updateTreeVolume`, `advanceBatch`) and MarketFactory (for `registerMarket`, `deactivateMarket`)
+- **OPERATOR_ROLE:** BatchAuction (for `reduceOrderLots`, `updateTreeVolume`, `advanceBatch`, `pullRestingOrders`) and MarketFactory (for `registerMarket`, `deactivateMarket`)
 
 ## Events
 
@@ -83,5 +100,6 @@ event MarketHalted(uint256 indexed marketId);
 event MarketResumed(uint256 indexed marketId);
 event MarketDeactivated(uint256 indexed marketId);
 event OrderPlaced(uint256 indexed orderId, uint256 indexed marketId, address indexed owner, Side side, uint256 tick, uint256 lots, uint256 batchId);
+event OrderResting(uint256 indexed orderId, uint256 indexed marketId, address indexed owner, Side side, uint256 tick, uint256 lots);
 event OrderCancelled(uint256 indexed orderId, address indexed owner);
 ```
