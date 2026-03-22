@@ -334,4 +334,118 @@ contract AuditFixesTest is Test {
         // Worst case: all YES win or all NO win → payout = lots * LOT_SIZE
         assertGe(pool, totalLots * LOT, "pool solvency: pool >= lots * LOT_SIZE");
     }
+
+    // =========================================================================
+    // Fix 2: Chunked Settlement Correctness (L-01)
+    // =========================================================================
+
+    function test_Fix2_MultiChunkSettlement() public {
+        uint256 mId = _setupMarket();
+
+        // Place > 400 orders to trigger multi-chunk settlement.
+        // Use GTC orders from batch 1, then roll them forward via clearBatch
+        // so that batch 2 has >400 orders (GTC rollovers + new orders).
+
+        // Batch 1: place 300 GTC bids from many users (no asks → no match → all roll to batch 2)
+        for (uint256 i = 0; i < 300; i++) {
+            address u = address(uint160(0xA000 + i));
+            usdt.mint(u, 100000 ether);
+            vm.prank(u);
+            usdt.approve(address(vault), type(uint256).max);
+            vm.prank(u);
+            book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 50, 1);
+        }
+        // Clear batch 1 — no cross, all 300 GTC bids roll to batch 2
+        auction.clearBatch(mId);
+
+        // Now add 200 more bids + 500 asks into batch 2 → total 500 bids, 500 asks
+        for (uint256 i = 0; i < 200; i++) {
+            address u = address(uint160(0xB000 + i));
+            usdt.mint(u, 100000 ether);
+            vm.prank(u);
+            usdt.approve(address(vault), type(uint256).max);
+            vm.prank(u);
+            book.placeOrder(mId, Side.Bid, OrderType.GoodTilBatch, 50, 1);
+        }
+        for (uint256 i = 0; i < 500; i++) {
+            address u = address(uint160(0xC000 + i));
+            usdt.mint(u, 100000 ether);
+            vm.prank(u);
+            usdt.approve(address(vault), type(uint256).max);
+            vm.prank(u);
+            book.placeOrder(mId, Side.Ask, OrderType.GoodTilBatch, 50, 1);
+        }
+
+        // Batch 2 has 300 (rolled) + 200 + 500 = 1000 orders → needs 3 chunks
+        // First clearBatch settles chunk 1 (orders 0-399)
+        auction.clearBatch(mId);
+        assertFalse(auction.isBatchFullySettled(mId, 2), "should not be fully settled after 1 chunk");
+
+        // Second clearBatch settles chunk 2 (orders 400-799)
+        auction.clearBatch(mId);
+        assertFalse(auction.isBatchFullySettled(mId, 2), "should not be fully settled after 2 chunks");
+
+        // Third clearBatch settles chunk 3 (orders 800-999)
+        auction.clearBatch(mId);
+        assertTrue(auction.isBatchFullySettled(mId, 2), "should be fully settled after 3 chunks");
+
+        // Verify pool solvency: 500 matched lots × LOT_SIZE
+        uint256 pool = vault.marketPool(mId);
+        assertGe(pool, 500 * LOT, "pool solvency after multi-chunk settlement");
+    }
+
+    function test_Fix2_GTC_PartialFillAcrossChunks() public {
+        uint256 mId = _setupMarket();
+
+        // Set up a scenario where a GTC order gets partial-filled in chunk 1
+        // and its remainder must be correctly handled in a subsequent chunk.
+
+        // Place 350 GTC bids (1 lot each) from unique users
+        for (uint256 i = 0; i < 350; i++) {
+            address u = address(uint160(0xD000 + i));
+            usdt.mint(u, 100000 ether);
+            vm.prank(u);
+            usdt.approve(address(vault), type(uint256).max);
+            vm.prank(u);
+            book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 50, 1);
+        }
+        // Roll them to batch 2
+        auction.clearBatch(mId);
+
+        // In batch 2: add 200 more bids + 200 asks (less than total bids → partial fills)
+        for (uint256 i = 0; i < 200; i++) {
+            address u = address(uint160(0xE000 + i));
+            usdt.mint(u, 100000 ether);
+            vm.prank(u);
+            usdt.approve(address(vault), type(uint256).max);
+            vm.prank(u);
+            book.placeOrder(mId, Side.Bid, OrderType.GoodTilBatch, 50, 1);
+        }
+        for (uint256 i = 0; i < 200; i++) {
+            address u = address(uint160(0xF000 + i));
+            usdt.mint(u, 100000 ether);
+            vm.prank(u);
+            usdt.approve(address(vault), type(uint256).max);
+            vm.prank(u);
+            book.placeOrder(mId, Side.Ask, OrderType.GoodTilBatch, 50, 1);
+        }
+
+        // Batch 2: 350 + 200 + 200 = 750 orders → 2 chunks
+        // 550 bids, 200 asks → 200 matched, pro-rata fill for bids
+        auction.clearBatch(mId); // chunk 1
+        auction.clearBatch(mId); // chunk 2
+        assertTrue(auction.isBatchFullySettled(mId, 2), "should be fully settled");
+
+        // Pool should hold 200 matched lots
+        uint256 pool = vault.marketPool(mId);
+        assertGe(pool, 200 * LOT, "pool solvency after partial-fill chunks");
+    }
+
+    // =========================================================================
+    // Fix 3: MAX_ORDERS_PER_BATCH = 1600
+    // =========================================================================
+
+    function test_Fix3_MaxOrdersPerBatchIs1600() public {
+        assertEq(book.MAX_ORDERS_PER_BATCH(), 1600, "MAX_ORDERS_PER_BATCH should be 1600");
+    }
 }

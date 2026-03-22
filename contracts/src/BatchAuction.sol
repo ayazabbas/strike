@@ -33,6 +33,14 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
     ///         marketId => batchId => number of orders settled so far.
     mapping(uint256 => mapping(uint256 => uint256)) public settledUpTo;
 
+    /// @notice Precomputed fill lots for chunked settlement.
+    ///         orderId => fill lots (stored during first chunk, read in subsequent chunks).
+    mapping(uint256 => uint256) private _precomputedFills;
+
+    /// @notice Precomputed order info for chunked settlement.
+    ///         orderId => encoded flag (1 = has precomputed data).
+    mapping(uint256 => uint256) private _hasPrecomputed;
+
     /// @notice Maximum orders to settle per clearBatch call.
     uint256 public constant SETTLE_CHUNK_SIZE = 400;
 
@@ -152,24 +160,55 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
     }
 
     /// @dev Settle a chunk of orders starting from settledUpTo.
+    ///      First chunk: computes fills for ALL orders and stores them in _precomputedFills.
+    ///      Subsequent chunks: reads from _precomputedFills (since chunk 1 mutated order lots).
+    ///      Final chunk: clears the precomputed fill mapping entries.
     function _settleChunk(uint256 marketId, uint256 batchId, BatchResult memory result) internal {
         uint256[] memory ids = orderBook.getBatchOrderIds(marketId, batchId);
         uint256 startIdx = settledUpTo[marketId][batchId];
         if (startIdx >= ids.length) return;
 
-        // Compute fills for ALL orders (needed for correct rounding distribution).
-        // Also returns OrderInfo[] to avoid double storage reads during settlement.
-        (uint256[] memory fills, OrderInfo[] memory infos) = _computeFills(ids, result);
+        uint256 endIdx = startIdx + SETTLE_CHUNK_SIZE;
+        if (endIdx > ids.length) endIdx = ids.length;
+        bool isFinalChunk = (endIdx >= ids.length);
 
         // Cache isInternalPositions once per chunk (avoids repeated SLOAD per order)
         bool isInternal = _isInternalPositions(marketId);
 
-        uint256 endIdx = startIdx + SETTLE_CHUNK_SIZE;
-        if (endIdx > ids.length) endIdx = ids.length;
+        if (startIdx == 0) {
+            // First chunk: compute fills for ALL orders and store in mapping
+            (uint256[] memory fills, OrderInfo[] memory infos) = _computeFills(ids, result);
 
-        for (uint256 i = startIdx; i < endIdx; ) {
-            _settleOrder(ids[i], infos[i], result, fills[i], isInternal);
-            unchecked { ++i; }
+            // Store precomputed fills for all orders (needed by subsequent chunks)
+            uint256 idsLen = ids.length;
+            for (uint256 j = 0; j < idsLen; ) {
+                _precomputedFills[ids[j]] = fills[j];
+                _hasPrecomputed[ids[j]] = 1;
+                unchecked { ++j; }
+            }
+
+            // Settle the first chunk using the freshly computed data
+            for (uint256 i = 0; i < endIdx; ) {
+                _settleOrder(ids[i], infos[i], result, fills[i], isInternal);
+                unchecked { ++i; }
+            }
+        } else {
+            // Subsequent chunks: read from _precomputedFills
+            for (uint256 i = startIdx; i < endIdx; ) {
+                uint256 fill = _precomputedFills[ids[i]];
+                _settleOrder(ids[i], OrderInfo(0, address(0), Side.Bid, OrderType.GoodTilBatch, 0, 0, 0), result, fill, isInternal);
+                unchecked { ++i; }
+            }
+        }
+
+        // Clean up precomputed fills on final chunk
+        if (isFinalChunk) {
+            uint256 idsLen = ids.length;
+            for (uint256 j = 0; j < idsLen; ) {
+                delete _precomputedFills[ids[j]];
+                delete _hasPrecomputed[ids[j]];
+                unchecked { ++j; }
+            }
         }
 
         settledUpTo[marketId][batchId] = endIdx;
