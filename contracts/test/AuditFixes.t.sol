@@ -117,4 +117,114 @@ contract AuditFixesTest is Test {
         vm.prank(user1);
         book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 50, 1);
     }
+
+    // =========================================================================
+    // Fix 1: GTB Zero-Fill Cleanup (M-01)
+    // =========================================================================
+
+    function test_Fix1_GTBBuyZeroFillCleanedUp() public {
+        uint256 mId = _setupMarket();
+
+        // user1 places a small GTB bid at tick 50
+        vm.prank(user1);
+        uint256 smallOrderId = book.placeOrder(mId, Side.Bid, OrderType.GoodTilBatch, 50, 1);
+
+        // user2 places a large GTB bid at same tick (will consume all matched lots via pro-rata)
+        vm.prank(user2);
+        book.placeOrder(mId, Side.Bid, OrderType.GoodTilBatch, 50, 10000);
+
+        // user3 places a small ask to create a match (1 lot matched)
+        vm.prank(user3);
+        book.placeOrder(mId, Side.Ask, OrderType.GoodTilBatch, 50, 1);
+
+        uint256 user1BalBefore = usdt.balanceOf(user1);
+        auction.clearBatch(mId);
+
+        // user1's order got 0 fill (pro-rata rounds to 0 for 1 lot out of 10001)
+        // Verify the order was cleaned up: lots should be 0
+        (, , , , uint64 lotsAfter, , , , ) = book.orders(smallOrderId);
+        assertEq(lotsAfter, 0, "GTB zero-fill order should be cleaned up");
+
+        // Verify collateral returned
+        uint256 user1BalAfter = usdt.balanceOf(user1);
+        assertTrue(user1BalAfter > user1BalBefore, "Collateral should be returned");
+    }
+
+    function test_Fix1_GTBSellZeroFillCleanedUp() public {
+        uint256 mId = _setupMarket();
+
+        // Get user1 and user3 YES tokens
+        vm.prank(user1);
+        book.placeOrder(mId, Side.Bid, OrderType.GoodTilBatch, 50, 100);
+        vm.prank(user3);
+        book.placeOrder(mId, Side.Bid, OrderType.GoodTilBatch, 50, 10000);
+        vm.prank(user2);
+        book.placeOrder(mId, Side.Ask, OrderType.GoodTilBatch, 50, 10100);
+        auction.clearBatch(mId);
+
+        // Approve OrderBook for token transfers
+        vm.prank(user1);
+        token.setApprovalForAll(address(book), true);
+        vm.prank(user3);
+        token.setApprovalForAll(address(book), true);
+
+        // user1 places small SellYes GTB (1 lot)
+        uint256 user1YesBefore = token.balanceOf(user1, token.yesTokenId(mId));
+        vm.prank(user1);
+        uint256 sellOrderId = book.placeOrder(mId, Side.SellYes, OrderType.GoodTilBatch, 50, 1);
+        // user3 places large SellYes GTB (10000 lots) — dominates pro-rata
+        vm.prank(user3);
+        book.placeOrder(mId, Side.SellYes, OrderType.GoodTilBatch, 50, 10000);
+        // 1 bid to create minimal match
+        vm.prank(user2);
+        book.placeOrder(mId, Side.Bid, OrderType.GoodTilBatch, 50, 1);
+
+        auction.clearBatch(mId);
+
+        // Verify order cleaned up
+        (, , , , uint64 lotsAfter, , , , ) = book.orders(sellOrderId);
+        assertEq(lotsAfter, 0, "GTB sell zero-fill order should be cleaned up");
+
+        // Verify tokens returned (user1 had 100, locked 1, should get 1 back = 100)
+        uint256 user1YesAfter = token.balanceOf(user1, token.yesTokenId(mId));
+        assertEq(user1YesAfter, user1YesBefore, "Tokens should be returned to original balance");
+    }
+
+    function test_Fix1_GTBInternalPositionsZeroFillCleanedUp() public {
+        uint256 mId = _setupInternalMarket();
+
+        // Get user1 and user3 internal YES positions
+        vm.prank(user1);
+        book.placeOrder(mId, Side.Bid, OrderType.GoodTilBatch, 50, 100);
+        vm.prank(user3);
+        book.placeOrder(mId, Side.Bid, OrderType.GoodTilBatch, 50, 10000);
+        vm.prank(user2);
+        book.placeOrder(mId, Side.Ask, OrderType.GoodTilBatch, 50, 10100);
+        auction.clearBatch(mId);
+
+        // Snapshot user1's YES position before placing sell order
+        (uint128 yesBefore, ) = vault.positions(user1, mId);
+
+        // user1 places small SellYes GTB
+        vm.prank(user1);
+        uint256 sellOrderId = book.placeOrder(mId, Side.SellYes, OrderType.GoodTilBatch, 50, 1);
+
+        // user3 places large SellYes GTB (dominates pro-rata)
+        vm.prank(user3);
+        book.placeOrder(mId, Side.SellYes, OrderType.GoodTilBatch, 50, 10000);
+
+        // Small bid to create 1-lot match
+        vm.prank(user2);
+        book.placeOrder(mId, Side.Bid, OrderType.GoodTilBatch, 50, 1);
+
+        auction.clearBatch(mId);
+
+        // Verify order cleaned up
+        (, , , , uint64 lotsAfter, , , , ) = book.orders(sellOrderId);
+        assertEq(lotsAfter, 0, "GTB internal zero-fill order should be cleaned up");
+
+        // Verify position unlocked (back to original)
+        (uint128 yesAfter, ) = vault.positions(user1, mId);
+        assertEq(yesAfter, yesBefore, "Internal position should be unlocked back to original");
+    }
 }

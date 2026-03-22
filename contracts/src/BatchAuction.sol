@@ -371,10 +371,34 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
             return;
         }
 
-        // Participating but zero fill (edge case)
+        // Participating but zero fill (pro-rata rounding edge case)
         if (precomputedFill == 0) {
             if (o.orderType == OrderType.GoodTilCancel) {
                 _tryRollOrCancel(orderId, o, result.batchId + 1);
+            } else {
+                // GTB zero-fill cleanup: remove order, return collateral/tokens
+                orderBook.decrementActiveOrderCount(o.owner, o.marketId);
+                orderBook.reduceOrderLots(orderId, o.lots);
+                orderBook.updateTreeVolume(o.marketId, o.side, o.tick, -int256(o.lots));
+
+                if (isSell) {
+                    bool isYes = (o.side == Side.SellYes);
+                    if (isInternal) {
+                        vault.unlockPosition(o.owner, o.marketId, uint128(o.lots), isYes);
+                    } else {
+                        uint256 tokenId = isYes
+                            ? o.marketId * 2
+                            : o.marketId * 2 + 1;
+                        orderBook.transferEscrowTokens(o.owner, tokenId, o.lots);
+                    }
+                } else {
+                    uint256 collateral = _collateral(o.lots, o.tick, o.side);
+                    uint256 fee = feeModel.calculateFee(collateral);
+                    if (collateral + fee > 0) {
+                        vault.unlock(o.owner, collateral + fee);
+                        vault.withdrawTo(o.owner, collateral + fee);
+                    }
+                }
             }
             emit OrderSettled(orderId, o.owner, 0, 0);
             return;
