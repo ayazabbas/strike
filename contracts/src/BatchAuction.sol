@@ -291,6 +291,7 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
     }
 
     /// @dev Settle amounts: pool gets full filledCollateral, fee from locked excess.
+    ///      Buy side pays half fee (rounded down); sell side pays other half (rounded up).
     function _settleAmounts(OrderInfo memory o, BatchResult memory result, uint256 filledLots)
         internal
         view
@@ -306,7 +307,8 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
         uint256 lockedFeeForFilled = obFee.calculateFee(lockedForFilled);
 
         s.filledCollateral = _collateral(s.filledLots, result.clearingTick, o.side);
-        s.protocolFee = obFee.calculateFee(s.filledCollateral);
+        // Buy side pays the other half (full - ceil(full/2)) so sell side gets the rounding extra
+        s.protocolFee = obFee.calculateOtherHalfFee(s.filledCollateral);
         s.toPool = s.filledCollateral;
 
         s.excessRefund = (lockedForFilled + lockedFeeForFilled) - s.filledCollateral - s.protocolFee;
@@ -457,8 +459,10 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
         bool fullyFilled = filledLots == o.lots;
         bool isYes = (o.side == Side.SellYes);
 
-        // Compute seller payout at clearing price
-        uint256 payout = _collateral(filledLots, result.clearingTick, o.side);
+        // Compute seller payout at clearing price, then deduct sell-side fee (half of total)
+        uint256 grossPayout = _collateral(filledLots, result.clearingTick, o.side);
+        uint256 sellFee = feeModel.calculateHalfFee(grossPayout);
+        uint256 payout = grossPayout - sellFee;
 
         // Consume filled tokens/positions
         if (filledLots > 0) {
@@ -472,9 +476,13 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
             }
         }
 
-        // Pay seller from market pool
+        // Pay seller from market pool (net of fee)
         if (payout > 0) {
             vault.redeemFromPool(o.marketId, o.owner, payout);
+        }
+        // Collect sell-side fee from pool to protocol
+        if (sellFee > 0) {
+            vault.redeemFromPool(o.marketId, feeModel.protocolFeeCollector(), sellFee);
         }
 
         if (fullyFilled || o.orderType == OrderType.GoodTilBatch) {

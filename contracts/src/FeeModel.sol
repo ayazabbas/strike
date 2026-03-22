@@ -54,6 +54,19 @@ contract FeeModel is AccessControl {
         fee = (amount * feeBps) / MAX_BPS;
     }
 
+    /// @notice Returns half of the fee (for 50/50 buy/sell split). Rounds up to protocol.
+    function calculateHalfFee(uint256 amount) public view returns (uint256 fee) {
+        uint256 fullFee = (amount * feeBps) / MAX_BPS;
+        fee = (fullFee + 1) / 2;
+    }
+
+    /// @notice Returns the other half of the fee (full - half). Ensures total = full fee.
+    function calculateOtherHalfFee(uint256 amount) public view returns (uint256 fee) {
+        uint256 fullFee = (amount * feeBps) / MAX_BPS;
+        uint256 half = (fullFee + 1) / 2;
+        fee = fullFee - half;
+    }
+
     // -------------------------------------------------------------------------
     // Admin parameter updates
     // -------------------------------------------------------------------------
