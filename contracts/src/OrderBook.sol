@@ -309,6 +309,8 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
             timestamp: uint40(block.timestamp)
         });
 
+        bool shouldRest = _isTickFar(marketId, p.tick, p.side);
+
         if (p.side == Side.SellYes || p.side == Side.SellNo) {
             bool isYes = (p.side == Side.SellYes);
             if (markets[marketId].useInternalPositions) {
@@ -319,25 +321,35 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
                     : outcomeToken.noTokenId(marketId);
                 outcomeToken.safeTransferFrom(caller, address(this), tokenId, p.lots, "");
             }
-            if (p.side == Side.SellYes) {
-                askTrees[marketId].update(p.tick, int256(uint256(p.lots)));
-            } else {
-                bidTrees[marketId].update(p.tick, int256(uint256(p.lots)));
+            if (!shouldRest) {
+                if (p.side == Side.SellYes) {
+                    askTrees[marketId].update(p.tick, int256(uint256(p.lots)));
+                } else {
+                    bidTrees[marketId].update(p.tick, int256(uint256(p.lots)));
+                }
             }
         } else {
             uint256 collateral = (p.side == Side.Bid)
                 ? (uint256(p.lots) * LOT_SIZE * p.tick) / 100
                 : (uint256(p.lots) * LOT_SIZE * (100 - uint256(p.tick))) / 100;
             deposit = collateral + feeModel.calculateFee(collateral);
-            if (p.side == Side.Bid) {
-                bidTrees[marketId].update(p.tick, int256(uint256(p.lots)));
-            } else {
-                askTrees[marketId].update(p.tick, int256(uint256(p.lots)));
+            if (!shouldRest) {
+                if (p.side == Side.Bid) {
+                    bidTrees[marketId].update(p.tick, int256(uint256(p.lots)));
+                } else {
+                    askTrees[marketId].update(p.tick, int256(uint256(p.lots)));
+                }
             }
         }
 
-        batchOrderIds[marketId][batchId].push(oid);
-        emit OrderPlaced(oid, marketId, caller, p.side, p.tick, p.lots, batchId);
+        if (shouldRest) {
+            isResting[oid] = true;
+            restingOrderIds[marketId].push(oid);
+            emit OrderResting(oid, marketId, caller);
+        } else {
+            batchOrderIds[marketId][batchId].push(oid);
+            emit OrderPlaced(oid, marketId, caller, p.side, p.tick, p.lots, batchId);
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -626,7 +638,7 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
     ///      Bid/SellNo participate if tick >= clearingTick → far if tick < ref - threshold.
     ///      Ask/SellYes participate if tick <= clearingTick → far if tick > ref + threshold.
     ///      Before the first clear (lastClearingTick == 0), no filtering is applied.
-    function _isTickFar(uint256 marketId, uint256 tick, Side side) internal view returns (bool) {
+    function _isTickFar(uint256 marketId, uint256 tick, Side side) public view returns (bool) {
         uint256 ref = lastClearingTick[marketId];
         if (ref == 0) return false; // no filtering before first clear
 

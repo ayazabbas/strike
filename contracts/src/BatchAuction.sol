@@ -212,10 +212,11 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
                 unchecked { ++i; }
             }
         } else {
-            // Subsequent chunks: read from _precomputedFills
+            // Subsequent chunks: read fills from precomputed, but read order info from storage
             for (uint256 i = startIdx; i < endIdx; ) {
                 uint256 fill = _precomputedFills[ids[i]];
-                _settleOrder(ids[i], OrderInfo(0, address(0), Side.Bid, OrderType.GoodTilBatch, 0, 0, 0), result, fill, isInternal);
+                OrderInfo memory info = _readOrder(ids[i]);
+                _settleOrder(ids[i], info, result, fill, isInternal);
                 unchecked { ++i; }
             }
         }
@@ -377,22 +378,11 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
 
     /// @dev Roll GTC order to next batch, or move to resting list if far from price.
     function _tryRollOrCancel(uint256 orderId, OrderInfo memory o, uint256 nextBatchId) internal {
-        if (_isOrderFarFromPrice(o)) {
+        if (orderBook._isTickFar(o.marketId, o.tick, o.side)) {
             orderBook.removeFromTree(o.marketId, o.side, o.tick, o.lots);
             orderBook.pushRestingOrderId(o.marketId, orderId);
         } else {
             orderBook.pushBatchOrderId(o.marketId, nextBatchId, orderId);
-        }
-    }
-
-    function _isOrderFarFromPrice(OrderInfo memory o) internal view returns (bool) {
-        uint256 ref = orderBook.lastClearingTick(o.marketId);
-        if (ref == 0) return false; // no filtering before first clear
-        uint256 threshold = orderBook.PROXIMITY_THRESHOLD();
-        if (o.side == Side.Bid || o.side == Side.SellNo) {
-            return ref > threshold && o.tick < ref - threshold;
-        } else {
-            return ref + threshold < 100 && o.tick > ref + threshold;
         }
     }
 

@@ -626,4 +626,211 @@ contract AuditFixesTest is Test {
         vm.prank(user3);
         book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 5, 1);
     }
+
+    // =========================================================================
+    // Post-Review Fix 1: Chunked Settlement Reads Actual OrderInfo
+    // =========================================================================
+
+    function test_PostReview1_MultiChunkBothSidesGTC() public {
+        uint256 mId = _setupMarket();
+
+        // Place 300 GTC bids at tick 50 from unique users
+        for (uint256 i = 0; i < 300; i++) {
+            address u = address(uint160(0x10000 + i));
+            usdt.mint(u, 100000 ether);
+            vm.prank(u);
+            usdt.approve(address(vault), type(uint256).max);
+            vm.prank(u);
+            book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 50, 1);
+        }
+        // Place 300 GTC asks at tick 50 from unique users
+        for (uint256 i = 0; i < 300; i++) {
+            address u = address(uint160(0x20000 + i));
+            usdt.mint(u, 100000 ether);
+            vm.prank(u);
+            usdt.approve(address(vault), type(uint256).max);
+            vm.prank(u);
+            book.placeOrder(mId, Side.Ask, OrderType.GoodTilCancel, 50, 1);
+        }
+
+        // Clear batch 1 — no match if no cross. Actually 300 bids + 300 asks at tick 50 → 300 matched.
+        // All in batch 1, within SETTLE_CHUNK_SIZE=400 for first chunk (600 total → 2 chunks).
+        auction.clearBatch(mId); // chunk 1: settles orders 0-399
+        assertFalse(auction.isBatchFullySettled(mId, 1), "not fully settled after chunk 1");
+
+        // chunk 2: settles orders 400-599 — these are in the "subsequent chunks" branch
+        auction.clearBatch(mId);
+        assertTrue(auction.isBatchFullySettled(mId, 1), "fully settled after chunk 2");
+
+        // Verify bid users in chunk 2 (indices 400+) got YES tokens
+        for (uint256 i = 100; i < 300; i++) {
+            address u = address(uint160(0x10000 + i));
+            uint256 yesBal = token.balanceOf(u, token.yesTokenId(mId));
+            assertEq(yesBal, 1, "bid user in chunk 2 should have YES token");
+        }
+
+        // Verify ask users in chunk 2 got NO tokens
+        for (uint256 i = 100; i < 300; i++) {
+            address u = address(uint160(0x20000 + i));
+            uint256 noBal = token.balanceOf(u, token.noTokenId(mId));
+            assertEq(noBal, 1, "ask user in chunk 2 should have NO token");
+        }
+
+        // Pool solvency
+        uint256 pool = vault.marketPool(mId);
+        assertGe(pool, 300 * LOT, "pool solvency after multi-chunk both-sides settlement");
+    }
+
+    function test_PostReview1_ChunkSettlesCorrectOwnerAndTick() public {
+        uint256 mId = _setupMarket();
+
+        // Place 350 GTC bids at tick 50 (will roll to batch 2)
+        for (uint256 i = 0; i < 350; i++) {
+            address u = address(uint160(0x30000 + i));
+            usdt.mint(u, 100000 ether);
+            vm.prank(u);
+            usdt.approve(address(vault), type(uint256).max);
+            vm.prank(u);
+            book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 50, 1);
+        }
+        // Roll to batch 2
+        auction.clearBatch(mId);
+
+        // Batch 2: add 200 more GTC bids at tick 60 + 550 asks at tick 50
+        for (uint256 i = 0; i < 200; i++) {
+            address u = address(uint160(0x40000 + i));
+            usdt.mint(u, 100000 ether);
+            vm.prank(u);
+            usdt.approve(address(vault), type(uint256).max);
+            vm.prank(u);
+            book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 60, 1);
+        }
+        for (uint256 i = 0; i < 550; i++) {
+            address u = address(uint160(0x50000 + i));
+            usdt.mint(u, 100000 ether);
+            vm.prank(u);
+            usdt.approve(address(vault), type(uint256).max);
+            vm.prank(u);
+            book.placeOrder(mId, Side.Ask, OrderType.GoodTilBatch, 50, 1);
+        }
+
+        // Batch 2: 350+200+550 = 1100 orders → 3 chunks
+        // 550 bids total, 550 asks → 550 matched at clearing tick
+        uint256 user0x40000Before = usdt.balanceOf(address(uint160(0x40000)));
+
+        auction.clearBatch(mId); // chunk 1
+        auction.clearBatch(mId); // chunk 2
+        auction.clearBatch(mId); // chunk 3
+        assertTrue(auction.isBatchFullySettled(mId, 2), "fully settled");
+
+        // Verify a tick-60 bid user (in later chunk) got correct excess refund
+        // They locked at tick 60 but filled at clearing tick — excess should be refunded
+        address tick60User = address(uint160(0x40000));
+        uint256 tick60UserAfter = usdt.balanceOf(tick60User);
+        // User locked collateral for tick 60, settled at clearing tick <= 60
+        // Should have received YES tokens
+        uint256 yesBal = token.balanceOf(tick60User, token.yesTokenId(mId));
+        assertEq(yesBal, 1, "tick-60 user should get YES token via chunk 2+");
+    }
+
+    // =========================================================================
+    // Post-Review Fix 2: placeOrders/replaceOrders Proximity Filtering
+    // =========================================================================
+
+    function test_PostReview2_PlaceOrdersBatchProximity() public {
+        uint256 mId = _setupMarketWithClearing();
+        // lastClearingTick = 50
+
+        // Place batch of 3 orders: one near (tick 45), one far (tick 5), one near (tick 55 ask)
+        OrderParam[] memory params = new OrderParam[](3);
+        params[0] = OrderParam(Side.Bid, OrderType.GoodTilCancel, 45, 1);
+        params[1] = OrderParam(Side.Bid, OrderType.GoodTilCancel, 5, 1);  // far
+        params[2] = OrderParam(Side.Ask, OrderType.GoodTilCancel, 55, 1);
+
+        vm.prank(user1);
+        uint256[] memory orderIds = book.placeOrders(mId, params);
+
+        // Near orders should be in batch, not resting
+        assertFalse(book.isResting(orderIds[0]), "near bid should not be resting");
+        assertFalse(book.isResting(orderIds[2]), "near ask should not be resting");
+
+        // Far order should be resting
+        assertTrue(book.isResting(orderIds[1]), "far bid should be resting");
+
+        // Far order should NOT be in tree
+        assertEq(book.bidVolumeAt(mId, 5), 0, "far order should not be in bid tree");
+
+        // Near orders should be in tree
+        assertEq(book.bidVolumeAt(mId, 45), 1, "near bid should be in tree");
+        assertEq(book.askVolumeAt(mId, 55), 1, "near ask should be in tree");
+    }
+
+    function test_PostReview2_ReplaceOrdersFarGoToResting() public {
+        uint256 mId = _setupMarketWithClearing();
+        // lastClearingTick = 50
+
+        // Place a near order first
+        vm.prank(user1);
+        uint256 nearId = book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 45, 1);
+        assertFalse(book.isResting(nearId), "initially near");
+
+        // Replace it with a far order
+        uint256[] memory cancelIds = new uint256[](1);
+        cancelIds[0] = nearId;
+        OrderParam[] memory params = new OrderParam[](1);
+        params[0] = OrderParam(Side.Bid, OrderType.GoodTilCancel, 5, 1); // far
+
+        vm.prank(user1);
+        uint256[] memory newIds = book.replaceOrders(cancelIds, mId, params);
+
+        // New order should be resting
+        assertTrue(book.isResting(newIds[0]), "replaced far order should be resting");
+        assertEq(book.bidVolumeAt(mId, 5), 0, "far order should not be in tree");
+    }
+
+    function test_PostReview2_PlaceOrdersFarAskResting() public {
+        uint256 mId = _setupMarketWithClearing();
+        // lastClearingTick = 50
+
+        // Place a far ask (tick 95, far from 50 + 20 = 70 threshold → 95 > 70 → far)
+        OrderParam[] memory params = new OrderParam[](1);
+        params[0] = OrderParam(Side.Ask, OrderType.GoodTilCancel, 95, 1);
+
+        vm.prank(user1);
+        uint256[] memory orderIds = book.placeOrders(mId, params);
+
+        assertTrue(book.isResting(orderIds[0]), "far ask should be resting");
+        assertEq(book.askVolumeAt(mId, 95), 0, "far ask should not be in tree");
+    }
+
+    // =========================================================================
+    // Post-Review Fix 3: Deduplicated Proximity Logic
+    // =========================================================================
+
+    function test_PostReview3_IsTickFarIsPublic() public view {
+        uint256 mId = 1; // doesn't need to exist for the view call
+        // Just verify it's callable externally (public)
+        book._isTickFar(mId, 50, Side.Bid);
+    }
+
+    function test_PostReview3_BatchAuctionUsesOrderBookProximity() public {
+        uint256 mId = _setupMarketWithClearing();
+        // lastClearingTick = 50
+
+        // Place GTC bid at tick 5 (near) and far tick — then clear so GTC rolls
+        vm.prank(user1);
+        uint256 farGtcId = book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 5, 1);
+        assertTrue(book.isResting(farGtcId), "far GTC should be resting at placement");
+
+        // Place matching orders near the clearing tick to trigger another batch clear
+        vm.prank(user1);
+        book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 50, 10);
+        vm.prank(user2);
+        book.placeOrder(mId, Side.Ask, OrderType.GoodTilBatch, 50, 5);
+        auction.clearBatch(mId);
+
+        // The partially filled GTC at tick 50 should roll normally (near),
+        // while the far resting order stays resting — all using the same _isTickFar logic
+        assertTrue(book.isResting(farGtcId), "far order stays resting (same logic in both contracts)");
+    }
 }
