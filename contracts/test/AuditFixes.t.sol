@@ -448,4 +448,182 @@ contract AuditFixesTest is Test {
     function test_Fix3_MaxOrdersPerBatchIs1600() public {
         assertEq(book.MAX_ORDERS_PER_BATCH(), 1600, "MAX_ORDERS_PER_BATCH should be 1600");
     }
+
+    // =========================================================================
+    // Fix 4a: Price-Proximity Batch Filtering
+    // =========================================================================
+
+    function _setupMarketWithClearing() internal returns (uint256 mId) {
+        mId = _setupMarket();
+        // Establish a clearing tick at 50
+        vm.prank(user1);
+        book.placeOrder(mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
+        vm.prank(user2);
+        book.placeOrder(mId, Side.Ask, OrderType.GoodTilBatch, 50, 10);
+        auction.clearBatch(mId);
+        // lastClearingTick is now 50
+    }
+
+    function test_Fix4a_FarOrderParked() public {
+        uint256 mId = _setupMarketWithClearing();
+
+        // Place bid at tick 5 — far from clearing tick 50 (distance > 20)
+        vm.prank(user3);
+        uint256 orderId = book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 5, 1);
+
+        // Order should be resting (not in batch, not in tree)
+        assertTrue(book.isResting(orderId), "far order should be resting");
+        assertEq(book.bidVolumeAt(mId, 5), 0, "resting order should NOT be in tree");
+
+        // Resting order IDs should contain this order
+        uint256[] memory resting = book.getRestingOrderIds(mId);
+        bool found = false;
+        for (uint256 i = 0; i < resting.length; i++) {
+            if (resting[i] == orderId) found = true;
+        }
+        assertTrue(found, "order should be in resting list");
+    }
+
+    function test_Fix4a_NearOrderActive() public {
+        uint256 mId = _setupMarketWithClearing();
+
+        // Place bid at tick 40 — near clearing tick 50 (distance 10 < 20)
+        vm.prank(user3);
+        uint256 orderId = book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 40, 1);
+
+        // Order should be in the active batch, not resting
+        assertFalse(book.isResting(orderId), "near order should NOT be resting");
+        assertEq(book.bidVolumeAt(mId, 40), 1, "near order should be in tree");
+    }
+
+    function test_Fix4a_PullInWhenPriceMoves() public {
+        uint256 mId = _setupMarketWithClearing();
+        // lastClearingTick = 50
+
+        // Place bid at tick 5 — goes to resting (5 < 50-20=30)
+        vm.prank(user3);
+        uint256 restingId = book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 5, 1);
+        assertTrue(book.isResting(restingId), "should be resting initially");
+
+        // Step 1: Move clearing tick from 50 → 35 (within proximity of 50)
+        vm.prank(user1);
+        book.placeOrder(mId, Side.Bid, OrderType.GoodTilBatch, 35, 10);
+        vm.prank(user2);
+        book.placeOrder(mId, Side.Ask, OrderType.GoodTilBatch, 35, 10);
+        auction.clearBatch(mId);
+        // ref is now 35. Tick 5 is still far (5 < 35-20=15)
+
+        // Step 2: Move clearing tick from 35 → 20 (within proximity of 35)
+        vm.prank(user1);
+        book.placeOrder(mId, Side.Bid, OrderType.GoodTilBatch, 20, 10);
+        vm.prank(user2);
+        book.placeOrder(mId, Side.Ask, OrderType.GoodTilBatch, 20, 10);
+        auction.clearBatch(mId);
+        // ref is now 20. Tick 5 is still far (5 < 20-20=0 → 20 > 20 is false, so not far!)
+
+        // Step 3: One more clear to trigger pull-in at ref=20
+        vm.prank(user1);
+        book.placeOrder(mId, Side.Bid, OrderType.GoodTilBatch, 20, 10);
+        vm.prank(user2);
+        book.placeOrder(mId, Side.Ask, OrderType.GoodTilBatch, 20, 10);
+        auction.clearBatch(mId);
+
+        // Now with ref=20, tick 5: _isTickFar check: ref > threshold → 20 > 20 = false → not far
+        assertFalse(book.isResting(restingId), "should be pulled in after price moved near");
+    }
+
+    function test_Fix4a_CancelRestingOrder() public {
+        uint256 mId = _setupMarketWithClearing();
+
+        // Place far bid → resting
+        vm.prank(user3);
+        uint256 orderId = book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 5, 1);
+        assertTrue(book.isResting(orderId), "should be resting");
+
+        uint256 balBefore = usdt.balanceOf(user3);
+        vm.prank(user3);
+        book.cancelOrder(orderId);
+
+        // Should return collateral
+        uint256 balAfter = usdt.balanceOf(user3);
+        assertTrue(balAfter > balBefore, "collateral should be returned on cancel");
+
+        // Order lots should be 0
+        (, , , , uint64 lots, , , , ) = book.orders(orderId);
+        assertEq(lots, 0, "cancelled resting order should have 0 lots");
+    }
+
+    function test_Fix4a_GTC_RollToResting() public {
+        uint256 mId = _setupMarket();
+
+        // Place GTC bid at tick 50 and ask at tick 50
+        vm.prank(user1);
+        uint256 bidId = book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 50, 20);
+        vm.prank(user2);
+        book.placeOrder(mId, Side.Ask, OrderType.GoodTilBatch, 50, 5);
+
+        // Also place a GTC bid at tick 10 (will become far when clearing at 50)
+        vm.prank(user3);
+        uint256 farBidId = book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 10, 1);
+
+        // Clear — clearing tick = 50. Tick 10 is within 50-20=30 threshold, so 10 < 30 = far
+        auction.clearBatch(mId);
+
+        // The far GTC bid should have been moved to resting via _tryRollOrCancel
+        assertTrue(book.isResting(farBidId), "far GTC order should be moved to resting after clear");
+    }
+
+    function test_Fix4a_LazySkipCancelled() public {
+        uint256 mId = _setupMarketWithClearing();
+        // lastClearingTick = 50
+
+        // Place two far bids → both go to resting
+        vm.prank(user1);
+        uint256 id1 = book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 5, 1);
+        vm.prank(user2);
+        uint256 id2 = book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 5, 1);
+
+        assertTrue(book.isResting(id1), "id1 resting");
+        assertTrue(book.isResting(id2), "id2 resting");
+
+        // Cancel id1 — sets lots to 0, lazy-skipped during scan
+        vm.prank(user1);
+        book.cancelOrder(id1);
+
+        // Step 1: Trade near ref=50 to get a clear (moves ref to 35)
+        vm.prank(user1);
+        book.placeOrder(mId, Side.Bid, OrderType.GoodTilBatch, 35, 10);
+        vm.prank(user2);
+        book.placeOrder(mId, Side.Ask, OrderType.GoodTilBatch, 35, 10);
+        auction.clearBatch(mId);
+        // ref now 35. Tick 5 still far: 5 < 35-20=15 → far.
+
+        // Step 2: Trade at tick 20 (within 20 of 35) → ref moves to 20
+        vm.prank(user1);
+        book.placeOrder(mId, Side.Bid, OrderType.GoodTilBatch, 20, 10);
+        vm.prank(user2);
+        book.placeOrder(mId, Side.Ask, OrderType.GoodTilBatch, 20, 10);
+        auction.clearBatch(mId);
+        // ref now 20. Tick 5: 5 < 20-20=0 → NOT far (threshold check: 20>20 → false).
+        // pullRestingOrders during this clear used ref=35, tick 5 still far.
+
+        // Step 3: One more clear to trigger pull with ref=20
+        auction.clearBatch(mId);
+
+        // id1 should be lazy-skipped (already cancelled), id2 should be pulled in
+        assertFalse(book.isResting(id2), "id2 should be pulled in");
+        (, , , , uint64 lots1, , , , ) = book.orders(id1);
+        assertEq(lots1, 0, "id1 stays cancelled");
+    }
+
+    function test_Fix4a_OrderRestingEventEmitted() public {
+        uint256 mId = _setupMarketWithClearing();
+
+        // Check that OrderResting event is emitted (check indexed params: marketId and owner)
+        vm.expectEmit(false, true, true, false);
+        emit OrderBook.OrderResting(0, mId, user3);
+
+        vm.prank(user3);
+        book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 5, 1);
+    }
 }

@@ -87,6 +87,17 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
     ///           and settles up to SETTLE_CHUNK_SIZE orders.
     ///         - Subsequent calls: settles the next chunk of orders.
     ///         - Small batches (<=400 orders) complete in a single tx.
+    ///
+    /// @dev    MEV EXPOSURE (L-03): `batchInterval` is stored in Market but NOT enforced here.
+    ///         Any address can call `clearBatch` at any time, enabling MEV sandwich attacks:
+    ///         an attacker can front-run clearBatch → place an order → isolate a single user
+    ///         in a nearly empty batch → match at the user's limit price instead of the fair
+    ///         clearing price. Enforcing `block.timestamp >= lastClearTimestamp + batchInterval`
+    ///         would mitigate this but adds latency, which is undesirable for the current UX.
+    ///         Price-proximity filtering (Fix 4a) reduces this surface by keeping only near-price
+    ///         orders in the active batch, making it harder to isolate a user at an extreme tick.
+    ///         Future mitigation: enforce minimum batch duration or restrict clearBatch to a
+    ///         permissioned keeper.
     /// @return result The BatchResult for this batch.
     function clearBatch(uint256 marketId) external nonReentrant returns (BatchResult memory result) {
         // Check if we're continuing settlement of a previous batch
@@ -112,6 +123,9 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
         // Phase 1: New batch clearing
         require(active, "BatchAuction: market not active");
         require(!halted, "BatchAuction: market halted");
+
+        // Pull in-range resting orders before computing clearing price
+        orderBook.pullRestingOrders(marketId);
 
         uint256 clearingTick = orderBook.findClearingTick(marketId);
 
@@ -148,6 +162,11 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
         orderBook.advanceBatch(marketId);
 
         emit BatchCleared(marketId, currentBatchId, clearingTick, matchedLots);
+
+        // Update reference price for proximity filtering
+        if (clearingTick > 0) {
+            orderBook.setLastClearingTick(marketId, uint8(clearingTick));
+        }
 
         // Settle orders (first chunk)
         _settleChunk(marketId, currentBatchId, result);
@@ -356,9 +375,25 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
         s.unfilledFee = obFee.calculateFee(s.unfilledCollateral);
     }
 
-    /// @dev Roll GTC order to next batch. No cap — chunked settlement handles large batches.
+    /// @dev Roll GTC order to next batch, or move to resting list if far from price.
     function _tryRollOrCancel(uint256 orderId, OrderInfo memory o, uint256 nextBatchId) internal {
-        orderBook.pushBatchOrderId(o.marketId, nextBatchId, orderId);
+        if (_isOrderFarFromPrice(o)) {
+            orderBook.removeFromTree(o.marketId, o.side, o.tick, o.lots);
+            orderBook.pushRestingOrderId(o.marketId, orderId);
+        } else {
+            orderBook.pushBatchOrderId(o.marketId, nextBatchId, orderId);
+        }
+    }
+
+    function _isOrderFarFromPrice(OrderInfo memory o) internal view returns (bool) {
+        uint256 ref = orderBook.lastClearingTick(o.marketId);
+        if (ref == 0) return false; // no filtering before first clear
+        uint256 threshold = orderBook.PROXIMITY_THRESHOLD();
+        if (o.side == Side.Bid || o.side == Side.SellNo) {
+            return ref > threshold && o.tick < ref - threshold;
+        } else {
+            return ref + threshold < 100 && o.tick > ref + threshold;
+        }
     }
 
     function _settleOrder(uint256 orderId, OrderInfo memory o, BatchResult memory result, uint256 precomputedFill, bool isInternal) internal {
