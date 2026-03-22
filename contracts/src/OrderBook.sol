@@ -24,7 +24,7 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
     // Constants
     // -------------------------------------------------------------------------
 
-    uint256 public constant MAX_ORDERS_PER_BATCH = 400;
+    uint256 public constant MAX_ORDERS_PER_BATCH = 1600;
     uint16 public constant MAX_USER_ORDERS = 20;
 
     // -------------------------------------------------------------------------

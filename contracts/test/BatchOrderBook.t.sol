@@ -316,14 +316,21 @@ contract BatchOrderBookTest is Test {
     function test_PlaceOrders_BatchOverflowToNextBatch() public {
         uint256 mId = _setupSimpleMarket();
 
-        // Fill batch to 398 using many unique users (cap is 20 per user)
-        for (uint256 i = 0; i < 398; i++) {
-            address filler = address(uint160(0xF000 + i));
+        // Fill batch to MAX_ORDERS_PER_BATCH - 2 using 80 users × 20 orders each
+        uint256 target = book.MAX_ORDERS_PER_BATCH() - 2;
+        uint256 usersNeeded = (target + 19) / 20; // ceil division
+        uint256 placed;
+        for (uint256 u = 0; u < usersNeeded && placed < target; u++) {
+            address filler = address(uint160(0xF000 + u));
             usdt.mint(filler, 100000 ether);
             vm.prank(filler);
             usdt.approve(address(vault), type(uint256).max);
-            vm.prank(filler);
-            book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 50, 1);
+            uint256 count = target - placed > 20 ? 20 : target - placed;
+            for (uint256 j = 0; j < count; j++) {
+                vm.prank(filler);
+                book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 50, 1);
+            }
+            placed += count;
         }
 
         // Place 4 more — overflows to batch 2
