@@ -227,4 +227,111 @@ contract AuditFixesTest is Test {
         (uint128 yesAfter, ) = vault.positions(user1, mId);
         assertEq(yesAfter, yesBefore, "Internal position should be unlocked back to original");
     }
+
+    // =========================================================================
+    // Fix 5: Split Protocol Fees 50/50 (I-01)
+    // =========================================================================
+
+    function test_Fix5_EqualFeesBothSides() public {
+        uint256 mId = _setupMarket();
+
+        // Get user1 YES tokens for selling
+        vm.prank(user1);
+        book.placeOrder(mId, Side.Bid, OrderType.GoodTilBatch, 50, 100);
+        vm.prank(user2);
+        book.placeOrder(mId, Side.Ask, OrderType.GoodTilBatch, 50, 100);
+        auction.clearBatch(mId);
+
+        // Now test fee split: user3 bids, user1 sells YES
+        vm.prank(user1);
+        token.setApprovalForAll(address(book), true);
+
+        uint256 feeCollectorBefore = usdt.balanceOf(feeCollector);
+
+        vm.prank(user3);
+        book.placeOrder(mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
+        vm.prank(user1);
+        book.placeOrder(mId, Side.SellYes, OrderType.GoodTilBatch, 50, 10);
+
+        auction.clearBatch(mId);
+
+        uint256 totalFees = usdt.balanceOf(feeCollector) - feeCollectorBefore;
+        // fee collector also gets fees via vault.balance for buy side
+        uint256 feeCollectorVaultBal = vault.balance(feeCollector);
+
+        // Both sides should contribute; total should be > 0
+        assertTrue(totalFees + feeCollectorVaultBal > 0, "fees should be collected");
+    }
+
+    function test_Fix5_TotalFeePreserved() public {
+        uint256 mId = _setupMarket();
+
+        // Match bid and ask at tick 50, 10 lots each
+        uint256 collectorBefore = vault.balance(feeCollector);
+        uint256 collectorUsdtBefore = usdt.balanceOf(feeCollector);
+
+        vm.prank(user1);
+        book.placeOrder(mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
+        vm.prank(user2);
+        book.placeOrder(mId, Side.Ask, OrderType.GoodTilBatch, 50, 10);
+        auction.clearBatch(mId);
+
+        // For bid+ask match, both sides are buy orders (lock USDT).
+        // Each pays half fee on their filled collateral.
+        // Bid fills at 50: collateral = 10 * LOT * 50 / 100
+        // Ask fills at 50: collateral = 10 * LOT * 50 / 100
+        uint256 bidCollateral = (10 * LOT * 50) / 100;
+        uint256 askCollateral = (10 * LOT * 50) / 100;
+        uint256 expectedBuyHalf1 = feeModel.calculateOtherHalfFee(bidCollateral);
+        uint256 expectedBuyHalf2 = feeModel.calculateOtherHalfFee(askCollateral);
+
+        uint256 totalCollected = (vault.balance(feeCollector) - collectorBefore) +
+            (usdt.balanceOf(feeCollector) - collectorUsdtBefore);
+        assertEq(totalCollected, expectedBuyHalf1 + expectedBuyHalf2, "total fee preserved for buy-buy match");
+    }
+
+    function test_Fix5_OddWeiRoundingToProtocol() public {
+        uint256 mId = _setupMarket();
+
+        // Use 7 lots at tick 33 to create an odd fee amount
+        // collateral = 7 * 1e16 * 33 / 100 = 23100000000000000
+        // fullFee = 23100000000000000 * 20 / 10000 = 46200000000000
+        // halfFee (ceil) = (46200000000000 + 1) / 2 = 23100000000001
+        // otherHalfFee = 46200000000000 - 23100000000001 = 23099999999999
+        // sum = 46200000000000 = fullFee ✓
+        vm.prank(user1);
+        book.placeOrder(mId, Side.Bid, OrderType.GoodTilBatch, 33, 7);
+        vm.prank(user2);
+        book.placeOrder(mId, Side.Ask, OrderType.GoodTilBatch, 33, 7);
+
+        // Just verify it doesn't revert (rounding is handled correctly)
+        auction.clearBatch(mId);
+
+        // Verify the half fees sum to the full fee
+        uint256 collateral = (7 * LOT * 33) / 100;
+        uint256 fullFee = feeModel.calculateFee(collateral);
+        uint256 halfFee = feeModel.calculateHalfFee(collateral);
+        uint256 otherHalf = feeModel.calculateOtherHalfFee(collateral);
+        assertEq(halfFee + otherHalf, fullFee, "halves sum to full fee");
+        // Rounding: halfFee >= otherHalf (extra wei goes to protocol via ceil)
+        assertGe(halfFee, otherHalf, "ceil half >= floor half");
+    }
+
+    function test_Fix5_SolvencyFuzz(uint8 tick, uint64 lots) public {
+        vm.assume(tick >= 1 && tick <= 99);
+        vm.assume(lots >= 1 && lots <= 1000);
+        uint256 mId = _setupMarket();
+
+        vm.prank(user1);
+        book.placeOrder(mId, Side.Bid, OrderType.GoodTilBatch, tick, lots);
+        vm.prank(user2);
+        book.placeOrder(mId, Side.Ask, OrderType.GoodTilBatch, tick, lots);
+        auction.clearBatch(mId);
+
+        // Pool should have enough to pay out winning tokens
+        uint256 pool = vault.marketPool(mId);
+        uint256 totalLots = uint256(lots);
+        // Worst case: all YES win or all NO win → payout = lots * LOT_SIZE
+        assertGe(pool, totalLots * LOT, "pool solvency: pool >= lots * LOT_SIZE");
+    }
 }

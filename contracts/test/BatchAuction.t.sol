@@ -229,16 +229,16 @@ contract BatchAuctionTest is Test {
         assertGt(r.clearingTick, 0);
 
         // V2.1: locked = collateral + fee at order tick
-        // excessRefund = (lockedForFilled + lockedFee) - filledCollateral - protocolFee
+        // excessRefund = (lockedForFilled + lockedFee) - filledCollateral - buyHalfFee
         uint256 bidLocked = (10 * LOT * 70) / 100;
         uint256 bidFilled = (10 * LOT * r.clearingTick) / 100;
         uint256 bidExcessRefund = (bidLocked + feeModel.calculateFee(bidLocked))
-            - bidFilled - feeModel.calculateFee(bidFilled);
+            - bidFilled - feeModel.calculateOtherHalfFee(bidFilled);
 
         uint256 askLocked = (10 * LOT * 60) / 100;
         uint256 askFilled = (10 * LOT * (100 - r.clearingTick)) / 100;
         uint256 askExcessRefund = (askLocked + feeModel.calculateFee(askLocked))
-            - askFilled - feeModel.calculateFee(askFilled);
+            - askFilled - feeModel.calculateOtherHalfFee(askFilled);
 
         assertEq(usdt.balanceOf(user1) - user1UsdtBefore, bidExcessRefund, "bid excess refund");
         assertEq(usdt.balanceOf(user2) - user2UsdtBefore, askExcessRefund, "ask excess refund");
