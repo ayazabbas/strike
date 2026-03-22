@@ -28,6 +28,7 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
     uint16 public constant MAX_USER_ORDERS = 20;
     uint256 public constant PROXIMITY_THRESHOLD = 20;
     uint256 public constant MAX_RESTING_PULL = 200;
+    uint256 public constant MAX_RESTING_SCAN = 400;
 
     // -------------------------------------------------------------------------
     // State
@@ -228,7 +229,7 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
             });
         }
 
-        bool shouldRest = _isTickFar(marketId, tick, side);
+        bool shouldRest = isTickFar(marketId, tick, side);
         _lockAndTree(marketId, side, tick, lots, !shouldRest);
 
         if (shouldRest) {
@@ -256,9 +257,8 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
         Side side = o.side;
         o.lots = 0;
 
-        if (activeOrderCount[caller][mktId] > 0) {
-            activeOrderCount[caller][mktId]--;
-        }
+        require(activeOrderCount[caller][mktId] > 0, "OrderBook: counter underflow");
+        activeOrderCount[caller][mktId]--;
 
         if (!isResting[orderId]) {
             if (side == Side.Bid || side == Side.SellNo) {
@@ -309,7 +309,7 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
             timestamp: uint40(block.timestamp)
         });
 
-        bool shouldRest = _isTickFar(marketId, p.tick, p.side);
+        bool shouldRest = isTickFar(marketId, p.tick, p.side);
 
         if (p.side == Side.SellYes || p.side == Side.SellNo) {
             bool isYes = (p.side == Side.SellYes);
@@ -465,9 +465,8 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
 
         o.lots = 0;
 
-        if (activeOrderCount[recipient][marketId] > 0) {
-            activeOrderCount[recipient][marketId]--;
-        }
+        require(activeOrderCount[recipient][marketId] > 0, "OrderBook: counter underflow");
+        activeOrderCount[recipient][marketId]--;
 
         // Only update tree if order is NOT resting (resting orders were never added to tree)
         if (!isResting[orderId]) {
@@ -606,9 +605,8 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
     }
 
     function decrementActiveOrderCount(address user, uint256 marketId) external onlyRole(OPERATOR_ROLE) {
-        if (activeOrderCount[user][marketId] > 0) {
-            activeOrderCount[user][marketId]--;
-        }
+        require(activeOrderCount[user][marketId] > 0, "OrderBook: counter underflow");
+        activeOrderCount[user][marketId]--;
     }
 
     function advanceBatch(uint256 marketId) external onlyRole(OPERATOR_ROLE) {
@@ -638,7 +636,7 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
     ///      Bid/SellNo participate if tick >= clearingTick → far if tick < ref - threshold.
     ///      Ask/SellYes participate if tick <= clearingTick → far if tick > ref + threshold.
     ///      Before the first clear (lastClearingTick == 0), no filtering is applied.
-    function _isTickFar(uint256 marketId, uint256 tick, Side side) public view returns (bool) {
+    function isTickFar(uint256 marketId, uint256 tick, Side side) public view returns (bool) {
         uint256 ref = lastClearingTick[marketId];
         if (ref == 0) return false; // no filtering before first clear
 
@@ -656,54 +654,69 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
     }
 
     /// @dev Check if a resting order's tick is now within proximity of the reference.
-    function _isTickNear(uint256 marketId, uint256 tick, Side side) internal view returns (bool) {
-        return !_isTickFar(marketId, tick, side);
+    function isTickNear(uint256 marketId, uint256 tick, Side side) internal view returns (bool) {
+        return !isTickFar(marketId, tick, side);
+    }
+
+    /// @dev Swap-remove element at index from storage array. Returns new length.
+    function _swapRemoveResting(uint256[] storage arr, uint256 idx) internal returns (uint256) {
+        uint256 lastIdx = arr.length - 1;
+        if (idx != lastIdx) {
+            arr[idx] = arr[lastIdx];
+        }
+        arr.pop();
+        return arr.length;
     }
 
     /// @notice Pull in-range resting orders into the current batch and tree.
-    ///         Scans the full resting list, compacting as it goes.
+    ///         Scans a bounded window (MAX_RESTING_SCAN) starting from restingScanIndex,
+    ///         compacting cancelled orders as encountered.
     ///         Pulls at most MAX_RESTING_PULL orders per call (gas-bounded).
+    ///         Multiple clearBatch calls will eventually process the full list.
     ///         Called by BatchAuction before computing clearing price.
     function pullRestingOrders(uint256 marketId) external onlyRole(OPERATOR_ROLE) returns (uint256 pulled) {
         uint256[] storage resting = restingOrderIds[marketId];
-        uint256 len = resting.length;
-        if (len == 0) return 0;
+        if (resting.length == 0) return 0;
 
         uint256 batchId = markets[marketId].currentBatchId;
-        uint256 writeIdx = 0;
+        uint256 i = restingScanIndex[marketId];
+        if (i >= resting.length) i = 0;
+        uint256 remaining = resting.length; // track original size for scan bound
+        uint256 scanned;
 
-        for (uint256 i = 0; i < len; ) {
+        while (scanned < MAX_RESTING_SCAN && scanned < remaining && resting.length > 0) {
+            if (i >= resting.length) i = 0;
+
             uint256 oid = resting[i];
             Order storage o = orders[oid];
 
             if (o.lots == 0) {
-                // Lazy-skip cancelled/filled — remove from array
                 isResting[oid] = false;
-            } else if (pulled < MAX_RESTING_PULL && _isTickNear(marketId, o.tick, o.side)) {
-                // Pull into active batch + tree
-                if (o.side == Side.Bid || o.side == Side.SellNo) {
-                    bidTrees[marketId].update(o.tick, int256(uint256(o.lots)));
-                } else {
-                    askTrees[marketId].update(o.tick, int256(uint256(o.lots)));
-                }
-                batchOrderIds[marketId][batchId].push(oid);
+                _swapRemoveResting(resting, i);
+                if (resting.length > 0 && i >= resting.length) i = 0;
+            } else if (pulled < MAX_RESTING_PULL && isTickNear(marketId, o.tick, o.side)) {
+                _addToTreeAndBatch(marketId, batchId, oid, o.side, o.tick, o.lots);
                 isResting[oid] = false;
                 pulled++;
+                _swapRemoveResting(resting, i);
+                if (resting.length > 0 && i >= resting.length) i = 0;
             } else {
-                // Keep in resting array (compact forward)
-                if (writeIdx != i) {
-                    resting[writeIdx] = oid;
-                }
-                writeIdx++;
+                unchecked { ++i; }
             }
-
-            unchecked { ++i; }
+            unchecked { ++scanned; }
         }
 
-        // Trim the array to remove gaps
-        while (resting.length > writeIdx) {
-            resting.pop();
+        restingScanIndex[marketId] = (resting.length > 0 && i < resting.length) ? i : 0;
+    }
+
+    /// @dev Add a resting order to the tree and batch list.
+    function _addToTreeAndBatch(uint256 marketId, uint256 batchId, uint256 oid, Side side, uint256 tick, uint256 lots) internal {
+        if (side == Side.Bid || side == Side.SellNo) {
+            bidTrees[marketId].update(tick, int256(lots));
+        } else {
+            askTrees[marketId].update(tick, int256(lots));
         }
+        batchOrderIds[marketId][batchId].push(oid);
     }
 
     /// @notice Push an order to the resting list (for GTC orders moving away from price).

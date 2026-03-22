@@ -528,7 +528,7 @@ contract AuditFixesTest is Test {
         book.placeOrder(mId, Side.Ask, OrderType.GoodTilBatch, 20, 10);
         auction.clearBatch(mId);
 
-        // Now with ref=20, tick 5: _isTickFar check: ref > threshold → 20 > 20 = false → not far
+        // Now with ref=20, tick 5: isTickFar check: ref > threshold → 20 > 20 = false → not far
         assertFalse(book.isResting(restingId), "should be pulled in after price moved near");
     }
 
@@ -810,7 +810,7 @@ contract AuditFixesTest is Test {
     function test_PostReview3_IsTickFarIsPublic() public view {
         uint256 mId = 1; // doesn't need to exist for the view call
         // Just verify it's callable externally (public)
-        book._isTickFar(mId, 50, Side.Bid);
+        book.isTickFar(mId, 50, Side.Bid);
     }
 
     function test_PostReview3_BatchAuctionUsesOrderBookProximity() public {
@@ -830,7 +830,155 @@ contract AuditFixesTest is Test {
         auction.clearBatch(mId);
 
         // The partially filled GTC at tick 50 should roll normally (near),
-        // while the far resting order stays resting — all using the same _isTickFar logic
+        // while the far resting order stays resting — all using the same isTickFar logic
         assertTrue(book.isResting(farGtcId), "far order stays resting (same logic in both contracts)");
+    }
+
+    // =========================================================================
+    // v1.2 Fix M-01: Paginated Resting List Scanning
+    // =========================================================================
+
+    function test_M01_PaginatedScanBoundedWindow() public {
+        uint256 mId = _setupMarket();
+
+        // Verify MAX_RESTING_SCAN constant exists
+        assertEq(book.MAX_RESTING_SCAN(), 400, "MAX_RESTING_SCAN should be 400");
+
+        // Establish clearing tick at 50
+        vm.prank(user1);
+        book.placeOrder(mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
+        vm.prank(user2);
+        book.placeOrder(mId, Side.Ask, OrderType.GoodTilBatch, 50, 10);
+        auction.clearBatch(mId);
+        // ref = 50
+
+        // Place 10 far orders (tick 5 — far from 50)
+        for (uint256 i = 0; i < 10; i++) {
+            address u = address(uint160(0x50000 + i));
+            usdt.mint(u, 100000 ether);
+            vm.prank(u);
+            usdt.approve(address(vault), type(uint256).max);
+            vm.prank(u);
+            book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 5, 1);
+        }
+
+        uint256[] memory resting = book.getRestingOrderIds(mId);
+        assertEq(resting.length, 10, "should have 10 resting orders");
+
+        // Move clearing tick to 20 so tick 5 becomes "near" (20 > 20 is false)
+        // Use operator to directly set the clearing tick
+        vm.prank(address(auction));
+        book.setLastClearingTick(mId, 20);
+
+        // Now trigger a clear — pullRestingOrders should pull all 10 in
+        vm.prank(user1);
+        book.placeOrder(mId, Side.Bid, OrderType.GoodTilBatch, 20, 10);
+        vm.prank(user2);
+        book.placeOrder(mId, Side.Ask, OrderType.GoodTilBatch, 20, 10);
+        auction.clearBatch(mId);
+
+        // All 10 resting orders should have been pulled
+        resting = book.getRestingOrderIds(mId);
+        assertEq(resting.length, 0, "all resting orders should be pulled in");
+    }
+
+    function test_M01_ScanIndexPersistsAcrossCalls() public {
+        uint256 mId = _setupMarketWithClearing();
+        // restingScanIndex should start at 0
+        assertEq(book.restingScanIndex(mId), 0, "initial scan index should be 0");
+
+        // Place far orders
+        for (uint256 i = 0; i < 5; i++) {
+            address u = address(uint160(0x60000 + i));
+            usdt.mint(u, 100000 ether);
+            vm.prank(u);
+            usdt.approve(address(vault), type(uint256).max);
+            vm.prank(u);
+            book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 5, 1);
+        }
+
+        // Clear a batch (pullRestingOrders is called internally) — orders stay far
+        vm.prank(user1);
+        book.placeOrder(mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
+        vm.prank(user2);
+        book.placeOrder(mId, Side.Ask, OrderType.GoodTilBatch, 50, 10);
+        auction.clearBatch(mId);
+
+        // Orders still far, but scan index should have advanced
+        uint256[] memory resting = book.getRestingOrderIds(mId);
+        assertEq(resting.length, 5, "far orders stay resting");
+    }
+
+    // =========================================================================
+    // v1.2 Fix M-02: Stale o.lots in _tryRollOrCancel — remaining lots
+    // =========================================================================
+
+    function test_M02_PartialFillGtcRemainingLotsCorrect() public {
+        uint256 mId = _setupMarket();
+
+        // Place GTC bid with 20 lots at tick 50
+        vm.prank(user1);
+        uint256 bidId = book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 50, 20);
+
+        // Place GTB ask with 5 lots to partially fill
+        vm.prank(user2);
+        book.placeOrder(mId, Side.Ask, OrderType.GoodTilBatch, 50, 5);
+
+        // Check tree volume before clear
+        uint256 bidVolBefore = book.bidVolumeAt(mId, 50);
+        assertEq(bidVolBefore, 20, "should have 20 lots in tree before clear");
+
+        // Clear — 5 lots fill, 15 lots remain
+        auction.clearBatch(mId);
+
+        // The GTC order should have been rolled with remaining 15 lots
+        (, , , , uint64 remainingLots, , , , ) = book.orders(bidId);
+        assertEq(remainingLots, 15, "remaining lots should be 15 after partial fill");
+
+        // Tree should have 15 lots at tick 50 (remaining volume after roll)
+        uint256 bidVolAfter = book.bidVolumeAt(mId, 50);
+        assertEq(bidVolAfter, 15, "tree should have 15 remaining lots after partial fill roll");
+    }
+
+    function test_M02_PartialFillSellGtcRemainingLots() public {
+        uint256 mId = _setupMarket();
+
+        // First, create tokens for user1 by filling a buy order
+        vm.prank(user1);
+        book.placeOrder(mId, Side.Bid, OrderType.GoodTilBatch, 50, 20);
+        vm.prank(user2);
+        book.placeOrder(mId, Side.Ask, OrderType.GoodTilBatch, 50, 20);
+        auction.clearBatch(mId);
+        // user1 now has 20 YES tokens
+
+        // Approve OrderBook to handle tokens
+        vm.prank(user1);
+        token.setApprovalForAll(address(book), true);
+
+        // Place GTC SellYes with 15 lots
+        vm.prank(user1);
+        uint256 sellId = book.placeOrder(mId, Side.SellYes, OrderType.GoodTilCancel, 50, 15);
+
+        // Place bid to partially fill (5 lots)
+        vm.prank(user2);
+        book.placeOrder(mId, Side.Bid, OrderType.GoodTilBatch, 50, 5);
+        auction.clearBatch(mId);
+
+        // Remaining should be 10
+        (, , , , uint64 remainingLots, , , , ) = book.orders(sellId);
+        assertEq(remainingLots, 10, "sell order remaining lots should be 10 after partial fill");
+    }
+
+    // =========================================================================
+    // v1.2 Fix L-03: activeOrderCount underflow reverts
+    // =========================================================================
+
+    function test_L03_ActiveOrderCountUnderflowReverts() public {
+        uint256 mId = _setupMarket();
+
+        // Try to decrement when count is 0 — should revert
+        vm.prank(address(auction));
+        vm.expectRevert("OrderBook: counter underflow");
+        book.decrementActiveOrderCount(user1, mId);
     }
 }

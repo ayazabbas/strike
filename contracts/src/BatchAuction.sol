@@ -37,10 +37,6 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
     ///         orderId => fill lots (stored during first chunk, read in subsequent chunks).
     mapping(uint256 => uint256) private _precomputedFills;
 
-    /// @notice Precomputed order info for chunked settlement.
-    ///         orderId => encoded flag (1 = has precomputed data).
-    mapping(uint256 => uint256) private _hasPrecomputed;
-
     /// @notice Maximum orders to settle per clearBatch call.
     uint256 public constant SETTLE_CHUNK_SIZE = 400;
 
@@ -202,7 +198,6 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
             uint256 idsLen = ids.length;
             for (uint256 j = 0; j < idsLen; ) {
                 _precomputedFills[ids[j]] = fills[j];
-                _hasPrecomputed[ids[j]] = 1;
                 unchecked { ++j; }
             }
 
@@ -226,7 +221,6 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
             uint256 idsLen = ids.length;
             for (uint256 j = 0; j < idsLen; ) {
                 delete _precomputedFills[ids[j]];
-                delete _hasPrecomputed[ids[j]];
                 unchecked { ++j; }
             }
         }
@@ -378,7 +372,7 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
 
     /// @dev Roll GTC order to next batch, or move to resting list if far from price.
     function _tryRollOrCancel(uint256 orderId, OrderInfo memory o, uint256 nextBatchId) internal {
-        if (orderBook._isTickFar(o.marketId, o.tick, o.side)) {
+        if (orderBook.isTickFar(o.marketId, o.tick, o.side)) {
             orderBook.removeFromTree(o.marketId, o.side, o.tick, o.lots);
             orderBook.pushRestingOrderId(o.marketId, orderId);
         } else {
@@ -499,7 +493,9 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
                 feeModel.protocolFeeCollector(), s.protocolFee,
                 s.excessRefund, s.excessRefund > 0
             );
-            _tryRollOrCancel(orderId, o, result.batchId + 1);
+            OrderInfo memory remaining = o;
+            remaining.lots = o.lots - s.filledLots;
+            _tryRollOrCancel(orderId, remaining, result.batchId + 1);
         }
 
         // Credit outcome tokens or internal positions
@@ -568,7 +564,9 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
             // GTC partial fill: reduce filled, roll remainder
             orderBook.reduceOrderLots(orderId, filledLots);
             orderBook.updateTreeVolume(o.marketId, o.side, o.tick, -int256(filledLots));
-            _tryRollOrCancel(orderId, o, result.batchId + 1);
+            OrderInfo memory remaining = o;
+            remaining.lots = o.lots - filledLots;
+            _tryRollOrCancel(orderId, remaining, result.batchId + 1);
         }
 
         emit OrderSettled(orderId, o.owner, filledLots, payout);
