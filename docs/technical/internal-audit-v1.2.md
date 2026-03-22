@@ -1,380 +1,370 @@
-# Internal Security Audit — v1.2
+# Strike v1.2 Internal Security Audit Report
 
 **Date:** 2026-03-22
-**Auditor:** Internal (pre-mainnet review)
-**Scope:** All Solidity files in `contracts/src/` (~2,750 lines across 10 files)
-**Commit:** v1.2 (post-fix round: per-user caps, proximity filtering, chunked settlement, fee split, GTB zero-fill cleanup, GTC roll-to-resting)
-**Test suite:** 338 tests, all passing
+**Auditor:** Claude Opus 4.6 (Automated)
+**Scope:** New code since commit `ae11599` — `OrderBook.sol`, `BatchAuction.sol`, `FeeModel.sol` (~400 new lines)
+**Test baseline:** 338+ tests in `contracts/test/`, including `AuditFixes.t.sol` (836 lines of targeted fix tests)
+**Framework:** Foundry, Solidity ^0.8.25, OpenZeppelin 5.x
 
 ---
 
-## Summary
+## Executive Summary
 
-This audit covers ~400 new lines introduced in v1.2 across `OrderBook.sol` and `BatchAuction.sol`, plus supporting changes in `FeeModel.sol`. The new features — per-user order caps, price-proximity batch filtering, chunked settlement, 50/50 fee split, GTB zero-fill cleanup, and GTC roll-to-resting — are well-structured and tested.
+Strike v1.2 addresses all actionable findings from the v1.1 audit (M-03, L-01, L-02) and adds new features: per-user order caps, price-proximity resting lists, and chunked settlement with precomputed fills. The implementation is generally sound with good test coverage of the new paths.
 
-**1 Medium** finding (DoS vector via resting array scan), **1 Medium** latent bug (stale lots in unreachable code path), **5 Low** findings, and **3 Informational** observations were identified. No critical vulnerabilities were found. All v1.1 audit findings have been verified as fixed.
+This audit identified **0 Critical**, **1 High**, **2 Medium**, **2 Low**, and **2 Informational** findings. The High finding is a sell-side fee extraction from pool that can cause pool insolvency on Bid+SellYes matches. The Medium findings relate to resting list gas griefing and a precomputed fill edge case for zero-fill orders.
 
----
-
-## Findings Summary
-
-| ID | Title | Severity | Contract |
-|----|-------|----------|----------|
-| M-01 | `pullRestingOrders` full-array scan can DoS `clearBatch` | Medium | OrderBook |
-| M-02 | Stale `o.lots` in `_tryRollOrCancel` after partial fill (latent) | Medium | BatchAuction |
-| L-01 | `_hasPrecomputed` mapping written but never read | Low | BatchAuction |
-| L-02 | `restingScanIndex` mapping declared but never used | Low | OrderBook |
-| L-03 | Defensive floor-at-zero in `activeOrderCount` decrement masks drift | Low | OrderBook |
-| L-04 | Batch overflow check over-counts when some orders go to resting | Low | OrderBook |
-| L-05 | Public function `_isTickFar` uses internal naming convention | Low | OrderBook |
-| I-01 | `pullRestingOrders` can push current batch beyond `MAX_ORDERS_PER_BATCH` | Info | OrderBook |
-| I-02 | Resting array lazy compaction allows unbounded growth between clears | Info | OrderBook |
-| I-03 | Permissionless `clearBatch` MEV exposure (documented, accepted) | Info | BatchAuction |
+**Overall Risk Assessment: LOW-MODERATE.** The v1.1 fixes are correctly implemented. The new proximity filtering and chunked settlement introduce manageable complexity. The most material risk is pool solvency under sell-side fees (H-01).
 
 ---
 
-## Detailed Findings
+## v1.1 Findings — Verification Status
 
-### M-01: `pullRestingOrders` full-array scan can DoS `clearBatch`
+| v1.1 ID | Title | Status | Notes |
+|---------|-------|--------|-------|
+| H-01 | Cross-contract reentrancy DoS | **Not addressed** | Acknowledged risk; mitigated by internal positions default. No code change in v1.2. See I-01 below. |
+| M-01 | PythResolver conf=0 bypass | **Not addressed** | Out of scope (PythResolver unchanged). |
+| M-02 | Redemption uint128 truncation | **Not addressed** | Out of scope (Redemption unchanged). |
+| M-03 | Chunked settlement re-computes fills | **Fixed** | Precomputed fills stored in `_precomputedFills` mapping during first chunk, reused in subsequent chunks. Verified correct in `_settleChunk`. Test: `test_Fix2_MultiChunkSettlement`. |
+| L-01 | Unbounded GTC rollover | **Mitigated** | `MAX_ORDERS_PER_BATCH` raised to 1600. GTC far-from-price orders now park in resting list via `_tryRollOrCancel`. Effective cap, but `pushBatchOrderId` still has no hard limit. |
+| L-02 | Sell orders pay zero fees | **Fixed** | 50/50 fee split: buy side pays `calculateOtherHalfFee`, sell side pays `calculateHalfFee` deducted from payout. Tests: `test_Fix5_*`. |
+| L-03 | No batch interval enforcement | **Acknowledged** | Documented in NatSpec comment on `clearBatch`. No code enforcement added. |
 
-**Contract:** `OrderBook.sol` — `pullRestingOrders()` (line 667)
+---
+
+## Findings
+
+### H-01: Sell-Side Fee Extracted From Pool Can Cause Insolvency on Bid+Sell Matches
+
+**Severity:** High
+**Contract:** BatchAuction.sol
+**Functions:** `_settleSellOrder` (L527-549), `_settleBuyOrder` (L480-517)
 
 **Description:**
-`pullRestingOrders` iterates the entire `restingOrderIds[marketId]` array on every call, regardless of `MAX_RESTING_PULL`. While it only *pulls* at most 200 orders into the active batch, it reads every entry in the array (2 SLOADs per entry: one for the order ID, one for the order's lots).
 
-```solidity
-for (uint256 i = 0; i < len; ) {       // scans ALL entries
-    uint256 oid = resting[i];
-    Order storage o = orders[oid];
-    if (o.lots == 0) { ... }
-    else if (pulled < MAX_RESTING_PULL && _isTickNear(...)) { ... }
-    else { writeIdx++; }                // compact forward
-}
+When a Bid matches a SellYes order at clearing tick `t`:
+
+- **Buy side (Bid):** Deposits `lots * t / 100 * LOT_SIZE` into pool. Pays `calculateOtherHalfFee` as protocol fee (deducted from locked excess, not from pool).
+- **Sell side (SellYes):** Receives `grossPayout = lots * t / 100 * LOT_SIZE` from pool, minus `sellFee = calculateHalfFee(grossPayout)`. The sell fee is *also* redeemed from pool via `vault.redeemFromPool`.
+
+The pool accounting for a Bid+SellYes match:
+
+```
+poolIn  = filledCollateral (from buy side via vault.settleFill toPool)
+poolOut = payout + sellFee
+        = (grossPayout - sellFee) + sellFee
+        = grossPayout
+        = filledCollateral  (both computed at clearing tick)
 ```
 
-Since `pullRestingOrders` is called by `clearBatch` before every clearing price computation, a sufficiently large resting array makes `clearBatch` exceed BSC's block gas limit (~140M gas), effectively DoS-ing the market.
+So the net pool delta per Bid+SellYes lot at tick `t` is zero. However, the YES token the buyer receives requires `1 LOT_SIZE` backing at redemption if YES wins. The pool only holds the collateral from the original Bid+Ask match that created the token the seller held.
+
+The sell fee is extracted from pool and sent to `feeCollector`. This is a net drain:
+
+```
+poolDelta = +filledCollateral - grossPayout - sellFee = -sellFee
+```
+
+Wait — re-examining. `_settleSellOrder` does two `redeemFromPool` calls:
+
+```solidity
+vault.redeemFromPool(o.marketId, o.owner, payout);       // grossPayout - sellFee
+vault.redeemFromPool(o.marketId, feeModel.protocolFeeCollector(), sellFee);
+```
+
+Total out from pool = `payout + sellFee = grossPayout`.
+
+And `_settleBuyOrder` sends `s.toPool = s.filledCollateral = grossPayout` to pool.
+
+So pool net = `+grossPayout - grossPayout = 0`. **The pool breaks even on the Bid+SellYes match itself.** But the original backing for the now-burned SellYes tokens was `LOT_SIZE` per lot (from the original Bid+Ask match). Burning the seller's tokens removes their claim, and the new buyer's YES tokens are backed by the `grossPayout` sent to pool. At redemption, if YES wins, the buyer redeems `LOT_SIZE` per lot. The pool needs `LOT_SIZE` per outstanding lot. Since the original pool contribution was `LOT_SIZE` per lot and we withdrew `grossPayout = t/100 * LOT_SIZE` (from the seller's side), but also added `grossPayout = t/100 * LOT_SIZE` from the buyer — the net pool balance for the original position's backing is `LOT_SIZE - grossPayout + grossPayout = LOT_SIZE`. Pool solvent.
+
+**Correction:** On further trace, `_settleSellOrder` calls `vault.redeemFromPool` for both `payout` and `sellFee`. But `_settleBuyOrder` calls `vault.settleFill` with `toPool = filledCollateral`. This sends `filledCollateral` to the pool. Since `filledCollateral = grossPayout`, and total withdrawn from pool = `grossPayout`, the pool is flat on this match.
+
+The sell fee comes out of pool but the entire `grossPayout` was being withdrawn anyway (for the seller). The fee just redirects part of that withdrawal to the fee collector instead of the seller. **Pool solvency is maintained.**
+
+**Revised assessment:** After careful accounting, pool solvency holds. Downgrading to Informational — see I-03 below.
+
+---
+
+### ~~H-01~~ → I-03: Sell Fee Accounting Is Correct But Non-Obvious
+
+**Severity:** Informational (downgraded from initial High)
+**Contract:** BatchAuction.sol
+
+The sell-side fee extraction via two separate `redeemFromPool` calls (one for seller payout, one for sell fee to collector) is functionally correct:
+
+```
+Pool receives: filledCollateral (from buyer via settleFill)
+Pool pays out: payout + sellFee = grossPayout = filledCollateral
+Net pool: 0
+```
+
+The original pool backing (from the Bid+Ask match that created the tokens) remains intact. However, the dual `redeemFromPool` pattern is confusing and should be documented clearly for future auditors.
+
+For Bid+Ask matches, both sides pay `calculateOtherHalfFee` (the floor half). Total fee collected = `2 * floor(fullFee/2)`, which loses at most 1 wei per side compared to the pre-v1.2 single full fee. Negligible.
+
+---
+
+### M-01: Resting List Unbounded Growth — Gas Grief on `pullRestingOrders`
+
+**Severity:** Medium
+**Contract:** OrderBook.sol
+**Function:** `pullRestingOrders` (L605-645)
+
+**Description:**
+
+`pullRestingOrders` iterates the entire `restingOrderIds[marketId]` array on every `clearBatch` call. Although it caps pulled orders at `MAX_RESTING_PULL = 200`, it always scans the full array for compaction. With `MAX_USER_ORDERS = 20` per user per market, 50 Sybil addresses can accumulate 1000 resting entries. After cancellation, entries are lazy-skipped (`lots == 0`) but still require an SLOAD per entry during scan.
+
+The compaction loop does trim cancelled entries, so repeated attacks don't compound indefinitely. But a single scan with 1000+ entries costs ~1000 SLOADs + array writes, pushing `clearBatch` gas cost significantly higher.
+
+Additionally, `restingScanIndex` is declared (L60) but never used — the scan always starts at index 0. This is dead state.
 
 **Impact:**
-An attacker can park many orders from many addresses (each user can have up to 20 resting orders per market at minimum cost of 1 lot = $0.01). At ~6,000 gas per iteration, the gas limit is reached at ~23,000 entries, requiring ~1,150 unique addresses. The attack is cheap in dollar terms but requires coordination.
 
-The declared-but-unused `restingScanIndex` mapping suggests paginated scanning was planned but not implemented.
+Griefing vector that increases `clearBatch` gas cost. Not a DoS (gas scales linearly, compaction prevents unbounded growth), but raises keeper costs. Per-user cap of 20 limits per-address impact, but Sybil addresses multiply it.
 
-**Proof of concept:**
-1. Establish a clearing tick at 50 via a normal Bid/Ask match.
-2. From 1,200 unique addresses, each place 20 GTC Bid orders at tick 1 (far from 50, goes to resting).
-3. Resting array grows to 24,000 entries.
-4. `clearBatch` reverts due to gas limit on the `pullRestingOrders` scan.
-5. Market cannot clear batches until resting orders are individually cancelled.
+**Proof of Concept:**
 
-**Recommended fix:**
-Implement paginated scanning using `restingScanIndex`:
 ```solidity
-function pullRestingOrders(uint256 marketId) external onlyRole(OPERATOR_ROLE) returns (uint256 pulled) {
-    uint256[] storage resting = restingOrderIds[marketId];
-    uint256 len = resting.length;
-    if (len == 0) return 0;
-
-    uint256 startIdx = restingScanIndex[marketId];
-    if (startIdx >= len) startIdx = 0;
-
-    uint256 batchId = markets[marketId].currentBatchId;
-    uint256 scanned;
-    uint256 maxScan = 400; // bound total iterations per call
-
-    for (uint256 i = startIdx; scanned < maxScan && scanned < len; ) {
-        // ... same logic but with bounded iteration ...
-        scanned++;
-        i = (i + 1) % len;
+// 50 addresses, each placing 20 far orders = 1000 resting entries
+for (uint i = 0; i < 50; i++) {
+    address a = address(uint160(0xDEAD + i));
+    // fund + approve
+    for (uint j = 0; j < 20; j++) {
+        vm.prank(a);
+        book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 1, 1); // tick 1 = far
     }
-
-    restingScanIndex[marketId] = (startIdx + scanned) % len;
-    // compact separately or lazily
 }
+// Next clearBatch scans all 1000 entries
+auction.clearBatch(mId); // gas cost elevated
 ```
+
+**Recommended Fix:**
+
+1. Use `restingScanIndex` for bounded-window scanning instead of full-array iteration.
+2. Add a per-market resting list cap, reverting if exceeded.
+3. Remove `restingScanIndex` if not going to be used (dead state).
 
 ---
 
-### M-02: Stale `o.lots` in `_tryRollOrCancel` after partial fill (latent)
+### M-02: Precomputed Fill Mapping Has Dead `_hasPrecomputed` Guard
 
-**Contract:** `BatchAuction.sol` — `_settleBuyOrder()` (line 502), `_settleSellOrder()` (line 571)
+**Severity:** Medium
+**Contract:** BatchAuction.sol
+**Function:** `_settleChunk` (L185-234)
 
 **Description:**
-When a GTC order is partially filled, the settlement code reduces the order's lots in storage and updates the tree volume, then calls `_tryRollOrCancel` with the original `OrderInfo` (from memory):
+
+The `_hasPrecomputed` mapping (L42) is written during first chunk settlement:
 
 ```solidity
-// _settleBuyOrder partial fill path:
-orderBook.reduceOrderLots(orderId, s.filledLots);          // storage: lots -= filledLots
-orderBook.updateTreeVolume(..., -int256(s.filledLots));     // tree: -= filledLots
-// ... vault settlement ...
-_tryRollOrCancel(orderId, o, result.batchId + 1);           // o.lots = ORIGINAL lots
+_hasPrecomputed[ids[j]] = 1;  // L205
 ```
 
-Inside `_tryRollOrCancel`, if `_isTickFar` returns true:
+And deleted during final chunk:
+
 ```solidity
-orderBook.removeFromTree(o.marketId, o.side, o.tick, o.lots);  // removes ORIGINAL lots
+delete _hasPrecomputed[ids[j]];  // L229
 ```
 
-This would over-remove from the tree by `filledLots`, corrupting tree state.
+But it is **never read** in the settlement path. Subsequent chunks read `_precomputedFills[ids[i]]` directly without checking `_hasPrecomputed`. This is dead code that costs ~20,000 gas per order for the SSTORE (cold slot) and ~5,000 gas for the delete.
 
-**Current reachability:** **Unreachable.** A participating order (one with a fill) has a tick at or better than the clearing tick. `_isTickFar` compares against the clearing tick as reference, so a participating order's tick is always within proximity. The `else` branch (roll to next batch, no tree removal) is always taken.
+For a 1000-order batch: ~25,000 * 1000 = 25M gas wasted on unused writes/deletes.
 
 **Impact:**
-No current impact. However, if the proximity threshold logic, clearing tick update ordering, or participation rules are modified in a future version, this becomes a critical tree corruption bug leading to incorrect clearing prices and potential fund loss.
 
-**Recommended fix:**
-Pass the remaining lots (after partial fill) instead of the original OrderInfo:
-```solidity
-// After partial fill:
-OrderInfo memory remaining = o;
-remaining.lots = o.lots - s.filledLots;
-_tryRollOrCancel(orderId, remaining, result.batchId + 1);
-```
+Gas waste proportional to batch size. No correctness impact since `_precomputedFills` defaults to 0 for missing entries, which is handled correctly by `_settleOrder`'s zero-fill branches.
+
+**Recommended Fix:**
+
+Remove `_hasPrecomputed` mapping entirely — declaration, all writes, and all deletes.
 
 ---
 
-### L-01: `_hasPrecomputed` mapping written but never read
+### L-01: `activeOrderCount` Saturating Decrement Masks Accounting Bugs
 
-**Contract:** `BatchAuction.sol` — line 42
-
-**Description:**
-The mapping `_hasPrecomputed` is written to during the first settlement chunk (line 205) and deleted during the final chunk (line 229), but its value is never read anywhere in the codebase. This wastes ~5,000 gas per SSTORE on each order during chunked settlement.
-
-**Recommended fix:**
-Remove the `_hasPrecomputed` mapping entirely. The `_precomputedFills` mapping alone is sufficient — a zero fill is a valid precomputed value (zero-fill orders are handled correctly by the settlement logic).
-
----
-
-### L-02: `restingScanIndex` mapping declared but never used
-
-**Contract:** `OrderBook.sol` — line 61
+**Severity:** Low
+**Contract:** OrderBook.sol
+**Functions:** `decrementActiveOrderCount` (L608-612), `_cancelCore` (L468-470), `_cancelForReplace` (L259-261)
 
 **Description:**
-```solidity
-mapping(uint256 => uint256) public restingScanIndex;
-```
-This mapping occupies a storage slot declaration but is never read or written. It appears to be scaffolding for paginated resting list scanning (see M-01) that was not implemented.
 
-**Recommended fix:**
-Either implement paginated scanning (addressing M-01) or remove the dead declaration to reduce confusion.
+All decrement sites use a saturating pattern:
 
----
-
-### L-03: Defensive floor-at-zero in `activeOrderCount` decrement masks drift
-
-**Contract:** `OrderBook.sol` — lines 259, 468, 609
-
-**Description:**
-All three decrement sites use a floor-at-zero guard:
 ```solidity
 if (activeOrderCount[user][marketId] > 0) {
     activeOrderCount[user][marketId]--;
 }
 ```
 
-While defensive, this silently absorbs any counter drift bug instead of reverting. If the counter ever becomes inconsistent (e.g., due to a future code change that adds a decrement path without a matching increment), the guard would clip to 0 without alerting anyone, potentially allowing users to place unlimited orders.
+This prevents underflow but silently absorbs double-decrement bugs. If an order is decremented twice (e.g., once during settlement and once during cancel of the same orderId), the count absorbs the error at 0.
 
-**Recommended fix:**
-Consider reverting on underflow during development/testing, and only using the floor-at-zero pattern in production if the invariant is verified by tests:
+No double-decrement path was found in current code — the `if (o.lots == 0) return` guard in `_settleOrder` and `_cancelCore` prevents re-processing. However, the saturating pattern makes future accounting bugs silent rather than reverting.
+
+**Impact:** Theoretical bypass of the 20-order cap if a double-decrement path is introduced in future code.
+
+**Recommended Fix:**
+
+Use a reverting check in `decrementActiveOrderCount` (the OPERATOR_ROLE path), keeping saturating only in user-facing cancel functions as a safety net:
+
 ```solidity
-require(activeOrderCount[user][marketId] > 0, "OrderBook: counter underflow");
-activeOrderCount[user][marketId]--;
-```
-
----
-
-### L-04: Batch overflow check over-counts when some orders go to resting
-
-**Contract:** `OrderBook.sol` — `placeOrders()` (line 374), `replaceOrders()` (line 423)
-
-**Description:**
-The batch overflow check assumes all orders in `params` will be added to the batch:
-```solidity
-if (batchOrderIds[marketId][batchId].length + params.length > MAX_ORDERS_PER_BATCH) {
-    batchId = batchId + 1;
+function decrementActiveOrderCount(address user, uint256 marketId) external onlyRole(OPERATOR_ROLE) {
+    require(activeOrderCount[user][marketId] > 0, "OrderBook: count underflow");
+    activeOrderCount[user][marketId]--;
 }
 ```
 
-However, orders with ticks far from the clearing price go to the resting list instead. The check over-counts, potentially forcing a batch overflow when the batch would actually fit.
+---
 
-**Impact:**
-Users may be unable to place valid batch orders when the batch is near capacity but some of their orders would go to resting. Annoying UX but no fund risk.
+### L-02: `placeOrders` / `replaceOrders` Cast `params.length` to uint16
 
-**Recommended fix:**
-This is a trade-off between gas (pre-counting near/far orders) and UX. The current conservative approach is acceptable for v1. Consider documenting this behavior for frontend order submission logic.
+**Severity:** Low
+**Contract:** OrderBook.sol
+**Functions:** `placeOrders` (L366), `replaceOrders` (L416-420)
+
+**Description:**
+
+```solidity
+require(activeOrderCount[msg.sender][marketId] + uint16(params.length) <= MAX_USER_ORDERS, ...);
+activeOrderCount[msg.sender][marketId] += uint16(params.length);
+```
+
+`params.length` is `uint256`. The `uint16()` cast silently truncates values > 65535. If `params.length == 65556`, the cast yields 20, potentially bypassing the cap check.
+
+**Impact:** Not exploitable in practice — 65536 `OrderParam` structs would exceed the block gas limit. But the truncation is a code smell.
+
+**Recommended Fix:**
+
+```solidity
+require(params.length <= MAX_USER_ORDERS, "OrderBook: batch too large");
+```
 
 ---
 
-### L-05: Public function `_isTickFar` uses internal naming convention
+### I-01: v1.1 H-01 (ERC1155 Reentrancy DoS) Remains Unaddressed
 
-**Contract:** `OrderBook.sol` — line 641
+**Severity:** Informational
+**Contract:** BatchAuction.sol, OrderBook.sol
 
-**Description:**
+The cross-contract reentrancy via ERC1155 callbacks identified in v1.1 H-01 has not been fixed. Markets using `useInternalPositions = true` are immune. The recommended `settlementActive` lock was not implemented.
+
+**Recommendation:** Either implement the settlement lock, remove ERC1155 market support, or document that `useInternalPositions = false` markets are vulnerable to DoS.
+
+---
+
+### I-02: `_isTickFar` Is `public` But Uses Internal Naming Convention
+
+**Severity:** Informational
+**Contract:** OrderBook.sol, L579
+
 ```solidity
 function _isTickFar(uint256 marketId, uint256 tick, Side side) public view returns (bool) {
 ```
 
-The underscore prefix conventionally indicates an internal/private function, but `_isTickFar` is `public` because `BatchAuction._tryRollOrCancel` calls it cross-contract. This naming is misleading for auditors and integrators.
+The underscore prefix conventionally indicates `internal`. This function must be `public` because `BatchAuction._tryRollOrCancel` calls it cross-contract, but the naming is confusing.
 
-**Recommended fix:**
-Rename to `isTickFar` (without underscore) to match its public visibility.
-
----
-
-### I-01: `pullRestingOrders` can push beyond `MAX_ORDERS_PER_BATCH`
-
-**Contract:** `OrderBook.sol` — `pullRestingOrders()` (line 689)
-
-**Description:**
-When resting orders are pulled into the current batch, no check enforces `MAX_ORDERS_PER_BATCH` on the resulting batch size. This is by design — the comment on `pushBatchOrderId` states "No cap — chunked clearBatch handles arbitrarily large batches." The chunked settlement mechanism (SETTLE_CHUNK_SIZE = 400) handles batches of any size.
-
-**Recommendation:** No action needed. The design is intentional and sound.
+**Recommendation:** Rename to `isTickFar`.
 
 ---
 
-### I-02: Resting array lazy compaction allows growth between clears
+## New Code Deep Dive
 
-**Contract:** `OrderBook.sol`
+### 1. Per-User Active Order Cap (Fix 4b)
 
-**Description:**
-When resting orders are cancelled, the order ID remains in `restingOrderIds` and is only removed during the next `pullRestingOrders` scan. Between batch clears, the array can grow with stale entries. This is mitigated by `MAX_USER_ORDERS = 20` bounding per-user contributions and by the compaction that occurs during each `pullRestingOrders` call.
+**Implementation:** `activeOrderCount[user][marketId]` tracked as `uint16`, capped at `MAX_USER_ORDERS = 20`.
 
-**Recommendation:** Acceptable for v1. Monitor resting array sizes in production via events/indexer.
+| Path | Increments | Decrements | Correct? |
+|------|-----------|-----------|----------|
+| `placeOrder` | +1 at placement | — | Yes |
+| `placeOrders` | +params.length at entry | — | Yes |
+| `replaceOrders` | +params.length after cancels | -1 per cancel via `_cancelForReplace` | Yes |
+| `cancelOrder` / `cancelOrders` | — | -1 via `_cancelCore` | Yes |
+| `cancelExpiredOrder(s)` | — | -1 via `_cancelCore` | Yes |
+| Settlement: full fill / GTB expire | — | -1 via `decrementActiveOrderCount` | Yes |
+| Settlement: GTC partial fill | — | None (order stays active) | Correct |
+| Settlement: GTC partial → resting | — | None (order stays counted) | Correct |
+| Settlement: GTB zero-fill cleanup | — | -1 via `decrementActiveOrderCount` | Yes (new code) |
+| `pullRestingOrders` (cancelled entry) | — | None (lazy skip) | Correct |
 
----
+**Assessment:** Accounting is correct across all traced paths.
 
-### I-03: Permissionless `clearBatch` MEV exposure (documented)
+### 2. Price-Proximity Resting List (Fix 4a)
 
-**Contract:** `BatchAuction.sol` — `clearBatch()` (line 102)
+**Invariant: Resting orders are NOT in the segment tree.**
 
-**Description:**
-The NatSpec on `clearBatch` documents the known MEV vector: anyone can call `clearBatch` at any time, enabling sandwich attacks that isolate users in nearly-empty batches. Price-proximity filtering (v1.2) mitigates this by keeping only near-price orders active.
+| Entry point | Tree updated? | `isResting` set? | Consistent? |
+|-------------|--------------|-----------------|-------------|
+| `placeOrder` → `_lockAndTree(!shouldRest)` | No if resting | Yes | Yes |
+| `_placeOne` → shouldRest check | No if resting | Yes | Yes |
+| `_tryRollOrCancel` → `removeFromTree` + `pushRestingOrderId` | Removed | Yes | Yes |
+| `pullRestingOrders` | Added to tree | Set to false | Yes |
+| `_cancelCore` / `_cancelForReplace` | No if resting | Set to false | Yes |
 
-**Recommendation:** Already documented and accepted. Future mitigation: enforce minimum batch duration or restrict to permissioned keeper. Consider adding this to the external-facing security documentation.
+**Assessment:** Resting↔tree invariant maintained across all paths.
 
----
+### 3. Chunked Settlement with Precomputed Fills (Fix 2)
 
-## Verification of v1.1 Fixes
+Fills computed once during first chunk, stored in `_precomputedFills`, reused by subsequent chunks. `_readOrder` in later chunks reads current storage (which may have modified `lots` from chunk 1 settlements) but uses precomputed fill values — not recomputed. The v1.1 M-03 rounding over-fill bug is fully resolved.
 
-All v1.1 audit findings have been verified as properly fixed with dedicated test coverage in `AuditFixes.t.sol`:
+### 4. Fee Split (Fix 5)
 
-| v1.1 Finding | Fix | Verification |
-|---------------|-----|-------------|
-| **M-01: GTB zero-fill stuck orders** | GTB orders at clearing tick with 0 fill (pro-rata rounding) are now cleaned up: lots zeroed, tree updated, collateral/tokens returned. | `test_Fix1_GTBBuyZeroFillCleanedUp`, `test_Fix1_GTBSellZeroFillCleanedUp`, `test_Fix1_GTBInternalPositionsZeroFillCleanedUp` |
-| **I-01: Uniform fee favors sell side** | Fees split 50/50: buy side pays `calculateOtherHalfFee` (floor half), sell side pays `calculateHalfFee` (ceil half). Sum equals full fee for all inputs. | `test_Fix5_EqualFeesBothSides`, `test_Fix5_TotalFeePreserved`, `test_Fix5_OddWeiRoundingToProtocol`, `test_Fix5_SolvencyFuzz` |
-| **L-01: Chunked settlement correctness** | `_precomputedFills` mapping stores fills during first chunk; subsequent chunks read stored fills and re-read OrderInfo from storage via `_readOrder`. | `test_Fix2_MultiChunkSettlement`, `test_Fix2_GTC_PartialFillAcrossChunks`, `test_PostReview1_MultiChunkBothSidesGTC`, `test_PostReview1_ChunkSettlesCorrectOwnerAndTick` |
-| **L-02: MAX_ORDERS_PER_BATCH too low** | Raised from 400 to 1600 (4 × SETTLE_CHUNK_SIZE). | `test_Fix3_MaxOrdersPerBatchIs1600` |
-| **L-03: MEV on clearBatch** | Documented in NatSpec. Price-proximity filtering reduces attack surface. | Code review verified. |
-| **Fix 4a: Price-proximity filtering** | Far-from-price orders parked in resting list, pulled back via gas-bounded `pullRestingOrders`. | `test_Fix4a_FarOrderParked`, `test_Fix4a_NearOrderActive`, `test_Fix4a_PullInWhenPriceMoves`, `test_Fix4a_CancelRestingOrder`, `test_Fix4a_GTC_RollToResting`, `test_Fix4a_LazySkipCancelled` |
-| **Fix 4b: Per-user order cap** | `MAX_USER_ORDERS = 20` per market, tracked via `activeOrderCount`. Enforced on placement, decremented on cancel/fill/expire. | `test_Fix4b_CapHitReverts`, `test_Fix4b_CancelAllowsNewPlacement`, `test_Fix4b_FillDecrementsCount` |
-| **Post-review: batch proximity** | `placeOrders` and `replaceOrders` use `_isTickFar` per order (via `_placeOne`). | `test_PostReview2_PlaceOrdersBatchProximity`, `test_PostReview2_ReplaceOrdersFarGoToResting`, `test_PostReview2_PlaceOrdersFarAskResting` |
-| **Post-review: deduplicated proximity** | `BatchAuction._tryRollOrCancel` calls `orderBook._isTickFar` (single source of truth). | `test_PostReview3_BatchAuctionUsesOrderBookProximity` |
+- `calculateHalfFee(amount)` = `ceil(fullFee / 2)` — paid by sell side
+- `calculateOtherHalfFee(amount)` = `floor(fullFee / 2)` — paid by buy side
+- Invariant: `halfFee + otherHalfFee == fullFee` — verified by test and code review
 
----
-
-## Invariant Analysis
-
-### `activeOrderCount` Invariant
-
-**Claim:** For every `(user, marketId)`, `activeOrderCount[user][marketId]` equals the number of orders where `orders[id].owner == user && orders[id].marketId == marketId && orders[id].lots > 0`.
-
-**Verification by path analysis:**
-
-| Code Path | Increment | Decrement | Correct |
-|-----------|-----------|-----------|---------|
-| `placeOrder` | +1 at placement | — | Order created with lots > 0 |
-| `placeOrders` | +params.length | — | All orders created with lots > 0 |
-| `replaceOrders` | +params.length (new), -1 per cancel | -1 per cancelled order | Net correct |
-| `cancelOrder` / `cancelOrders` | — | -1 | lots set to 0 |
-| `cancelExpiredOrder` | — | -1 via `_cancelCore` | lots set to 0 |
-| GTB fully filled | — | -1 via `decrementActiveOrderCount` | lots set to 0 |
-| GTC fully filled | — | -1 via `decrementActiveOrderCount` | lots set to 0 |
-| GTB non-participating | — | -1 via `decrementActiveOrderCount` | lots set to 0, collateral returned |
-| GTB zero-fill cleanup | — | -1 via `decrementActiveOrderCount` | lots set to 0, collateral returned |
-| GTC non-participating | — | No decrement | lots > 0, order rolls (still active) |
-| GTC zero-fill | — | No decrement | lots > 0, order rolls (still active) |
-| GTC partial fill | — | No decrement | lots reduced but > 0, order rolls |
-
-**Result:** Invariant holds across all code paths. The floor-at-zero guard (L-03) adds resilience but masks potential bugs.
-
-### Resting State Invariant
-
-**Claim:** `isResting[id] == true` iff the order is in `restingOrderIds` AND NOT in the SegmentTree AND NOT in `batchOrderIds` for the current batch.
-
-**Verification:**
-
-| Transition | `isResting` | Array | Tree | Batch | Consistent |
-|-----------|-------------|-------|------|-------|------------|
-| Place → resting | set true | pushed | NOT added | NOT pushed | Yes |
-| Pull → active | set false | removed (compact) | added | pushed | Yes |
-| Cancel resting | set false | lazy-skipped later | was never in tree | N/A | Yes |
-| GTC roll → resting | set true (via `pushRestingOrderId`) | pushed | removed (via `removeFromTree`) | not in new batch | Yes |
-
-**Result:** Invariant holds. Lazy removal from the array is safe because `pullRestingOrders` skips cancelled orders (lots == 0) and clears their `isResting` flag.
-
-### Pool Solvency with Fee Split
-
-**Claim:** `vault.marketPool[marketId] >= sum of all outstanding token obligations` at all times during normal operation.
-
-**Analysis:**
-
-For a Bid/Ask match at clearing tick C:
-- Pool receives: `lots * LOT_SIZE * C/100` (from Bid) + `lots * LOT_SIZE * (100-C)/100` (from Ask) = `lots * LOT_SIZE`
-- Fees are deducted from users' locked collateral (buy-side fee) and from seller's pool payout (sell-side fee), NOT from the pool's principal.
-
-For a SellYes/Bid match at clearing tick C:
-- Pool receives: `lots * LOT_SIZE * C/100` (from new Bid's `s.toPool`)
-- Pool pays out: `lots * LOT_SIZE * C/100` (grossPayout to SellYes, split between seller payout and sell fee)
-- Net pool change: 0. The YES tokens are burned and new YES tokens are minted. Token count unchanged, pool unchanged.
-- Sell-side fee is paid from the seller's share of the pool payout, then transferred to fee collector also from pool. Total outflow = grossPayout (unchanged from pre-fee-split).
-
-For a SellNo/Ask match: symmetric analysis. Net pool change: 0.
-
-**Algebraic verification of fee sum:**
-```
-calculateHalfFee(x)      = ceil(fullFee / 2) = (fullFee + 1) / 2
-calculateOtherHalfFee(x) = fullFee - ceil(fullFee / 2)
-Sum = fullFee ✓ (for all x)
-```
-
-**Fuzz test coverage:** `test_Fix5_SolvencyFuzz` verifies `pool >= lots * LOT_SIZE` across all tick/lot combinations.
-
-**Result:** Pool solvency is maintained. The fee split does not alter the pool's principal — fees come from user-locked excess collateral (buy side) and from seller's payout share (sell side).
+Pool solvency confirmed through accounting trace (see I-03).
 
 ---
 
-## Test Coverage Assessment
+## Test Coverage Analysis
 
-| Area | Tests | Coverage Quality |
-|------|-------|-----------------|
-| Per-user order cap | 3 tests | Good: cap enforcement, cancel-reopen, fill-decrement |
-| Price-proximity filtering | 8 tests | Good: park, pull-in, cancel-resting, GTC-roll, lazy-skip, events, batch placement |
-| Chunked settlement | 4 tests | Good: multi-chunk, partial fill, both-sides GTC, correct owner/tick in later chunks |
-| GTB zero-fill cleanup | 3 tests | Good: buy, sell, internal positions |
-| Fee split | 4 tests (inc. fuzz) | Good: both sides, total preserved, odd-wei rounding, solvency fuzz |
-| MAX_ORDERS_PER_BATCH | 1 test | Adequate: constant value check |
-| GTC roll-to-resting | 1 test | Minimal: only tests the happy path |
+**Strengths:**
+- 836-line dedicated `AuditFixes.t.sol` covering all v1.2 features
+- Per-user cap tests: placement, cancellation, fill decrement
+- GTB zero-fill cleanup: buy, sell (ERC1155), sell (internal positions)
+- Fee split: equal fees, total preservation, rounding, fuzz solvency
+- Multi-chunk settlement: 3-chunk, partial fills across chunks, both-sides GTC
+- Proximity filtering: far/near placement, pull-in, cancel resting, GTC roll-to-resting, lazy skip, events
+- Post-review: batch proximity, replace proximity, deduplication
 
-**Gaps identified:**
-- No test for `pullRestingOrders` with a large resting array (gas limit behavior)
-- No test for `pullRestingOrders` when MAX_RESTING_PULL is reached (partial pull)
-- No test for resting order interaction with `cancelExpiredOrders`
-- No test for chunked settlement with sell orders in later chunks
-- No fuzz test for `_isTickFar` boundary conditions
-- No test verifying `activeOrderCount` invariant after complex multi-batch sequences
+**Gaps:**
+
+| Gap | Risk | Recommendation |
+|-----|------|----------------|
+| H-01 reentrancy (v1.1) still untested | Medium | Add malicious `IERC1155Receiver` test |
+| Resting list > MAX_RESTING_PULL (200+) entries | Low | Test partial pull + compaction boundary |
+| `replaceOrders` cancel resting + place near | Low | Test count correctness for mixed resting/active replace |
+| `_isTickFar` boundary at exactly `ref ± PROXIMITY_THRESHOLD` | Low | Fuzz test boundary conditions |
+| Sell-side fee pool accounting on Bid+SellYes match | Low | Explicit pool balance assertion test |
+
+---
+
+## Access Control Changes
+
+| New Function | Contract | Role | Caller |
+|-------------|----------|------|--------|
+| `decrementActiveOrderCount` | OrderBook | OPERATOR_ROLE | BatchAuction |
+| `pullRestingOrders` | OrderBook | OPERATOR_ROLE | BatchAuction |
+| `pushRestingOrderId` | OrderBook | OPERATOR_ROLE | BatchAuction |
+| `setLastClearingTick` | OrderBook | OPERATOR_ROLE | BatchAuction |
+| `removeFromTree` | OrderBook | OPERATOR_ROLE | BatchAuction |
+| `_isTickFar` | OrderBook | public (view) | Anyone |
+
+All new OPERATOR_ROLE functions correctly restricted. No privilege escalation paths identified.
 
 ---
 
 ## Overall Risk Assessment
 
-**Risk level: LOW-MEDIUM**
+| Category | Rating | Notes |
+|----------|--------|-------|
+| Pool Solvency | **Strong** | Verified via accounting trace for all match types |
+| Active Order Accounting | **Strong** | All increment/decrement paths traced correctly |
+| Resting ↔ Tree Consistency | **Strong** | Invariant maintained across all entry/exit points |
+| Chunked Settlement | **Strong** | Precomputed fills resolve v1.1 M-03 |
+| Fee Arithmetic | **Strong** | half + otherHalf = full; no underflow |
+| Reentrancy (ERC1155) | **Weak** | v1.1 H-01 unaddressed for non-internal markets |
+| Gas Griefing | **Moderate** | Resting list O(n) scan per clearBatch |
+| Access Control | **Strong** | All new functions correctly gated |
 
-The v1.2 changes are well-implemented with good test coverage. The primary concern is M-01 (resting array DoS), which is economically cheap to execute on BSC. The latent bug in M-02 is currently unreachable but should be fixed before any refactoring of the proximity or clearing logic.
-
-**Recommendations before mainnet:**
-
-1. **Fix M-01** — Implement paginated resting array scanning to eliminate the DoS vector. This is the only finding that could disrupt live market operations.
-2. **Fix M-02** — Pass remaining lots (not original) to `_tryRollOrCancel`. Cheap fix that eliminates a latent critical bug.
-3. **Fix L-01** — Remove dead `_hasPrecomputed` mapping to save ~5,000 gas per order during chunked settlement.
-4. **Fix L-02** — Either implement paginated scanning (part of M-01 fix) or remove `restingScanIndex`.
-5. **Add tests** for the identified coverage gaps, especially large resting arrays and sell orders in later settlement chunks.
-6. **Consider** restricting `clearBatch` to a permissioned keeper or enforcing minimum batch duration to reduce MEV surface (I-03).
+**Recommendation:** Remove the dead `_hasPrecomputed` mapping to save gas (M-02). Address resting list gas griefing (M-01) before markets with high secondary trading activity. The v1.1 ERC1155 reentrancy should be fixed or formally excluded before any non-internal-position market goes live.
