@@ -54,7 +54,7 @@ No function iterates over unbounded sets. Segment trees provide O(log N) operati
 ## Auditing
 
 ### Internal Audit v1.2
-An internal security audit (v1.2) was conducted covering all core contracts. Key areas reviewed include fee split logic, chunked settlement, resting order mechanics, and per-user order caps. All findings have been addressed. See `contracts/audit/` for the full report.
+An internal security audit (v1.2) was conducted covering all core contracts. Key areas reviewed include fee split logic, chunked settlement, resting order mechanics, and per-user order caps. All findings have been addressed. See `docs/technical/internal-audit-v1.2.md` for the full report.
 
 ### Static Analysis
 - Slither static analysis
