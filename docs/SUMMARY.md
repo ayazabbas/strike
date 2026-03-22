@@ -63,6 +63,7 @@
 * [Security](technical/security.md)
 * [Gas & Costs](technical/gas-and-costs.md)
 * [MEV Mitigation](technical/mev.md)
+* [Internal Audit v1.2](technical/internal-audit-v1.2.md)
 
 ## Coming Soon
 
