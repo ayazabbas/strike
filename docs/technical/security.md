@@ -41,7 +41,7 @@ No function iterates over unbounded sets. Segment trees provide O(log N) operati
 - Fallback windows handle rare Pyth publishing delays
 
 ### Resolution Safety
-- **Finality gate:** resolution waits for economic finality (n+2 blocks) before finalizing
+- **Finality gate:** resolution waits for a 90-second finality period before finalizing
 - **Procedural challenge:** anyone can submit a better qualifying Pyth update during finality window
 - **Replay protection:** each market can only be resolved once
 

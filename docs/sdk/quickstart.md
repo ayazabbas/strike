@@ -3,8 +3,8 @@
 ## Prerequisites
 
 - Rust 1.75+ with cargo
-- BSC testnet tBNB for gas (from a [BNB faucet](https://www.bnbchain.org/en/testnet-faucet))
-- Testnet USDT for collateral (mint from the [faucet](https://app.strike.pm/faucet))
+- BNB for gas fees
+- USDT for collateral
 
 ## Read-Only: Fetch Markets
 
@@ -15,7 +15,7 @@ use strike_sdk::prelude::*;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let client = StrikeClient::new(StrikeConfig::bsc_testnet()).build()?;
+    let client = StrikeClient::new(StrikeConfig::bsc_mainnet()).build()?;
 
     // Fetch markets from the indexer
     let markets = client.indexer().get_markets().await?;
@@ -38,7 +38,7 @@ async fn main() -> Result<()> {
 
 ## Trading: Place and Cancel Orders
 
-Requires a private key with tBNB and testnet USDT.
+Requires a private key with BNB and USDT.
 
 ```rust
 use strike_sdk::prelude::*;
@@ -47,7 +47,7 @@ use strike_sdk::prelude::*;
 async fn main() -> Result<()> {
     let private_key = std::env::var("PRIVATE_KEY").expect("PRIVATE_KEY required");
 
-    let client = StrikeClient::new(StrikeConfig::bsc_testnet())
+    let client = StrikeClient::new(StrikeConfig::bsc_mainnet())
         .with_private_key(&private_key)
         .build()?;
 

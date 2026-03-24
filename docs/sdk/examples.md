@@ -17,7 +17,7 @@ use strike_sdk::prelude::*;
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
-    let client = StrikeClient::new(StrikeConfig::bsc_testnet()).build()?;
+    let client = StrikeClient::new(StrikeConfig::bsc_mainnet()).build()?;
 
     // Fetch markets from indexer
     let markets = client.indexer().get_markets().await?;
@@ -70,7 +70,7 @@ async fn main() -> Result<()> {
 
     let private_key = std::env::var("PRIVATE_KEY").expect("PRIVATE_KEY required");
 
-    let client = StrikeClient::new(StrikeConfig::bsc_testnet())
+    let client = StrikeClient::new(StrikeConfig::bsc_mainnet())
         .with_private_key(&private_key)
         .build()?;
 
@@ -123,7 +123,7 @@ use strike_sdk::prelude::*;
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
-    let client = StrikeClient::new(StrikeConfig::bsc_testnet()).build()?;
+    let client = StrikeClient::new(StrikeConfig::bsc_mainnet()).build()?;
 
     let mut events = client.events().await?;
     println!("listening for events...\n");
@@ -169,7 +169,7 @@ async fn main() -> Result<()> {
 
     let private_key = std::env::var("PRIVATE_KEY").expect("PRIVATE_KEY required");
 
-    let client = StrikeClient::new(StrikeConfig::bsc_testnet())
+    let client = StrikeClient::new(StrikeConfig::bsc_mainnet())
         .with_private_key(&private_key)
         .build()?;
 

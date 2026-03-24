@@ -16,7 +16,7 @@ struct Order {
     Side side;           // 1 byte  — Bid, Ask, SellYes, or SellNo
     OrderType orderType; // 1 byte  — GTC or GTB
     uint8 tick;          // 1 byte  — price tick 1-99 (price = tick/100)
-    uint64 lots;         // 8 bytes — remaining lots (each lot = LOT_SIZE = 1e18 = 1 USDT)
+    uint64 lots;         // 8 bytes — remaining lots (each lot = LOT_SIZE = 1e16 = $0.01)
     // --- Slot 2 (21 bytes) ---
     uint64 id;           // 8 bytes — unique order ID
     uint32 marketId;     // 4 bytes — market this order belongs to
@@ -36,9 +36,11 @@ The struct is tightly packed into 2 storage slots for gas efficiency.
 - Locks collateral in Vault (Bid/Ask) or custodies outcome tokens (SellYes/SellNo):
   - **Bid:** `lots * LOT_SIZE * tick / 100` USDT
   - **Ask:** `lots * LOT_SIZE * (100 - tick) / 100` USDT
-  - **SellYes:** transfers `lots` YES tokens to OrderBook (ERC-1155)
-  - **SellNo:** transfers `lots` NO tokens to OrderBook (ERC-1155)
+  - **SellYes:** transfers `lots` YES tokens to OrderBook (ERC-1155 for non-internal markets)
+  - **SellNo:** transfers `lots` NO tokens to OrderBook (ERC-1155 for non-internal markets)
 - Updates segment tree aggregate at tick
+
+> **Internal positions:** For markets with `useInternalPositions = true` (current 5-minute markets), SellYes and SellNo work with internal position balances instead of ERC-1155 token transfers.
 
 ### `placeOrders(marketId, OrderParam[])`
 - Batch order placement — places multiple orders in a single transaction

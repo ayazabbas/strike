@@ -8,7 +8,6 @@ Proof-of-concept built for the *Good Vibes Only: OpenClaw Edition* hackathon.
 - `Market.sol` + `MarketFactory.sol` with 51 tests
 - Telegram bot with Privy embedded wallets
 - Pyth oracle resolution
-- BSC testnet deployment
 - Keeper service (auto-create + auto-resolve)
 
 Preserved on the `poc` branch.
@@ -62,7 +61,7 @@ Preserved on the `poc` branch.
 - [ ] Gas optimization pass
 - [ ] Security hardening (Slither, Mythril)
 - [ ] Private submission support (BEP-322)
-- [x] BSC testnet deployment + soak test
+- [x] BSC deployment + soak test
 - [x] Documentation
 
 ## 🔮 Future
@@ -70,6 +69,7 @@ Preserved on the `poc` branch.
 - **[AI-Resolved Markets](../coming-soon/ai-resolved-markets.md)** — qualitative event markets (geopolitics, sports, culture) resolved via Flap AI Oracle
 - Multi-asset support (ETH, SOL, BNB + any Pyth feed)
 - Variable market durations (1min, 5min, 15min, 1hr)
-- BSC mainnet deployment
-- API for programmatic trading
-- Leaderboards
+
+### Recently Completed
+- [x] BSC mainnet deployment (block 88279332)
+- [x] Leaderboard (PNL + Volume tabs, 24H/7D/30D/All, username system)

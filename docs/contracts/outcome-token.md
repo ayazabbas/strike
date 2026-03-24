@@ -1,5 +1,7 @@
 # OutcomeToken.sol
 
+> **Note:** Current 5-minute markets use internal positions (`useInternalPositions = true`) and do not mint ERC-1155 tokens. This contract is used for future market types that require transferable outcome tokens.
+
 ERC-1155 multi-token contract for binary outcome tokens.
 
 ## Token ID Scheme

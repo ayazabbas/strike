@@ -7,11 +7,11 @@ Use `StrikeClient::new()` with a config, then chain builder methods:
 ```rust
 use strike_sdk::prelude::*;
 
-// Testnet with defaults
-let client = StrikeClient::new(StrikeConfig::bsc_testnet()).build()?;
+// Mainnet with defaults
+let client = StrikeClient::new(StrikeConfig::bsc_mainnet()).build()?;
 
 // With a wallet for trading
-let client = StrikeClient::new(StrikeConfig::bsc_testnet())
+let client = StrikeClient::new(StrikeConfig::bsc_mainnet())
     .with_private_key("0x...")
     .build()?;
 ```
@@ -20,7 +20,7 @@ let client = StrikeClient::new(StrikeConfig::bsc_testnet())
 
 | Method | Chain ID | Description |
 |--------|----------|-------------|
-| `StrikeConfig::bsc_testnet()` | 97 | BSC testnet with default RPC, WSS, and indexer URLs |
+| `StrikeConfig::bsc_mainnet()` | 56 | BSC mainnet with default RPC, WSS, and indexer URLs |
 | `StrikeConfig::custom(addresses, chain_id)` | any | Custom deployment |
 
 Each preset includes default RPC, WSS, and indexer endpoints. Override any of them with builder methods.
@@ -28,7 +28,7 @@ Each preset includes default RPC, WSS, and indexer endpoints. Override any of th
 ## Builder Methods
 
 ```rust
-let client = StrikeClient::new(StrikeConfig::bsc_testnet())
+let client = StrikeClient::new(StrikeConfig::bsc_mainnet())
     .with_rpc("https://your-rpc-node.com")       // override RPC endpoint
     .with_wss("wss://your-ws-node.com")           // override WSS endpoint
     .with_indexer("https://your-indexer.com")      // override indexer URL
@@ -56,7 +56,7 @@ Calling a write method without a wallet returns `StrikeError::NoWallet`.
 For bots that send transactions in rapid succession, enable the nonce manager to avoid nonce-too-low errors:
 
 ```rust
-let mut client = StrikeClient::new(StrikeConfig::bsc_testnet())
+let mut client = StrikeClient::new(StrikeConfig::bsc_mainnet())
     .with_private_key(&key)
     .build()?;
 

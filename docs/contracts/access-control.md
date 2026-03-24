@@ -10,6 +10,7 @@ All Strike contracts that use role-based access control inherit OpenZeppelin's `
 | `OPERATOR_ROLE` | OrderBook | BatchAuction, MarketFactory | Manage markets and settle orders |
 | `PROTOCOL_ROLE` | Vault | OrderBook, BatchAuction, Redemption | Lock/unlock/transfer collateral |
 | `MINTER_ROLE` | OutcomeToken | BatchAuction, Redemption | Mint and burn outcome tokens |
+| `ESCROW_ROLE` | OutcomeToken | BatchAuction | Burn escrowed sell-order tokens on fill via `burnEscrow()` |
 | `ADMIN_ROLE` | MarketFactory | PythResolver | Manage market state transitions |
 
 ## Role Definitions
@@ -67,6 +68,17 @@ Grants access to:
 - `redeem(from, marketId, amount, winningOutcome)` -- burn winning tokens
 
 Granted to **BatchAuction** (mints tokens during atomic settlement in `clearBatch`) and **Redemption** (burns winning tokens during redemption).
+
+### ESCROW_ROLE (OutcomeToken)
+
+```
+bytes32 public constant ESCROW_ROLE = keccak256("ESCROW_ROLE");
+```
+
+Grants access to:
+- `burnEscrow(from, marketId, amount, isYes)` -- burn escrowed outcome tokens held by OrderBook when sell orders (SellYes/SellNo) are filled during batch settlement
+
+Granted to **BatchAuction**. When a SellYes or SellNo order is filled, the tokens were custodied by OrderBook on placement. BatchAuction calls `burnEscrow()` to burn those tokens as part of the settlement flow.
 
 ### ADMIN_ROLE (MarketFactory)
 
@@ -184,6 +196,9 @@ vault.grantRole(vault.PROTOCOL_ROLE(), address(redemption));
 // OutcomeToken: grant MINTER_ROLE
 outcomeToken.grantRole(outcomeToken.MINTER_ROLE(), address(batchAuction));
 outcomeToken.grantRole(outcomeToken.MINTER_ROLE(), address(redemption));
+
+// OutcomeToken: grant ESCROW_ROLE
+outcomeToken.grantRole(outcomeToken.ESCROW_ROLE(), address(batchAuction));
 
 // MarketFactory: grant ADMIN_ROLE
 factory.grantRole(factory.ADMIN_ROLE(), address(pythResolver));

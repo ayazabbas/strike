@@ -12,9 +12,13 @@ The SDK is **on-chain first**. All trading operations go directly to BNB Chain v
 |---------|-------------|
 | Order management | Place, cancel, and replace orders in batch transactions |
 | Event streaming | Real-time WSS subscriptions with auto-reconnect |
-| Vault & tokens | USDT approval, balance queries, ERC-1155 outcome token operations |
+| Vault & tokens | USDT approval, balance queries, outcome token / position operations |
 | Indexer client | REST client for market snapshots and orderbook state |
 | Nonce manager | Optional `nonce-manager` feature flag for bots sending rapid transactions |
+
+## Preset Configs
+
+Use `StrikeConfig::bsc_mainnet()` for BSC mainnet with default RPC, WSS, and indexer endpoints. See [Client Configuration](client.md) for custom setups.
 
 ## Feature Flags
 

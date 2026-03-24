@@ -19,7 +19,8 @@ Post-resolution token redemption. Users burn winning outcome tokens 1:1 for USDT
 
 - Only winning tokens can be redeemed (losing tokens have no value)
 - Market pool is funded during atomic settlement in `clearBatch()`
-- Each outcome token represents 1 lot = LOT_SIZE (1e18 = 1 USDT)
+- Each position unit represents 1 lot = LOT_SIZE (1e16 = $0.01)
+- For `useInternalPositions` markets (current 5-minute markets), redemption works with internal position balances instead of ERC-1155 tokens
 
 ## Events
 

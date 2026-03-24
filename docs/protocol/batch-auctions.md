@@ -21,19 +21,19 @@ Strike uses **Frequency Batch Auctions (FBA)** instead of continuous order match
    - Filled collateral (at clearing price, not order tick) moves to the market pool
    - Excess refund = (locked at order tick) - (cost at clearing tick) returned to owner
    - Uniform fee (20 bps) deducted, sent to protocol fee collector
-   - Outcome tokens minted (bidder gets YES, asker gets NO)
+   - Positions credited (bidder gets UP, asker gets DOWN) — for internal position markets; ERC-1155 tokens minted for token-based markets
    - Unfilled collateral returned to owner
    - GTC orders with remaining lots roll to the next batch
 
 ## Collateral Model (USDT)
 
-Both sides lock USDT (ERC-20). Users must approve the Vault before placing orders. Asks do NOT require pre-existing outcome tokens.
+Both sides lock USDT (ERC-20). Users must approve the Vault before placing orders. Asks do NOT require pre-existing positions.
 
-- **Bid** at tick 50 for 10 lots: locks `10 * 1 * 50/100 = 5 USDT`
-- **Ask** at tick 50 for 10 lots: locks `10 * 1 * 50/100 = 5 USDT`
-- Total per matched lot = LOT_SIZE (1e18 = 1 USDT), fully collateralized
+- **Bid** at tick 50 for 10 lots: locks `10 × $0.01 × 50/100 = $0.05`
+- **Ask** at tick 50 for 10 lots: locks `10 × $0.01 × 50/100 = $0.05`
+- Total per matched lot = LOT_SIZE (1e16 = $0.01), fully collateralized
 
-This is simpler than requiring askers to hold outcome tokens, and provides symmetric UX for both sides.
+This is simpler than requiring askers to hold positions, and provides symmetric UX for both sides.
 
 ## Clearing Price Settlement
 
@@ -67,7 +67,7 @@ To express willingness to pay more for guaranteed fills, place your order at a t
 ### vs. Parimutuel Pools
 - **Real price discovery** — prices are set by supply and demand, not pool ratios
 - **Capital efficient** — traders can express precise views at specific prices
-- **Secondary market** — outcome tokens are tradeable on the book, not locked until resolution
+- **Secondary market** — positions are tradeable on the book via sell orders
 
 ## Resting Orders (Price-Proximity Filtering)
 

@@ -8,29 +8,29 @@ Strike runs continuous short-duration prediction markets (default: 5 minutes). E
 
 Where `$X` is the strike price (captured from Pyth at market creation) and `T` is the expiry timestamp.
 
-Traders express their view by buying outcome tokens on the orderbook:
-- **Buy YES** if you think the price will be above the strike
-- **Buy NO** if you think the price will be below the strike
+Traders express their view by placing orders on the orderbook:
+- **Buy UP** if you think the price will be above the strike at expiry
+- **Buy DOWN** if you think the price will be below the strike at expiry
 
 ## Step by Step
 
 1. **Market opens** — A new market is created with a strike price and expiry. The orderbook begins accepting orders.
 
-2. **Approve USDT** — Before trading, approve the Vault contract to spend your USDT. This is a one-time step per wallet.
+2. **Deposit USDT** — Deposit USDT to your Strike wallet. Approvals and gas are handled automatically.
 
-3. **Place orders** — Traders submit limit orders at their desired price (0.01–0.99). A YES token priced at 0.70 means "70% chance price is above strike." USDT collateral is locked automatically when you place an order.
+3. **Place orders** — Traders submit limit orders at their desired price ($0.01–$0.99). An UP position priced at $0.70 means "70% chance price is above strike." USDT collateral is locked automatically when you place an order.
 
-4. **Batches clear** — Periodically, all pending orders are matched at a single uniform clearing price. If bids and asks cross, a clearing price is found that maximizes matched volume. The oversubscribed side gets pro-rata partial fills. Settlement happens atomically in the same transaction — you receive outcome tokens and any excess collateral refund automatically.
+4. **Batches clear** — Periodically, all pending orders are matched at a single uniform clearing price. If bids and asks cross, a clearing price is found that maximizes matched volume. The oversubscribed side gets pro-rata partial fills. Settlement happens atomically in the same transaction — your position is recorded and any excess collateral refund is applied automatically.
 
 5. **Trading halts** — When less than one batch interval remains before expiry, the book stops accepting new orders. The final batch clears normally.
 
 6. **Market resolves** — After expiry, anyone can submit a signed Pyth price update to resolve the market. The contract verifies the update cryptographically and determines the outcome.
 
-7. **Redeem winnings** — Winning outcome tokens redeem 1:1 for collateral. Losing tokens are worthless.
+7. **Redeem winnings** — Winning positions pay out their full value. Losing positions pay nothing.
 
 ## What Makes FBA Different?
 
-In a continuous orderbook, the first order to arrive gets priority — this creates speed races and MEV extraction. In a **Frequency Batch Auction**:
+In a continuous orderbook, the first order to arrive gets priority — this creates speed races and MEV extraction. In a **Frequent Batch Auction**:
 
 - All orders within a batch window are treated equally (no time priority within a batch)
 - Everyone gets the same clearing price (uniform price)

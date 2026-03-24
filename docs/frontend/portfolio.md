@@ -11,7 +11,7 @@ The portfolio page (`/portfolio`) shows all positions across markets.
 - Deposit / Withdraw buttons
 
 ### Active Positions
-- Outcome token balances per market
+- Position sizes per market
 - Current mark-to-market using last clearing price
 - Unrealized P&L per position
 
@@ -21,7 +21,7 @@ The portfolio page (`/portfolio`) shows all positions across markets.
 - Filter by market, side, status
 
 ### Redeemable
-- Winning tokens from resolved markets
+- Winning positions from resolved markets
 - "Redeem All" button
 
 ### History

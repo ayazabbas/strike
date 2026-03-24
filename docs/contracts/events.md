@@ -67,12 +67,17 @@ event OrderPlaced(
     uint256 batchId
 );
 ```
-Emitted when a user places an order. `side` is `Bid` (0) or `Ask` (1). `batchId` is the batch the order was placed into.
+Emitted when a user places an order. `side` is `Bid` (0), `Ask` (1), `SellYes` (2), or `SellNo` (3). `batchId` is the batch the order was placed into.
 
 ```solidity
 event OrderCancelled(uint256 indexed orderId, address indexed owner);
 ```
 Emitted when an order is cancelled by its owner. Collateral is unlocked.
+
+```solidity
+event GtcAutoCancelled(uint256 indexed orderId, address indexed owner);
+```
+Emitted when a GTC order is automatically cancelled during settlement because it has moved too far from the clearing price (beyond PROXIMITY_THRESHOLD). The order's collateral or tokens are returned to the owner.
 
 ```solidity
 event MarketDeactivated(uint256 indexed marketId);
@@ -245,7 +250,7 @@ event ResolutionChallenged(
     address indexed challenger
 );
 ```
-Emitted when a pending resolution is challenged with an earlier publishTime during the finality window (`FINALITY_BLOCKS` = 3 blocks). The challenger's data replaces the pending resolution.
+Emitted when a pending resolution is challenged with an earlier publishTime during the finality window (`FINALITY_PERIOD` = 90 seconds). The challenger's data replaces the pending resolution.
 
 ```solidity
 event ResolutionFinalized(
@@ -267,4 +272,4 @@ event Redeemed(
     bool outcomeYes
 );
 ```
-Emitted when a user redeems winning outcome tokens for USDT. `amount` is the number of tokens burned; payout is `amount * LOT_SIZE` (1e18 = 1 USDT).
+Emitted when a user redeems winning outcome tokens for USDT. `amount` is the number of tokens burned; payout is `amount * LOT_SIZE` (1e16 = $0.01).

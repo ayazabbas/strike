@@ -8,11 +8,11 @@ Key architectural choices and why they were made.
 
 **Why:** On EVM, continuous orderbooks create MEV extraction opportunities — bots race for time priority, sandwich trades, and front-run large orders. FBA eliminates intra-batch time priority and gives everyone the same clearing price. The trade-off is 60s latency per batch (configurable), which is acceptable for prediction markets where positions are held for minutes, not milliseconds.
 
-## Claim-Based Settlement over Inline Fills
+## Atomic Inline Settlement over Claim-Based Settlement
 
-**Decision:** `clearBatch()` stores aggregate results; individual fills are claimed separately.
+**Decision:** `clearBatch()` settles all orders atomically in a single transaction. No separate claim step.
 
-**Why:** Writing fills per-order during clearing would make gas cost proportional to order count — O(n) storage writes at 5,000-20,000 gas each. Claim-based settlement keeps `clearBatch()` at O(1) writes regardless of book depth. Users claim their fills in a second transaction using deterministic math against the stored batch result.
+**Why:** Single-transaction settlement eliminates the UX friction of a separate claim step. Users receive their fills, excess refunds, and minted positions immediately. Gas cost scales linearly with order count, bounded by SETTLE_CHUNK_SIZE = 400 per `clearBatch` call and MAX_ORDERS_PER_BATCH = 1600. Large batches are settled across multiple `clearBatch` calls with precomputed fills ensuring correctness.
 
 ## Pyth `price` over `ema_price`
 
@@ -32,6 +32,8 @@ Key architectural choices and why they were made.
 
 **Why:** Deploying two ERC-20 contracts per market is expensive and creates address management overhead. ERC-1155 uses a single contract with deterministic token IDs (`marketId * 2` for YES, `marketId * 2 + 1` for NO). Cheaper deployment, simpler accounting, and tokens are still freely transferable.
 
+> **Note:** Current 5-minute markets use internal positions (`useInternalPositions = true`) for efficiency. The ERC-1155 token system is retained for future market types that require transferable tokens (e.g., longer-duration markets, secondary market trading).
+
 ## Segment Tree for Price Aggregation
 
 **Decision:** Segment tree over naive iteration or Fenwick tree.
@@ -40,9 +42,9 @@ Key architectural choices and why they were made.
 
 ## Finality Gate on Resolution
 
-**Decision:** Two-step resolution with a finality window (n+2 blocks).
+**Decision:** Two-step resolution with a 90-second finality period.
 
-**Why:** A single-transaction resolution on BSC could theoretically be reorganized, changing the market outcome. By splitting into `resolveMarket()` (submit data) and `finalizeResolution()` (after finality), we ensure the settlement price is economically final. The challenge window during finality lets anyone submit a better (earlier) Pyth update, enforcing the deterministic "earliest update wins" rule.
+**Why:** A single-transaction resolution on BSC could theoretically be reorganized, changing the market outcome. By splitting into `resolveMarket()` (submit data) and `finalizeResolution()` (after the 90-second wait), we ensure the settlement price is economically final. The challenge window during the finality period lets anyone submit a better (earlier) Pyth update, enforcing the deterministic "earliest update wins" rule.
 
 ## Open Submission by Default
 

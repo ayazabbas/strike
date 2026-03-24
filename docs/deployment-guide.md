@@ -104,6 +104,8 @@ pythResolver.acceptAdmin();               // called by newAdmin
 
 ### Local Devnet (Anvil)
 
+For local development and testing:
+
 ```bash
 anvil --chain-id 31337
 
@@ -114,27 +116,17 @@ forge script script/Deploy.s.sol \
 
 The `Deploy.s.sol` script deploys a `MockPyth` instance, wires all roles, and creates a test market automatically.
 
-### BSC Testnet
+### BSC
 
 ```bash
-forge script script/DeployTestnet.s.sol \
+forge script script/Deploy.s.sol \
   --rpc-url $RPC_URL \
   --broadcast \
   --verify \
   --etherscan-api-key $ETHERSCAN_API_KEY
 ```
 
-### BSC Mainnet
-
-```bash
-forge script script/DeployTestnet.s.sol \
-  --rpc-url $RPC_URL \
-  --broadcast \
-  --verify \
-  --etherscan-api-key $ETHERSCAN_API_KEY
-```
-
-The deploy script auto-detects chain ID 97 (testnet) vs 56 (mainnet) and uses the correct Pyth address.
+The deploy script auto-detects chain ID and uses the correct Pyth address.
 
 ## Contract Verification
 
@@ -142,7 +134,7 @@ Deploy scripts pass `--verify` to auto-verify on BscScan. To verify a contract m
 
 ```bash
 forge verify-contract <CONTRACT_ADDRESS> src/MarketFactory.sol:MarketFactory \
-  --chain-id 97 \
+  --chain-id 56 \
   --etherscan-api-key $ETHERSCAN_API_KEY \
   --constructor-args $(cast abi-encode \
     "constructor(address,address,address,address)" \

@@ -31,10 +31,11 @@ If no Pyth update exists within `[T, T+Δ]`:
 ## Finality Gate
 
 Resolution is not instant:
-1. Resolver submits Pyth update → `pendingResolution` is set
-2. Protocol waits for **economic finality** (n+2 blocks under BEP-126, ~1.1s on BSC)
-3. During this window, anyone can submit an **alternative** Pyth update with an earlier valid `publishTime`
+1. Resolver calls `resolve()` with a Pyth update → `pendingResolution` is set, market enters `Resolving`
+2. Protocol waits for a **90-second finality period** (`FINALITY_PERIOD = 90 seconds`)
+3. During this window, anyone can submit an **alternative** Pyth update with an earlier valid `publishTime`, but only if it would **change the outcome** (e.g., flip the result from UP to DOWN)
 4. After the finality window, `finalizeResolution()` is called → market enters `Resolved` state
+5. **Admin fallback:** the admin can call `setResolved()` to skip the 2-step process in emergency situations
 
 This "procedural challenge" mechanism ensures the deterministic rule (earliest update wins) is enforced even if the first resolver submits a suboptimal update.
 

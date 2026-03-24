@@ -28,7 +28,7 @@ Markets can be resolved permissionlessly by anyone with valid Pyth data. The res
 
 | Mechanism | Purpose |
 |-----------|---------|
-| **Minimum lot size** | Prevents dust orders (MIN_LOTS = 1, i.e. 1 USDT) |
+| **Minimum lot size** | Prevents dust orders (MIN_LOTS = 1, i.e. $0.01) |
 | **Full collateral locking** | Economic cost to placing orders (USDT locked until fill or cancel) |
 | **ERC-20 approval required** | Users must approve Vault before placing orders |
 | **Per-user active order cap** | MAX_USER_ORDERS = 20 per market — prevents a single address from flooding the book |

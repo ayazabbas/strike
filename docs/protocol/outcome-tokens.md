@@ -1,57 +1,63 @@
-# Outcome Tokens
+# Positions & Settlement
 
-Strike uses **ERC-1155 multi-tokens** to represent market outcomes. Each market has two tokens: YES and NO.
+## Internal Positions (Current 5-Minute Markets)
 
-## Token IDs
+Current 5-minute markets use **internal positions** tracked on-chain rather than ERC-1155 tokens. Each market has two sides: **UP** and **DOWN**.
 
-Token IDs are deterministic — no registry needed:
-- **YES:** `marketId * 2`
-- **NO:** `marketId * 2 + 1`
+### Position Tracking
 
-## Minting
-
-Outcome tokens are always minted as a **fully collateralized pair**:
+Positions are stored in a mapping:
 
 ```
-Deposit 1 USDT → Receive 1 YES + 1 NO
+positions[user][marketId][side]
 ```
 
-This guarantees that the total collateral in the system always equals the total supply of either token. There's no fractional reserve.
+When your order fills, your position is credited internally. No tokens are minted or transferred.
 
-## Merging
+### Collateral
 
-At any time before resolution, you can merge a pair back into collateral:
+Each lot represents **$0.01 of collateral** (LOT_SIZE = 1e16). When a bid and ask match at a clearing tick, the combined collateral from both sides equals $0.01 per lot — fully collateralized.
 
-```
-Return 1 YES + 1 NO → Receive 1 USDT
-```
+### Trading
 
-This is useful for exiting a position without trading on the book.
+Positions are what you trade on the orderbook:
+- **Buying UP at $0.60** = paying $0.006 per lot for an UP position (implies 60% probability)
+- **Selling UP at $0.60** = selling your UP position for $0.006 per lot
+- Equivalently, **buying DOWN at $0.40** (since UP + DOWN = $0.01 per lot)
 
-## Trading
-
-Outcome tokens are what you trade on the orderbook:
-- **Buying YES at 0.60** = paying 0.60 USDT for 1 YES token (implies 60% probability)
-- **Selling YES at 0.60** = selling 1 YES token for 0.60 USDT
-- Equivalently, **buying NO at 0.40** (since YES + NO = 1.00)
-
-Since tokens are ERC-1155, they're transferable and composable with other protocols.
-
-## Redemption (Post-Resolution)
+### Settlement (Post-Resolution)
 
 Once a market resolves:
-- **Winning tokens** redeem 1:1 for collateral (1 winning token → 1 USDT)
-- **Losing tokens** are worthless (can be burned or ignored)
+- **Winning positions** pay out at LOT_SIZE ($0.01) per lot in USDT
+- **Losing positions** pay nothing
+
+Batch settlement (collateral movement, position crediting) happens inline during `clearBatch`. After market resolution, winning positions are redeemed via `redeem()` on the Redemption contract.
 
 ### Example
 
-You buy 10 YES tokens at 0.60 each (cost: 6 USDT). The market resolves YES.
+You buy 1000 lots of UP at tick 60 (cost: 1000 x $0.01 x 60/100 = $6.00). The market resolves UP.
 
-- Your 10 YES tokens redeem for 10 USDT
-- Profit: 10 - 6 = 4 USDT (before fees)
+- Your 1000 UP lots pay out 1000 x $0.01 = $10.00
+- Profit: $10.00 - $6.00 = $4.00 (before fees)
 
-If the market resolves NO, your YES tokens are worth 0.
+If the market resolves DOWN, your UP position is worth $0.
 
-## Cancellation
+### Cancellation
 
-If a market is cancelled (no valid Pyth update within deadline), all token pairs can be merged back to collateral. No one loses funds.
+If a market is cancelled (no valid Pyth update within deadline), all collateral is refunded. No one loses funds.
+
+## ERC-1155 Tokens (Future Market Types)
+
+The contracts include a full ERC-1155 multi-token system (`OutcomeToken`) for future market types that may require transferable, composable tokens.
+
+### Token IDs
+
+Token IDs are deterministic — no registry needed:
+- **UP:** `marketId * 2`
+- **DOWN:** `marketId * 2 + 1`
+
+### Minting & Merging
+
+For token-based markets, outcome tokens are minted as fully collateralized pairs and can be merged back into collateral. Since tokens are ERC-1155, they are transferable and composable with other protocols.
+
+This system is not active for current 5-minute markets but is available in the contracts for future use (controlled by the `useInternalPositions` flag on market creation).

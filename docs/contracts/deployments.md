@@ -1,21 +1,15 @@
 # Deployments
 
-## BSC Testnet (Chain ID: 97)
+## BSC Mainnet (Chain ID: 56)
 
-Deployed 2026-03-18, block 96453171.
+Deployed at block 88279332.
 
 | Contract | Address |
 |----------|---------|
-| **MockUSDT** | [`0xb242dc031998b06772C63596Bfce091c80D4c3fA`](https://testnet.bscscan.com/address/0xb242dc031998b06772C63596Bfce091c80D4c3fA) |
-| **FeeModel** | [`0xf5b6889a56f9d95c059be028e682f802aee6c074`](https://testnet.bscscan.com/address/0xf5b6889a56f9d95c059be028e682f802aee6c074) |
-| **OutcomeToken** | [`0xc398678d4eb9b5a67dd3b2ff9cd6c517140fcf65`](https://testnet.bscscan.com/address/0xc398678d4eb9b5a67dd3b2ff9cd6c517140fcf65) |
-| **Vault** | [`0x04606a6f4909d0e9d9d763083d7649a2229eb679`](https://testnet.bscscan.com/address/0x04606a6f4909d0e9d9d763083d7649a2229eb679) |
-| **OrderBook** | [`0x9675bab261a6f168dd76fedb6d8706021e338c16`](https://testnet.bscscan.com/address/0x9675bab261a6f168dd76fedb6d8706021e338c16) |
-| **BatchAuction** | [`0x62224a55d05175eaeb22fc6263355c820c77e849`](https://testnet.bscscan.com/address/0x62224a55d05175eaeb22fc6263355c820c77e849) |
-| **MarketFactory** | [`0xf3ad14f117348de4886c29764fdcaf9c62794535`](https://testnet.bscscan.com/address/0xf3ad14f117348de4886c29764fdcaf9c62794535) |
-| **PythResolver** | [`0x5e7b8bb9d18bc620a19cea78caaf51e1ab8afa92`](https://testnet.bscscan.com/address/0x5e7b8bb9d18bc620a19cea78caaf51e1ab8afa92) |
-| **Redemption** | [`0xd181cc898bbbf4d2ddaebf6f245f043dd8f93704`](https://testnet.bscscan.com/address/0xd181cc898bbbf4d2ddaebf6f245f043dd8f93704) |
-| **Pyth Core** | [`0xd7308b14BF4008e7C7196eC35610B1427C5702EA`](https://testnet.bscscan.com/address/0xd7308b14BF4008e7C7196eC35610B1427C5702EA) |
+| **USDT** | [`0x55d398326f99059fF775485246999027B3197955`](https://bscscan.com/address/0x55d398326f99059fF775485246999027B3197955) |
+| **Pyth Core** | [`0x4D7E825f80bDf85e913E0DD2A2D54927e9dE1594`](https://bscscan.com/address/0x4D7E825f80bDf85e913E0DD2A2D54927e9dE1594) |
+
+Strike protocol contracts are deployed and verified on BscScan. Contract addresses are available on [BscScan](https://bscscan.com).
 
 ## Price Feeds
 

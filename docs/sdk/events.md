@@ -7,7 +7,7 @@ Subscribe to on-chain events via WebSocket:
 ```rust
 use strike_sdk::prelude::*;
 
-let client = StrikeClient::new(StrikeConfig::bsc_testnet()).build()?;
+let client = StrikeClient::new(StrikeConfig::bsc_mainnet()).build()?;
 
 let mut events = client.events().await?;
 

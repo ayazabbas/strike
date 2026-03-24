@@ -11,7 +11,7 @@ The trading page (`/market/:id`) is where the action happens.
 │              │                      │                   │
 │  Order Entry │     Orderbook        │   Trade History   │
 │              │   (depth chart +     │   (recent fills)  │
-│  Side: YES/NO│    price ladder)     │                   │
+│  Side: UP/DOWN    price ladder)     │                   │
 │  Price: 0.65 │                      │                   │
 │  Amount: 10  │                      │                   │
 │  Type: Limit │                      │                   │
@@ -31,11 +31,11 @@ The trading page (`/market/:id`) is where the action happens.
 
 ## Order Entry
 
-- **Side toggle:** Buy YES (green) / Buy NO (red)
-- **Price input:** tick slider (1-99) or numeric input, shows implied probability
+- **Side toggle:** Buy UP (green) / Buy DOWN (red)
+- **Price input:** tick slider (1-99) or numeric input, prices shown as $0.01-$0.99, shows implied probability
 - **Amount:** USDT input with available balance shown
 - **Order type:** toggle — GoodTilCancel (GTC), GoodTilBatch (GTB)
-- **Submit:** single transaction, status toast tracks confirmation
+- **Submit:** single transaction via Privy server wallet, status toast tracks confirmation
 
 ### Market Orders & Anti-MEV Price Protection
 

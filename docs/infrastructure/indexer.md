@@ -7,9 +7,11 @@ The indexer is an off-chain service that indexes on-chain events and serves real
 | Event | Data Extracted |
 |-------|---------------|
 | `OrderPlaced` | Order details, tick, side, amount |
+| `OrderResting` | Order parked outside active tree |
 | `OrderCancelled` | Order removal |
+| `OrderSettled` | Per-order fill result, amounts |
 | `BatchCleared` | Clearing price, volume, fill fractions |
-| `FillClaimed` | User fills, amounts |
+| `GtcAutoCancelled` | GTC order auto-cancelled on market close |
 | `MarketCreated` | Market parameters, expiry |
 | `MarketResolved` | Outcome, settlement price |
 
@@ -39,13 +41,18 @@ Connect to receive real-time updates:
 ws://indexer:3002/ws
 ```
 
-### Events
+### Message Format
+
+All messages use the format `{ type, event, data: {...} }`. Always access fields via `msg.data.field`.
+
 ```json
-{"type": "orderbook", "marketId": "...", "data": {...}}
-{"type": "trade", "marketId": "...", "data": {...}}
-{"type": "market_status", "marketId": "...", "status": "resolved"}
-{"type": "batch_cleared", "marketId": "...", "clearingTick": 65, "volume": "..."}
+{"type": "orderbook", "event": "update", "data": {"marketId": "...", "bids": [...], "asks": [...]}}
+{"type": "trade", "event": "fill", "data": {"marketId": "...", "price": 65, "volume": "..."}}
+{"type": "market_status", "event": "change", "data": {"marketId": "...", "status": "resolved"}}
+{"type": "batch_cleared", "event": "cleared", "data": {"marketId": "...", "clearingTick": 65, "volume": "..."}}
 ```
+
+On `BatchCleared`, the WebSocket broadcasts a full orderbook snapshot so clients can reconcile state.
 
 Subscribe to specific markets:
 ```json
@@ -55,5 +62,5 @@ Subscribe to specific markets:
 ## Infrastructure
 
 - **RPC:** uses a dedicated RPC provider (public BSC endpoints may disable `eth_getLogs`)
-- **Database:** SQLite (dev) or PostgreSQL (production)
+- **Database:** PostgreSQL
 - **Deployment:** systemd service, configurable via `.env`

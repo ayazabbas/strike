@@ -19,7 +19,7 @@ This calls `USDT.approve(vault, type(uint256).max)`. It checks the current allow
 let signer = client.signer_address().unwrap();
 
 let balance = client.vault().usdt_balance(signer).await?;
-println!("USDT balance: {balance}");  // in wei (1 USDT = 1e18)
+println!("USDT balance: {balance}");  // in wei (1 USDT = 1e18 wei)
 
 let allowance = client.vault().usdt_allowance(signer).await?;
 println!("vault allowance: {allowance}");
@@ -64,7 +64,7 @@ if !approved {
 
 ## Redemption
 
-After a market is [resolved via Pyth oracle](../protocol/oracle-resolution.md), winning outcome tokens can be redeemed 1:1 for USDT. Losing tokens are worthless.
+After a market is [resolved via Pyth oracle](../protocol/oracle-resolution.md), winning outcome tokens can be redeemed for USDT at LOT_SIZE ($0.01) per lot. Losing tokens are worthless.
 
 ### Check Balances
 
@@ -87,7 +87,7 @@ This calls `Redemption.redeem(factoryMarketId, amount)` on-chain.
 
 ## Collateral Model Summary
 
-In Strike, 1 YES + 1 NO = 1 USDT (fully collateralized). Both sides of the orderbook lock USDT — askers do NOT need to hold outcome tokens to sell. See [Batch Auctions](../protocol/batch-auctions.md) for details on how collateral flows during clearing.
+Each matched lot is fully collateralized at LOT_SIZE ($0.01). Both sides of the orderbook lock USDT — askers do NOT need to hold outcome tokens to sell. See [Batch Auctions](../protocol/batch-auctions.md) for details on how collateral flows during clearing.
 
 | Operation | Collateral |
 |-----------|-----------|
@@ -95,5 +95,7 @@ In Strike, 1 YES + 1 NO = 1 USDT (fully collateralized). Both sides of the order
 | Ask at tick T | `lots × (100-T)/100 × LOT_SIZE` USDT |
 | SellYes | YES tokens custodied by OrderBook |
 | SellNo | NO tokens custodied by OrderBook |
-| Redeem (winner) | 1 token → 1 USDT |
+| Redeem (winner) | 1 lot → $0.01 (LOT_SIZE) |
 | Redeem (loser) | worthless |
+
+> **Note:** Current markets use internal positions, but ERC-1155 operations are available for future market types.

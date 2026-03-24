@@ -82,7 +82,7 @@ The mapping is stored in `MarketFactory.marketMeta[factoryMarketId].orderBookMar
 
 - **User-facing / API:** Always use `factoryMarketId`. It is the canonical market identifier for resolution, redemption, and display.
 - **Trading operations:** `OrderBook.placeOrder` and `BatchAuction.clearBatch` use `orderBookMarketId`.
-- **Token IDs:** `OutcomeToken` derives YES/NO token IDs from `orderBookMarketId` (`marketId*2` = YES, `marketId*2+1` = NO).
+- **Token IDs:** `OutcomeToken` derives UP/DOWN token IDs from `orderBookMarketId` (`marketId*2` = UP, `marketId*2+1` = DOWN).
 
 ## Key Flows
 
@@ -99,10 +99,10 @@ One-time approval. The Vault uses `safeTransferFrom` to pull USDT when orders ar
 ```solidity
 uint256 orderId = orderBook.placeOrder(
     orderBookMarketId,           // from marketMeta
-    Side.Bid,                    // 0 = Bid (YES), 1 = Ask (NO)
+    Side.Bid,                    // 0 = Bid (UP), 1 = Ask (DOWN)
     OrderType.GoodTilCancel,     // 0 = GoodTilBatch, 1 = GoodTilCancel
     60,                          // tick (1-99, price = tick/100)
-    10                           // lots (each = 1 USDT)
+    10                           // lots (each = $0.01)
 );
 ```
 
@@ -110,7 +110,7 @@ Collateral is locked in the Vault automatically:
 - Bid: `lots * LOT_SIZE * tick / 100`
 - Ask: `lots * LOT_SIZE * (100 - tick) / 100`
 
-Where `LOT_SIZE = 1e18 = 1 USDT`.
+Where `LOT_SIZE = 1e16 = $0.01`.
 
 ### 3. Batch Clearing (Atomic Settlement)
 
@@ -124,7 +124,7 @@ Finds the clearing tick via the segment tree, records the `BatchResult`, and **s
 - Excess refund (order tick vs clearing tick difference) returned to owner
 - Uniform fee (20 bps) deducted and sent to `protocolFeeCollector`
 - Unfilled collateral returned (GoodTilBatch) or rolled to next batch (GoodTilCancel)
-- Outcome tokens minted: Bid fills receive YES tokens, Ask fills receive NO tokens
+- Positions credited: Bid fills receive UP positions, Ask fills receive DOWN positions
 
 No separate claim step is needed — settlement happens inline.
 
@@ -134,18 +134,18 @@ No separate claim step is needed — settlement happens inline.
 redemption.redeem(factoryMarketId, tokenAmount);
 ```
 
-Burns `tokenAmount` winning outcome tokens and pays out `tokenAmount * LOT_SIZE` USDT from the market's redemption pool.
+Burns `tokenAmount` winning outcome tokens and pays out `tokenAmount * LOT_SIZE` ($0.01 per lot) USDT from the market's redemption pool.
 
 ## Collateral Formulas
 
-All values in wei. `LOT_SIZE = 1e18` (1 USDT).
+All values in wei. `LOT_SIZE = 1e16` ($0.01).
 
 | Side | Collateral Required |
 |------|---------------------|
-| Bid (YES) | `lots * LOT_SIZE * tick / 100` |
-| Ask (NO) | `lots * LOT_SIZE * (100 - tick) / 100` |
+| Bid (UP) | `lots * LOT_SIZE * tick / 100` |
+| Ask (DOWN) | `lots * LOT_SIZE * (100 - tick) / 100` |
 
-Tick represents implied probability (1--99%). A bid at tick 60 means "willing to pay 60% of LOT_SIZE per lot for YES exposure."
+Tick represents implied probability (1--99%). A bid at tick 60 means "willing to pay 60% of LOT_SIZE per lot for UP exposure."
 
 ## Reading Market State
 

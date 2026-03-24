@@ -5,7 +5,7 @@ The Strike indexer provides REST endpoints for querying aggregated market state.
 ## Get Markets
 
 ```rust
-let client = StrikeClient::new(StrikeConfig::bsc_testnet()).build()?;
+let client = StrikeClient::new(StrikeConfig::bsc_mainnet()).build()?;
 
 // All markets
 let markets = client.indexer().get_markets().await?;
@@ -100,7 +100,7 @@ pub struct IndexerOrder {
 The indexer URL is set in `StrikeConfig` with a default for each network. Override it with the builder:
 
 ```rust
-let client = StrikeClient::new(StrikeConfig::bsc_testnet())
+let client = StrikeClient::new(StrikeConfig::bsc_mainnet())
     .with_indexer("https://your-indexer.com")
     .build()?;
 ```

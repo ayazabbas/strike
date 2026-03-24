@@ -2,7 +2,7 @@
 
 ## Estimated Gas Per Operation
 
-Based on EVM gas primitives and the FBA CLOB feasibility report. **These are estimates — actual benchmarks will be measured on BSC testnet.**
+Based on EVM gas primitives and the FBA CLOB feasibility report. **These are estimates — actual benchmarks are measured on BSC mainnet.**
 
 | Operation | Gas (Low) | Gas (Typical) | Gas (High) |
 |-----------|-----------|---------------|------------|
@@ -41,7 +41,8 @@ BSC's 2026 gas price (~0.05 gwei) makes all operations sub-cent for users and su
 - Segment tree traversal: O(log 99) ≈ 7 iterations
 - Result storage: one struct write
 - Per-order settlement: unlock, transfer fees, mint tokens, refund excess
-- Scales linearly with order count, bounded by MAX_ORDERS_PER_BATCH (400)
+- Scales linearly with order count, bounded by MAX_ORDERS_PER_BATCH (1600)
+- Settlement is chunked via SETTLE_CHUNK_SIZE = 400 per `clearBatch` call
 
 ## Optimization Targets
 

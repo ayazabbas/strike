@@ -42,9 +42,9 @@ For each order in `batchOrderIds[marketId][batchId]`:
 2. Filled collateral calculated at **clearing tick** (not the order's limit tick)
 3. Excess refund = (collateral locked at order tick) - (cost at clearing tick)
 4. Deduct fee (20 bps total, split 50/50): buy side pays `floor(fee/2)`, sell side pays `ceil(fee/2)` from USDT payout. Fees sent to protocol fee collector
-5. Mint outcome token via `mintSingle()`:
-   - **Bidder** receives YES token
-   - **Asker** receives NO token
+5. Mint outcome token via `mintSingle()` (or credit internal position for `useInternalPositions` markets):
+   - **Bidder** receives YES token (or YES position credit)
+   - **Asker** receives NO token (or NO position credit)
 6. Remove filled lots from order, update segment tree
 7. **Fully filled or GTB:** withdraw unfilled collateral + excess refund to wallet
 8. **Partially filled GTC:** roll remainder to next batch, withdraw excess refund if any
@@ -54,7 +54,7 @@ For each order in `batchOrderIds[marketId][batchId]`:
 Both sides lock USDT collateral (ERC-20). Users must approve the Vault before placing orders. Asks do NOT lock outcome tokens.
 - Bid collateral: `lots * LOT_SIZE * tick / 100`
 - Ask collateral: `lots * LOT_SIZE * (100 - tick) / 100`
-- Sum per matched lot = LOT_SIZE (1e18 = 1 USDT), fully collateralized
+- Sum per matched lot = LOT_SIZE (1e16 = $0.01), fully collateralized
 
 ### Clearing Price Settlement
 

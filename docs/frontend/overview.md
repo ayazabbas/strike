@@ -1,17 +1,19 @@
 # Frontend Overview
 
-Strike's web frontend is a trading terminal built with Next.js 15, Tailwind CSS, and shadcn/ui. Dark theme, inspired by Bloomberg and Polymarket.
+Strike's web frontend is a trading terminal built with Next.js 16, Tailwind CSS, and shadcn/ui. Dark theme, inspired by Bloomberg and Polymarket.
 
 ## Stack
 
 | Component | Technology |
 |-----------|-----------|
-| Framework | Next.js 15 (App Router) |
+| Framework | Next.js 16 (App Router) |
 | Styling | Tailwind CSS + shadcn/ui |
-| Wallet | RainbowKit (MetaMask, WalletConnect, Coinbase Wallet) |
-| Chain interaction | wagmi v2 + viem |
+| Wallet | Privy (server-managed wallets, no seed phrases) |
+| Chain interaction | wagmi v3 + viem v2.45 |
 | Real-time data | Indexer WebSocket |
 | Contract ABIs | Auto-generated from Foundry artifacts |
+
+> **Note:** Users get a server-managed wallet on signup. Transaction signing happens server-side via the Privy API — no browser extensions or seed phrases required.
 
 ## Pages
 

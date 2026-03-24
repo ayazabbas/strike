@@ -12,18 +12,18 @@ Leverage is backed by a **protocol liquidity vault** — similar to how HLP powe
 
 ### Without Leverage (Current)
 
-A trader buys YES at tick 50 ($0.50):
+A trader buys UP at tick 50 ($0.50):
 - Pays **$0.50** per lot
-- Wins **$1.00** if YES (2x return on capital)
-- Loses **$0.50** if NO
+- Wins **$1.00** if UP (2x return on capital)
+- Loses **$0.50** if DOWN
 
 ### With 3x Leverage
 
-A trader buys YES at tick 50 with 3x:
+A trader buys UP at tick 50 with 3x:
 - Pays **$0.50** per lot (same as before)
 - Vault locks an additional **$1.00** per lot as backing
-- Wins **$1.50** if YES (the vault contributes the extra $0.50)
-- Loses **$0.50** if NO (vault keeps its locked capital + collects a premium)
+- Wins **$1.50** if UP (the vault contributes the extra $0.50)
+- Loses **$0.50** if DOWN (vault keeps its locked capital + collects a premium)
 
 The trader's risk/reward is amplified, but max loss is still capped at their collateral — no liquidations.
 
@@ -103,14 +103,14 @@ More capital-efficient, but less predictable for traders.
 
 **Market:** BTC above $84,500 in 5 minutes? (tick 50 = $0.50)
 
-| Trader | Action | Leverage | Pays | Vault Locks | If YES Wins | If NO Wins |
+| Trader | Action | Leverage | Pays | Vault Locks | If UP Wins | If DOWN Wins |
 |---|---|---|---|---|---|---|
-| Alice | Buy YES | 1x | $50 | $0 | +$50 | -$50 |
-| Bob | Buy YES | 3x | $50 | $100 | +$100 | -$50 |
-| Carol | Buy NO | 5x | $50 | $200 | -$50 | +$200 |
+| Alice | Buy UP | 1x | $50 | $0 | +$50 | -$50 |
+| Bob | Buy UP | 3x | $50 | $100 | +$100 | -$50 |
+| Carol | Buy DOWN | 5x | $50 | $200 | -$50 | +$200 |
 
 - Bob pays a 2% premium ($1) for 3x leverage
-- If YES wins: Bob gets $150 ($50 collateral + $100 from vault). Vault is down $100 on Bob but keeps Carol's $50 + $200 locked backing
+- If UP wins: Bob gets $150 ($50 collateral + $100 from vault). Vault is down $100 on Bob but keeps Carol's $50 + $200 locked backing
 - Net vault P&L depends on aggregate outcomes across all traders and markets
 
 ## Comparison
