@@ -174,7 +174,8 @@ impl StrikeClient {
         let signer = self.signer_addr.ok_or(StrikeError::NoWallet)?;
         let ns = NonceSender::new(self.provider.clone(), signer)
             .await
-            .map_err(StrikeError::from)?;
+            .map_err(StrikeError::from)?
+            .with_bsc_gas_price();
         self.nonce_sender = Some(Arc::new(Mutex::new(ns)));
         Ok(())
     }
