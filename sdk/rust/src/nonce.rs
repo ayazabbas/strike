@@ -11,6 +11,9 @@ use alloy::rpc::types::TransactionRequest;
 use eyre::{Result, WrapErr};
 use tracing::{info, warn};
 
+/// BSC RPC providers enforce a minimum gas price of 0.05 gwei.
+const BSC_MIN_GAS_PRICE: u128 = 50_000_000; // 0.05 gwei in wei
+
 /// Concrete pending tx type.
 pub type PendingTx = PendingTransactionBuilder<Ethereum>;
 
@@ -65,12 +68,36 @@ impl NonceSender {
         self.nonce
     }
 
+    /// Enforce BSC minimum gas price on a transaction request.
+    fn apply_gas_floor(tx: TransactionRequest) -> TransactionRequest {
+        let mut tx = tx;
+        // EIP-1559 fields
+        if let Some(max_fee) = tx.max_fee_per_gas {
+            if max_fee < BSC_MIN_GAS_PRICE {
+                tx.max_fee_per_gas = Some(BSC_MIN_GAS_PRICE);
+            }
+        }
+        if let Some(max_priority) = tx.max_priority_fee_per_gas {
+            if max_priority < BSC_MIN_GAS_PRICE {
+                tx.max_priority_fee_per_gas = Some(BSC_MIN_GAS_PRICE);
+            }
+        }
+        // Legacy gas price
+        if let Some(gp) = tx.gas_price {
+            if gp < BSC_MIN_GAS_PRICE {
+                tx.gas_price = Some(BSC_MIN_GAS_PRICE);
+            }
+        }
+        tx
+    }
+
     /// Send a transaction, stamping it with the next nonce.
     ///
     /// On nonce-related errors: syncs from chain and retries once.
     /// The returned [`PendingTx`] can be `.await`ed for the receipt
     /// **after** releasing the Mutex lock.
     pub async fn send(&mut self, tx: TransactionRequest) -> Result<PendingTx> {
+        let tx = Self::apply_gas_floor(tx);
         let attempt = tx.clone().nonce(self.nonce);
         match self.provider.send_transaction(attempt).await {
             Ok(pending) => {
