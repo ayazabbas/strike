@@ -23,14 +23,10 @@ pub type PendingTx = PendingTransactionBuilder<Ethereum>;
 ///
 /// On nonce-related errors, the sender automatically syncs the nonce from chain
 /// and retries once before returning an error.
-/// BSC mainnet minimum gas price (5 Gwei = 5_000_000_000 wei).
-const BSC_MIN_GAS_PRICE: u128 = 5_000_000_000;
-
 pub struct NonceSender {
     provider: DynProvider,
     signer_addr: Address,
     nonce: u64,
-    min_gas_price: Option<u128>,
 }
 
 impl NonceSender {
@@ -45,19 +41,7 @@ impl NonceSender {
             provider,
             signer_addr,
             nonce,
-            min_gas_price: None,
         })
-    }
-
-    /// Set a minimum gas price floor (e.g. for BSC mainnet).
-    pub fn with_min_gas_price(mut self, min: u128) -> Self {
-        self.min_gas_price = Some(min);
-        self
-    }
-
-    /// Set BSC mainnet gas price floor (5 Gwei).
-    pub fn with_bsc_gas_price(self) -> Self {
-        self.with_min_gas_price(BSC_MIN_GAS_PRICE)
     }
 
     /// Re-fetch nonce from chain (use after errors).
@@ -86,17 +70,8 @@ impl NonceSender {
     /// On nonce-related errors: syncs from chain and retries once.
     /// The returned [`PendingTx`] can be `.await`ed for the receipt
     /// **after** releasing the Mutex lock.
-    /// Apply gas price floor to a transaction request.
-    fn apply_gas_price(&self, tx: TransactionRequest) -> TransactionRequest {
-        if let Some(min) = self.min_gas_price {
-            tx.gas_price(min)
-        } else {
-            tx
-        }
-    }
-
     pub async fn send(&mut self, tx: TransactionRequest) -> Result<PendingTx> {
-        let attempt = self.apply_gas_price(tx.clone().nonce(self.nonce));
+        let attempt = tx.clone().nonce(self.nonce);
         match self.provider.send_transaction(attempt).await {
             Ok(pending) => {
                 self.nonce += 1;
@@ -110,7 +85,7 @@ impl NonceSender {
                 {
                     warn!(nonce = self.nonce, err = %e, "nonce error — syncing and retrying");
                     self.sync().await?;
-                    let retry = self.apply_gas_price(tx.nonce(self.nonce));
+                    let retry = tx.nonce(self.nonce);
                     let pending = self
                         .provider
                         .send_transaction(retry)
