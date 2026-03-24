@@ -69,25 +69,19 @@ impl NonceSender {
     }
 
     /// Enforce BSC minimum gas price on a transaction request.
+    ///
+    /// BSC uses legacy (non-EIP-1559) transactions. When no gas fields are set,
+    /// alloy auto-fills at the provider level — which can result in values below
+    /// the RPC's minimum. We force legacy `gas_price` to at least 0.05 gwei and
+    /// clear EIP-1559 fields to prevent alloy from choosing type-2 transactions.
     fn apply_gas_floor(tx: TransactionRequest) -> TransactionRequest {
         let mut tx = tx;
-        // EIP-1559 fields
-        if let Some(max_fee) = tx.max_fee_per_gas {
-            if max_fee < BSC_MIN_GAS_PRICE {
-                tx.max_fee_per_gas = Some(BSC_MIN_GAS_PRICE);
-            }
-        }
-        if let Some(max_priority) = tx.max_priority_fee_per_gas {
-            if max_priority < BSC_MIN_GAS_PRICE {
-                tx.max_priority_fee_per_gas = Some(BSC_MIN_GAS_PRICE);
-            }
-        }
-        // Legacy gas price
-        if let Some(gp) = tx.gas_price {
-            if gp < BSC_MIN_GAS_PRICE {
-                tx.gas_price = Some(BSC_MIN_GAS_PRICE);
-            }
-        }
+        // Force legacy gas price — BSC doesn't use EIP-1559
+        let gp = tx.gas_price.unwrap_or(BSC_MIN_GAS_PRICE);
+        tx.gas_price = Some(if gp < BSC_MIN_GAS_PRICE { BSC_MIN_GAS_PRICE } else { gp });
+        // Clear EIP-1559 fields so alloy sends a type-0 (legacy) tx
+        tx.max_fee_per_gas = None;
+        tx.max_priority_fee_per_gas = None;
         tx
     }
 

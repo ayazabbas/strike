@@ -74,6 +74,13 @@ impl<'a> OrdersClient<'a> {
             .await
             .map_err(|e| StrikeError::Contract(e.to_string()))?;
 
+        if !receipt.status() {
+            return Err(StrikeError::Contract(format!(
+                "placeOrders reverted (market_id={market_id}, tx={tx_hash}, gas_used={})",
+                receipt.gas_used
+            )));
+        }
+
         let placed = parse_placed_orders(&receipt, market_id);
         info!(market_id, tx = %tx_hash, gas_used = receipt.gas_used, placed = placed.len(), "placeOrders confirmed");
 
@@ -117,6 +124,13 @@ impl<'a> OrdersClient<'a> {
             .get_receipt()
             .await
             .map_err(|e| StrikeError::Contract(e.to_string()))?;
+
+        if !receipt.status() {
+            return Err(StrikeError::Contract(format!(
+                "replaceOrders reverted (market_id={market_id}, tx={tx_hash}, gas_used={})",
+                receipt.gas_used
+            )));
+        }
 
         let placed = parse_placed_orders(&receipt, market_id);
         info!(market_id, tx = %tx_hash, gas_used = receipt.gas_used, cancelled = cancel_ids.len(), placed = placed.len(), "replaceOrders confirmed");
