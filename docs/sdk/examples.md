@@ -154,67 +154,50 @@ async fn main() -> Result<()> {
 
 ## simple_bot — Minimal Market Maker Skeleton
 
-Listens for new markets and quotes a fixed 10-tick spread around mid (tick 50). This is a skeleton — a real bot would compute fair value from a price feed.
+Event-driven market maker that demonstrates real bot patterns from the Strike MM. Quotes around the orderbook midpoint with a fixed spread, requotes atomically via `replaceOrders`, tracks fills, and cancels all orders on shutdown.
 
 ```bash
 PRIVATE_KEY=0x... cargo run --example simple_bot
 ```
 
+Key patterns demonstrated:
+
+| Pattern | Why it matters |
+|---------|---------------|
+| `init_nonce_sender()` | Prevents nonce-too-low errors under rapid sends |
+| `scan_orders()` startup recovery | Cancels stale orders from previous runs |
+| `replace()` for requoting | Atomic cancel + place — zero empty-book time |
+| `tokio::select!` event loop | React to events, handle graceful shutdown |
+| Position tracking via `OrderSettled` | Know your net exposure per market |
+
 ```rust
-use strike_sdk::prelude::*;
-
-#[tokio::main]
-async fn main() -> Result<()> {
-    tracing_subscriber::fmt::init();
-
-    let private_key = std::env::var("PRIVATE_KEY").expect("PRIVATE_KEY required");
-
-    let client = StrikeClient::new(StrikeConfig::bsc_mainnet())
-        .with_private_key(&private_key)
-        .build()?;
-
-    client.vault().approve_usdt().await?;
-
-    let mut events = client.events().await?;
-    println!("listening for new markets...\n");
-
-    while let Some(event) = events.next().await {
-        match event {
-            StrikeEvent::MarketCreated { market_id, strike_price, expiry_time, .. } => {
-                println!("new market {market_id} | strike: {strike_price} | expiry: {expiry_time}");
-
-                let mid = 50u8;
-                let spread = 5u8;
-                let lots = 100u64;
-
-                match client
-                    .orders()
-                    .place(market_id, &[
-                        OrderParam::bid(mid - spread, lots),
-                        OrderParam::ask(mid + spread, lots),
-                    ])
-                    .await
-                {
-                    Ok(orders) => {
-                        println!("  placed {} orders on market {market_id}", orders.len());
-                    }
-                    Err(e) => println!("  failed to place orders: {e}"),
+// Core loop structure (see full source in sdk/rust/examples/simple_bot.rs):
+loop {
+    tokio::select! {
+        _ = &mut shutdown_rx => {
+            // Cancel all orders on Ctrl+C
+            client.orders().cancel(&all_ids).await?;
+            return Ok(());
+        }
+        Some(event) = events.next() => {
+            match event {
+                StrikeEvent::MarketCreated { market_id, .. } => {
+                    // Initial quote: read orderbook → compute fair → place()
                 }
-            }
-            StrikeEvent::BatchCleared { market_id, clearing_tick, matched_lots, .. } => {
-                if matched_lots > 0 {
-                    println!("batch cleared: market {market_id} | tick {clearing_tick} | {matched_lots} lots");
+                StrikeEvent::BatchCleared { market_id, .. } => {
+                    // Requote: replace() = atomic cancel + place
                 }
+                StrikeEvent::OrderSettled { filled_lots, .. } => {
+                    // Track position: bid fill = +lots, ask fill = -lots
+                }
+                _ => {}
             }
-            _ => {}
         }
     }
-
-    Ok(())
 }
 ```
 
-**What it demonstrates:** Combining [events](events.md) with [order placement](orders.md), event-driven bot architecture, error handling per-market.
+**What it demonstrates:** [Nonce management](client.md#nonce-manager), [event streaming](events.md), [order placement](orders.md), [atomic requoting](orders.md#replacing-orders-atomic-cancel--place), [startup recovery](events.md#historical-scanning), graceful shutdown.
 
 ## Tips for Building a Real Bot
 
