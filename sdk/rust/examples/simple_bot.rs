@@ -99,10 +99,7 @@ async fn main() -> Result<()> {
                         println!("MarketCreated | id: {market_id} | strike: {strike_price} | expiry: {expiry_time}");
 
                         // Get fair value from orderbook midpoint (naive — real bots use a price feed)
-                        let fair = match get_fair_tick(&client, market_id).await {
-                            Some(f) => f,
-                            None => 50, // fallback if no orderbook data
-                        };
+                        let fair = get_fair_tick(&client, market_id).await.unwrap_or(50);
 
                         // Quote around fair value
                         let bid_tick = fair.saturating_sub(SPREAD).max(1);
@@ -143,9 +140,8 @@ async fn main() -> Result<()> {
 
                             if cancel_ids.is_empty() { continue; }
 
-                            let fair = match get_fair_tick(&client, market_id).await {
-                                Some(f) => f,
-                                None => continue,
+                            let Some(fair) = get_fair_tick(&client, market_id).await else {
+                                continue;
                             };
                             let bid_tick = fair.saturating_sub(SPREAD).max(1);
                             let ask_tick = (fair + SPREAD).min(99);
