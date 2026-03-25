@@ -21,6 +21,7 @@ let client = StrikeClient::new(StrikeConfig::bsc_mainnet())
 | Method | Chain ID | Description |
 |--------|----------|-------------|
 | `StrikeConfig::bsc_mainnet()` | 56 | BSC mainnet with default RPC, WSS, and indexer URLs |
+| `StrikeConfig::bsc_testnet()` | 97 | BSC testnet with default RPC, WSS, and indexer URLs |
 | `StrikeConfig::custom(addresses, chain_id)` | any | Custom deployment |
 
 Each preset includes default RPC, WSS, and indexer endpoints. Override any of them with builder methods.

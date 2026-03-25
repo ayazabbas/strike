@@ -24,7 +24,7 @@ Use `StrikeConfig::bsc_mainnet()` for BSC mainnet with default RPC, WSS, and ind
 
 ```toml
 [dependencies]
-strike-sdk = "0.1"           # nonce-manager enabled by default
+strike-sdk = "0.2"           # nonce-manager enabled by default
 strike-sdk = { version = "0.1", default-features = false }  # disable nonce-manager
 ```
 
@@ -36,7 +36,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-strike-sdk = "0.1"
+strike-sdk = "0.2"
 tokio = { version = "1", features = ["full"] }
 ```
 
