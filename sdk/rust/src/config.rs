@@ -36,31 +36,31 @@ impl StrikeConfig {
     pub fn bsc_testnet() -> Self {
         Self {
             addresses: ContractAddresses {
-                usdt: "0x6Cec5A83a392B90aeDB6f8f7D8A71e231883cb2f"
+                usdt: "0xb242dc031998b06772C63596Bfce091c80D4c3fA"
                     .parse()
                     .unwrap(),
-                fee_model: "0xC89a0BAE5c91428Fde19D07820917feBDCBf1597"
+                fee_model: "0x46C198Fa5e0E1CCEc3652bAB9A975B9F68B7F39E"
                     .parse()
                     .unwrap(),
-                outcome_token: "0x7e3F8454abE51CA4d6AAc932e94DF80425Fd27D0"
+                outcome_token: "0x1c6622bE0D8cefD48009A337CD393cAe4530fc9a"
                     .parse()
                     .unwrap(),
-                vault: "0x4b5DF4104C4a2238ECa1fE8721c725Af80012bb6"
+                vault: "0x10909d11446e48551DA0366f59b9Ac9Cb9079314"
                     .parse()
                     .unwrap(),
-                order_book: "0xab1f925c7D97B365FCb4151fCf42d7AC528Cc830"
+                order_book: "0x343d3f42562A8E5C794DFf8637664D2d03246FB9"
                     .parse()
                     .unwrap(),
-                batch_auction: "0x5b78902D8453821973667a7D1145b5a1208b862c"
+                batch_auction: "0xF6233287fb878706B191b868a5e38E1DfdfAdDf7"
                     .parse()
                     .unwrap(),
-                market_factory: "0xD1a6C60DF935595eD5BeA7Dc26623f9A5DeB117C"
+                market_factory: "0xd2783195A8d4Ee2f99616c3b9048B43187951E67"
                     .parse()
                     .unwrap(),
-                pyth_resolver: "0x6Ab6901ae588Cf7B0fb59B40c79A0bBfe944D920"
+                pyth_resolver: "0xF83aE0cfd2D1546Bb4b15ecEB010C1B045d7Ddc9"
                     .parse()
                     .unwrap(),
-                redemption: "0xF70e37E668DDF8D9b93920887392dAfDC900e9D3"
+                redemption: "0x03961AcDb718D84079De1B0236a77A7a1A3df177"
                     .parse()
                     .unwrap(),
             },
@@ -68,7 +68,7 @@ impl StrikeConfig {
             rpc_url: "https://data-seed-prebsc-1-s1.binance.org:8545".to_string(),
             wss_url: "wss://bsc-testnet.core.chainstack.com/e602061228197d446d43e62320004d74"
                 .to_string(),
-            indexer_url: "https://strike-indexer.fly.dev".to_string(),
+            indexer_url: "https://testnet.strike.pm/api".to_string(),
         }
     }
 
@@ -81,20 +81,35 @@ impl StrikeConfig {
                 usdt: "0x55d398326f99059fF775485246999027B3197955"
                     .parse()
                     .unwrap(),
-                // Placeholder addresses — update when mainnet contracts are deployed
-                fee_model: Address::ZERO,
-                outcome_token: Address::ZERO,
-                vault: Address::ZERO,
-                order_book: Address::ZERO,
-                batch_auction: Address::ZERO,
-                market_factory: Address::ZERO,
-                pyth_resolver: Address::ZERO,
-                redemption: Address::ZERO,
+                fee_model: "0xBB628007734963352b1cF9094847B902b0fca9aB"
+                    .parse()
+                    .unwrap(),
+                outcome_token: "0xBd65B054a08fe0e8d26325e69B6EB6aD6dfF1516"
+                    .parse()
+                    .unwrap(),
+                vault: "0x2556E5DE92281EdA3300F044dfB9158416407eed"
+                    .parse()
+                    .unwrap(),
+                order_book: "0x074Ca415B501Bcca0020e9c312cf1F80796Ae3b1"
+                    .parse()
+                    .unwrap(),
+                batch_auction: "0xa8e9a6B62B93A4360969972Dc7300C6Be7B5f9D8"
+                    .parse()
+                    .unwrap(),
+                market_factory: "0x9c045dc57c1132e5D13b234F8e166cAaD8CE2c3D"
+                    .parse()
+                    .unwrap(),
+                pyth_resolver: "0x1B3335A22D410713A4Cd32eF8ffBEe672aD4e65d"
+                    .parse()
+                    .unwrap(),
+                redemption: "0x03961AcDb718D84079De1B0236a77A7a1A3df177"
+                    .parse()
+                    .unwrap(),
             },
             chain_id: 56,
             rpc_url: "https://bsc-dataseed1.binance.org".to_string(),
             wss_url: "wss://bsc-ws-node.nariox.org:443".to_string(),
-            indexer_url: String::new(),
+            indexer_url: "https://app.strike.pm/api".to_string(),
         }
     }
 
