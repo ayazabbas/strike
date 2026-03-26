@@ -248,7 +248,14 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
 
     function _cancelForReplace(uint256 orderId, address caller) internal returns (uint256 refund) {
         Order storage o = orders[orderId];
-        if (o.lots == 0) return 0;
+        if (o.lots == 0) {
+            // Order already settled by a concurrent clearBatch.
+            // Still decrement activeOrderCount to prevent desync.
+            if (activeOrderCount[caller][o.marketId] > 0) {
+                activeOrderCount[caller][o.marketId]--;
+            }
+            return 0;
+        }
         require(o.owner == caller, "OrderBook: not owner");
 
         uint256 lots = o.lots;

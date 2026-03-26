@@ -981,4 +981,63 @@ contract AuditFixesTest is Test {
         vm.expectRevert("OrderBook: counter underflow");
         book.decrementActiveOrderCount(user1, mId);
     }
+
+    // =========================================================================
+    // Fix: _cancelForReplace must decrement activeOrderCount for settled orders
+    // =========================================================================
+
+    function test_CancelForReplace_SettledOrderDecrementsActiveCount() public {
+        uint256 mId = _setupMarket();
+
+        // 1. MM places 2 GTB bid orders (A, B)
+        vm.prank(user1);
+        uint256 orderA = book.placeOrder(mId, Side.Bid, OrderType.GoodTilBatch, 50, 5);
+        vm.prank(user1);
+        uint256 orderB = book.placeOrder(mId, Side.Bid, OrderType.GoodTilBatch, 50, 5);
+
+        // user2 provides the ask side so both orders get filled
+        vm.prank(user2);
+        book.placeOrder(mId, Side.Ask, OrderType.GoodTilBatch, 50, 10);
+
+        assertEq(book.activeOrderCount(user1, mId), 2, "pre-clear: 2 active orders");
+
+        // 2. clearBatch settles both orders -> lots become 0
+        auction.clearBatch(mId);
+
+        (, , , , uint64 lotsA, , , , ) = book.orders(orderA);
+        (, , , , uint64 lotsB, , , , ) = book.orders(orderB);
+        assertEq(lotsA, 0, "orderA should be fully filled");
+        assertEq(lotsB, 0, "orderB should be fully filled");
+
+        // After clearBatch, activeOrderCount should be 0 (decremented by BatchAuction)
+        assertEq(book.activeOrderCount(user1, mId), 0, "post-clear: 0 active orders");
+
+        // 3. replaceOrders([A, B], [newC, newD]) -- cancels settled orders + places new ones
+        uint256[] memory cancelIds = new uint256[](2);
+        cancelIds[0] = orderA;
+        cancelIds[1] = orderB;
+
+        OrderParam[] memory newParams = new OrderParam[](2);
+        newParams[0] = OrderParam(Side.Bid, OrderType.GoodTilBatch, 45, 3);
+        newParams[1] = OrderParam(Side.Bid, OrderType.GoodTilBatch, 55, 3);
+
+        vm.prank(user1);
+        uint256[] memory newIds = book.replaceOrders(cancelIds, mId, newParams);
+
+        // 4. activeOrderCount should be exactly 2 (only the 2 new orders)
+        assertEq(book.activeOrderCount(user1, mId), 2, "post-replace: should have exactly 2 active orders");
+
+        // 5. New orders should have non-zero lots
+        (, , , , uint64 lotsC, , , , ) = book.orders(newIds[0]);
+        (, , , , uint64 lotsD, , , , ) = book.orders(newIds[1]);
+        assertEq(lotsC, 3, "newC should have 3 lots");
+        assertEq(lotsD, 3, "newD should have 3 lots");
+
+        // 6. User can cancel the new orders (proves counter is correct, no stuck state)
+        vm.startPrank(user1);
+        book.cancelOrder(newIds[0]);
+        book.cancelOrder(newIds[1]);
+        vm.stopPrank();
+        assertEq(book.activeOrderCount(user1, mId), 0, "post-cancel: 0 active orders");
+    }
 }

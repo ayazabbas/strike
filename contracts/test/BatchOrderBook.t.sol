@@ -500,8 +500,11 @@ contract BatchOrderBookTest is Test {
 
         uint256 walletBefore = usdt.balanceOf(user1);
 
-        uint256[] memory cancelIds = new uint256[](2);
-        cancelIds[0] = oid1; cancelIds[1] = oid2;
+        // Only pass the non-cancelled order to replaceOrders.
+        // Already-cancelled orders have their counter decremented by cancelOrder,
+        // so including them would cause a double-decrement.
+        uint256[] memory cancelIds = new uint256[](1);
+        cancelIds[0] = oid2;
 
         OrderParam[] memory params = new OrderParam[](1);
         params[0] = _op(Side.Bid, OrderType.GoodTilCancel, 70, 5);
