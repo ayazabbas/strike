@@ -2,22 +2,56 @@
 
 The Strike indexer provides REST endpoints for querying aggregated market state. Use it for startup snapshots — fetching all markets, orderbook levels, and open positions. For live data, use [event streaming](events.md).
 
+## API v1
+
+All indexer endpoints are available under the `/v1/` prefix. The legacy unprefixed routes remain for backward compatibility but new integrations should use `/v1/`.
+
+Responses use a standard envelope: `{ data: [...], meta: { total, limit, offset } }`. The SDK handles this transparently — callers receive plain `Vec<Market>`, `Vec<IndexerOrder>`, etc. with no change to existing code.
+
 ## Get Markets
+
+`get_markets()` fetches all markets from the indexer:
 
 ```rust
 let client = StrikeClient::new(StrikeConfig::bsc_mainnet()).build()?;
 
-// All markets
 let markets = client.indexer().get_markets().await?;
 
-// Only active markets
-let active = client.indexer().get_active_markets().await?;
-
-for market in &active {
+for market in &markets {
     println!(
-        "market {} | expiry: {} | interval: {}s",
-        market.id, market.expiry_time, market.batch_interval,
+        "market {} | expiry: {} | interval: {}s | status: {}",
+        market.id, market.expiry_time, market.batch_interval, market.status,
     );
+}
+```
+
+`get_active_markets()` filters for active markets client-side:
+
+```rust
+let active = client.indexer().get_active_markets().await?;
+```
+
+### Pagination (direct HTTP)
+
+If you query the indexer directly (without the SDK), the `/v1/markets` endpoint supports pagination:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `status` | string | — | Filter by status (`active`, `halted`, `resolved`) |
+| `limit` | int | 50 | Max results per page |
+| `offset` | int | 0 | Number of results to skip |
+| `since` | int | — | Unix timestamp; return markets created after this time |
+
+```
+GET /v1/markets?status=active&limit=20&offset=0
+```
+
+Response:
+
+```json
+{
+  "data": [ { "id": 1, "status": "active", ... } ],
+  "meta": { "total": 42, "limit": 20, "offset": 0 }
 }
 ```
 
@@ -82,6 +116,17 @@ for order in &orders {
 }
 ```
 
+The v1 response from `/v1/positions/:address` is paginated:
+
+```json
+{
+  "open_orders": { "data": [...], "total": 15 },
+  "filled_positions": { "data": [...], "total": 8 }
+}
+```
+
+The SDK handles both the v1 paginated and legacy flat-array formats automatically — `get_open_orders` always returns `Vec<IndexerOrder>`.
+
 ### IndexerOrder Type
 
 ```rust
@@ -93,6 +138,22 @@ pub struct IndexerOrder {
     pub lots: u64,
     pub status: String,
 }
+```
+
+## Trades
+
+The `/v1/markets/:id/trades` endpoint returns cleared batches for a market, filtering out empty batches by default. This endpoint is available via direct HTTP — the SDK does not wrap it yet.
+
+```
+GET /v1/markets/1/trades?limit=50&offset=0
+```
+
+## Stats
+
+The `/v1/stats` endpoint returns aggregate protocol statistics (total volume, active markets, etc.). This endpoint is available via direct HTTP — the SDK does not wrap it yet.
+
+```
+GET /v1/stats
 ```
 
 ## Configuration

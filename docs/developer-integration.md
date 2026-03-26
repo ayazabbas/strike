@@ -198,10 +198,29 @@ await pythResolver.write.resolveMarket(
 | BTC/USD | `0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43` |
 | BNB/USD | `0x2f95862b045670cd22bee3114c39763a4a08beeb663b145d283c31d7d1101c4f` |
 
-## WebSocket / Indexer API
+## Indexer REST API
 
-The Strike indexer (in the `strike-infra` repo) provides:
-- REST API for market data, order book state, and user positions
-- WebSocket for real-time order book updates and batch clearing events
+The Strike indexer provides a REST API under the `/v1/` prefix (legacy unprefixed routes remain for backward compatibility).
 
-See the strike-infra documentation for API endpoints and schemas.
+### Key Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /v1/markets` | List markets (supports `?status=active&limit=50&offset=0&since=`) |
+| `GET /v1/markets/:id/orderbook` | Aggregated bid/ask levels |
+| `GET /v1/markets/:id/trades` | Cleared batches (empty batches filtered by default) |
+| `GET /v1/positions/:address` | Open orders and filled positions for a wallet |
+| `GET /v1/stats` | Aggregate protocol statistics (volume, active markets) |
+
+All list endpoints return paginated responses:
+
+```json
+{
+  "data": [...],
+  "meta": { "total": 42, "limit": 50, "offset": 0 }
+}
+```
+
+### WebSocket
+
+Real-time order book updates and batch clearing events are available via WebSocket. See the [SDK Events](sdk/events.md) page or the strike-infra documentation for details.

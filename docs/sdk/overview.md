@@ -25,7 +25,7 @@ Use `StrikeConfig::bsc_mainnet()` for BSC mainnet with default RPC, WSS, and ind
 ```toml
 [dependencies]
 strike-sdk = "0.2"           # nonce-manager enabled by default
-strike-sdk = { version = "0.1", default-features = false }  # disable nonce-manager
+strike-sdk = { version = "0.2", default-features = false }  # disable nonce-manager
 ```
 
 The `nonce-manager` feature enables `NonceSender`, a local nonce tracker that avoids nonce-too-low errors when sending multiple transactions in quick succession. Enabled by default — disable it if you manage nonces externally.
@@ -54,7 +54,6 @@ cargo add strike-sdk
 
 ## Coming Soon
 
-- TypeScript SDK
 - Python SDK
 
 ## Next Steps
