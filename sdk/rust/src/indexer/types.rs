@@ -14,9 +14,11 @@ pub struct Market {
 }
 
 /// Wrapper for the `/markets` response.
+/// Supports both v1 format { data: [...] } and legacy { markets: [...] }.
 #[derive(Debug, Deserialize)]
 pub(crate) struct MarketsResponse {
-    pub markets: Vec<Market>,
+    #[serde(alias = "markets")]
+    pub data: Vec<Market>,
 }
 
 /// An open order from the indexer.
@@ -30,12 +32,30 @@ pub struct IndexerOrder {
     pub status: String,
 }
 
+/// A paginated list wrapper: `{ data: [...], total: N }` or a plain array.
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub(crate) enum OrdersOrPaginated {
+    Paginated { data: Vec<IndexerOrder> },
+    Plain(Vec<IndexerOrder>),
+}
+
+impl OrdersOrPaginated {
+    pub fn into_vec(self) -> Vec<IndexerOrder> {
+        match self {
+            Self::Paginated { data } => data,
+            Self::Plain(v) => v,
+        }
+    }
+}
+
 /// Wrapper for the `/positions/:address` response.
+/// Supports both v1 `{ open_orders: { data: [...], total }, ... }` and legacy `{ open_orders: [...], ... }`.
 #[derive(Debug, Deserialize)]
 pub(crate) struct PositionsResponse {
-    pub open_orders: Vec<IndexerOrder>,
+    pub open_orders: OrdersOrPaginated,
     #[allow(dead_code)]
-    pub filled_positions: Vec<serde_json::Value>,
+    pub filled_positions: serde_json::Value,
 }
 
 /// An orderbook level.

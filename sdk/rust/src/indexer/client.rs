@@ -30,7 +30,7 @@ impl IndexerClient {
             .json()
             .await
             .map_err(|e| StrikeError::Indexer(e.to_string()))?;
-        Ok(resp.markets)
+        Ok(resp.data)
     }
 
     /// Fetch only active markets (status == "active").
@@ -67,6 +67,6 @@ impl IndexerClient {
             .json()
             .await
             .map_err(|e| StrikeError::Indexer(e.to_string()))?;
-        Ok(resp.open_orders)
+        Ok(resp.open_orders.into_vec())
     }
 }
