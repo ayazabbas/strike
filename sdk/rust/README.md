@@ -6,7 +6,7 @@ Rust SDK for [Strike](https://github.com/ayazabbas/strike) prediction markets on
 
 ```toml
 [dependencies]
-strike-sdk = "0.1"
+strike-sdk = "0.2"
 ```
 
 Or via cargo:
@@ -95,6 +95,21 @@ while let Some(event) = events.next().await {
 }
 ```
 
+## API Response Format (v0.2+)
+
+As of v0.2, the Strike indexer returns paginated envelopes for list endpoints:
+
+```json
+{
+  "data": [...],
+  "meta": { "total": 441, "limit": 50, "offset": 0 }
+}
+```
+
+The SDK handles both the new `{ data }` envelope and the legacy `{ markets }` format automatically — no changes needed in your code.
+
+The `get_markets()` call now fetches active markets only by default (equivalent to `?status=active`). To fetch all markets use the underlying indexer client directly with query params.
+
 ## Key Concepts
 
 - **LOT_SIZE** = 1e16 wei ($0.01 per lot)
@@ -129,11 +144,10 @@ strike-sdk = { version = "0.1", default-features = false }
 | `chain::markets` | On-chain market state reads |
 | `events::subscribe` | WSS event stream with auto-reconnect |
 | `events::scan` | Historical event scanning (chunked getLogs) |
-| `indexer` | REST client for market snapshots |
+| `indexer` | REST client: markets, positions, trades, stats (API v1) |
 | `nonce` | `NonceSender` for sequential TX sends |
 
 ## Coming Soon
 
-- Historical queries (fills, trade history)
-- TypeScript SDK
 - Python SDK
+- Full API v1 query builder
