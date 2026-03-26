@@ -1,6 +1,6 @@
 [package]
 name = "strike-sdk"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 description = "Rust SDK for Strike prediction markets on BNB Chain"
 license = "MIT"
