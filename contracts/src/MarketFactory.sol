@@ -7,6 +7,10 @@ import "./ITypes.sol";
 import "./OrderBook.sol";
 import "./OutcomeToken.sol";
 
+interface IAIResolver {
+    function depositFee(uint256 marketId, string calldata prompt, uint8 modelId) external payable;
+}
+
 /// @title MarketFactory
 /// @notice Creates and manages binary outcome markets for the Strike CLOB protocol.
 ///         Market creation is permissioned via MARKET_CREATOR_ROLE.
@@ -29,6 +33,9 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
     uint256 public defaultBatchInterval = 60; // seconds
     uint128 public defaultMinLots = 1;
 
+    /// @notice AI resolver contract for AI-resolved markets
+    address public aiResolver;
+
     /// @notice Market metadata stored by the factory
     struct MarketMeta {
         bytes32 priceId;       // Pyth price feed ID
@@ -40,6 +47,7 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
         int64 settlementPrice; // price at resolution
         uint256 orderBookMarketId; // ID in the OrderBook
         bool useInternalPositions; // true = internal position tracking (no ERC1155)
+        bool isAIMarket;           // true = resolved by AI oracle
     }
 
     /// @notice factoryMarketId => MarketMeta
@@ -106,6 +114,8 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
         uint256 batchInterval,
         uint128 minLots
     ) external onlyRole(MARKET_CREATOR_ROLE) nonReentrant returns (uint256 factoryMarketId) {
+        require(priceId != bytes32(0), "MarketFactory: zero priceId");
+        require(strikePrice > 0, "MarketFactory: zero strikePrice");
         return _createMarket(priceId, strikePrice, expiryTime, batchInterval, minLots, false);
     }
 
@@ -116,7 +126,23 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
         uint256 batchInterval,
         uint128 minLots
     ) external onlyRole(MARKET_CREATOR_ROLE) nonReentrant returns (uint256 factoryMarketId) {
+        require(priceId != bytes32(0), "MarketFactory: zero priceId");
+        require(strikePrice > 0, "MarketFactory: zero strikePrice");
         return _createMarket(priceId, strikePrice, expiryTime, batchInterval, minLots, true);
+    }
+
+    function createAIMarket(
+        string calldata prompt,
+        uint8 modelId,
+        uint256 expiryTime,
+        uint128 minLots
+    ) external payable onlyRole(MARKET_CREATOR_ROLE) nonReentrant returns (uint256 factoryMarketId) {
+        require(aiResolver != address(0), "MarketFactory: no AI resolver");
+
+        factoryMarketId = _createMarket(bytes32(0), 0, expiryTime, defaultBatchInterval, minLots, true);
+        marketMeta[factoryMarketId].isAIMarket = true;
+
+        IAIResolver(aiResolver).depositFee{value: msg.value}(factoryMarketId, prompt, modelId);
     }
 
     function _createMarket(
@@ -129,8 +155,6 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
     ) internal returns (uint256 factoryMarketId) {
         require(!paused, "MarketFactory: paused");
         require(expiryTime > block.timestamp, "MarketFactory: expiry in the past");
-        require(priceId != bytes32(0), "MarketFactory: zero priceId");
-        require(strikePrice > 0, "MarketFactory: zero strikePrice");
 
         uint256 interval = batchInterval > 0 ? batchInterval : defaultBatchInterval;
         uint128 lots = minLots > 0 ? minLots : defaultMinLots;
@@ -152,7 +176,8 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
             outcomeYes: false,
             settlementPrice: 0,
             orderBookMarketId: obMarketId,
-            useInternalPositions: useInternalPositions
+            useInternalPositions: useInternalPositions,
+            isAIMarket: false
         });
 
         // Track as active
@@ -240,6 +265,10 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
     // -------------------------------------------------------------------------
     // Admin controls
     // -------------------------------------------------------------------------
+
+    function setAIResolver(address _aiResolver) external onlyRole(ADMIN_ROLE) {
+        aiResolver = _aiResolver;
+    }
 
     function pauseFactory(bool _paused) external onlyRole(ADMIN_ROLE) {
         paused = _paused;

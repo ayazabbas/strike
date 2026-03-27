@@ -90,7 +90,7 @@ contract RedemptionTest is Test {
     function _createAndFillMarket() internal returns (uint256 fmId, uint256 obId) {
         vm.prank(user1);
         fmId = factory.createMarket(PRICE_ID, STRIKE_PRICE, block.timestamp + 3600, 60, 1);
-        (, , , , , , , uint256 _obId, ) = factory.marketMeta(fmId);
+        (, , , , , , , uint256 _obId, , ) = factory.marketMeta(fmId);
         obId = _obId;
 
         // user1 bids (buys YES), user2 asks (buys NO) at tick 60
@@ -103,7 +103,7 @@ contract RedemptionTest is Test {
     }
 
     function _resolveMarket(uint256 fmId, int64 price) internal {
-        (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
+        (, , uint256 expiry, , , , , , , ) = factory.marketMeta(fmId);
         vm.warp(expiry);
         factory.closeMarket(fmId);
 
@@ -123,7 +123,7 @@ contract RedemptionTest is Test {
         // Resolve YES (price above strike)
         _resolveMarket(fmId, 60000_00000000);
 
-        (, , , , , bool outcomeYes, , , ) = factory.marketMeta(fmId);
+        (, , , , , bool outcomeYes, , , , ) = factory.marketMeta(fmId);
         assertTrue(outcomeYes);
 
         uint256 balBefore = usdt.balanceOf(user1);
@@ -143,7 +143,7 @@ contract RedemptionTest is Test {
         // Resolve NO (price below strike)
         _resolveMarket(fmId, 40000_00000000);
 
-        (, , , , , bool outcomeYes, , , ) = factory.marketMeta(fmId);
+        (, , , , , bool outcomeYes, , , , ) = factory.marketMeta(fmId);
         assertFalse(outcomeYes);
 
         uint256 balBefore = usdt.balanceOf(user2);

@@ -84,7 +84,7 @@ contract InternalPositionsTest is Test {
     function _createInternalMarket(uint256 duration) internal returns (uint256 fmId, uint256 obId) {
         vm.prank(user1);
         fmId = factory.createMarketWithPositions(PRICE_ID, STRIKE_PRICE, block.timestamp + duration, 60, 1);
-        (, , , , , , , uint256 _obId, ) = factory.marketMeta(fmId);
+        (, , , , , , , uint256 _obId, , ) = factory.marketMeta(fmId);
         obId = _obId;
     }
 
@@ -101,7 +101,7 @@ contract InternalPositionsTest is Test {
     }
 
     function _resolveMarket(uint256 fmId, int64 price) internal {
-        (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
+        (, , uint256 expiry, , , , , , , ) = factory.marketMeta(fmId);
         vm.warp(expiry);
         factory.closeMarket(fmId);
 
@@ -120,7 +120,7 @@ contract InternalPositionsTest is Test {
 
     function test_CreateMarketWithPositions_SetsFlag() public {
         (uint256 fmId, uint256 obId) = _createInternalMarket(3600);
-        (, , , , , , , , bool useInternal) = factory.marketMeta(fmId);
+        (, , , , , , , , bool useInternal, ) = factory.marketMeta(fmId);
         assertTrue(useInternal);
         (, , , , , , , bool obUseInternal) = book.markets(obId);
         assertTrue(obUseInternal);
@@ -129,7 +129,7 @@ contract InternalPositionsTest is Test {
     function test_CreateMarket_DefaultNoInternalPositions() public {
         vm.prank(user1);
         uint256 fmId = factory.createMarket(PRICE_ID, STRIKE_PRICE, block.timestamp + 3600, 60, 1);
-        (, , , , , , , , bool useInternal) = factory.marketMeta(fmId);
+        (, , , , , , , , bool useInternal, ) = factory.marketMeta(fmId);
         assertFalse(useInternal);
     }
 

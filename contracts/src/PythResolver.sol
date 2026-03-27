@@ -172,7 +172,7 @@ contract PythResolver is ReentrancyGuard {
     {
         address creator;
         MarketState state;
-        (priceId, , expiryTime, creator, state, , , , ) = factory.marketMeta(factoryMarketId);
+        (priceId, , expiryTime, creator, state, , , , , ) = factory.marketMeta(factoryMarketId);
 
         require(creator != address(0), "PythResolver: market not found");
 
@@ -219,7 +219,7 @@ contract PythResolver is ReentrancyGuard {
             require(publishTime < pending.publishTime, "PythResolver: not earlier");
 
             // Challenge must change the outcome
-            (, int64 strikePrice,,,,,,, ) = factory.marketMeta(factoryMarketId);
+            (, int64 strikePrice,,,,,,,, ) = factory.marketMeta(factoryMarketId);
             bool currentOutcome = pending.price >= strikePrice;
             bool newOutcome = price >= strikePrice;
             require(currentOutcome != newOutcome, "PythResolver: outcome unchanged");
@@ -247,7 +247,7 @@ contract PythResolver is ReentrancyGuard {
         pending.finalized = true;
 
         // Determine outcome: price >= strikePrice → YES wins
-        (, int64 strikePrice,,,,,,, ) = factory.marketMeta(factoryMarketId);
+        (, int64 strikePrice,,,,,,,, ) = factory.marketMeta(factoryMarketId);
         bool outcomeYes = pending.price >= strikePrice;
 
         factory.setResolved(factoryMarketId, outcomeYes, pending.price);

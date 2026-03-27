@@ -64,7 +64,7 @@ contract Redemption is ReentrancyGuard {
             bool outcomeYes,
             ,
             uint256 orderBookMarketId,
-            bool useInternalPositions
+            bool useInternalPositions,
         ) = factory.marketMeta(factoryMarketId);
 
         require(state == MarketState.Resolved, "Redemption: not resolved");

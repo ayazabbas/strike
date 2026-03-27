@@ -85,7 +85,7 @@ contract SellOrdersTest is Test {
     function _createMarket(uint256 duration) internal returns (uint256 fmId, uint256 obId) {
         vm.prank(user1);
         fmId = factory.createMarket(PRICE_ID, STRIKE_PRICE, block.timestamp + duration, 60, 1);
-        (, , , , , , , uint256 _obId, ) = factory.marketMeta(fmId);
+        (, , , , , , , uint256 _obId, , ) = factory.marketMeta(fmId);
         obId = _obId;
     }
 
@@ -356,7 +356,7 @@ contract SellOrdersTest is Test {
 
     function test_ClearBatch_SellYes_PoolSolvency() public {
         (uint256 fmId, uint256 obId) = _createMarket(3600);
-        (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
+        (, , uint256 expiry, , , , , , , ) = factory.marketMeta(fmId);
 
         // Step 1: Create original pair — user1 bids, user3 asks at tick 50
         _mintTokensViaMatch(obId, 50, 10);
@@ -400,7 +400,7 @@ contract SellOrdersTest is Test {
 
     function test_SellNo_PoolSolvency() public {
         (uint256 fmId, uint256 obId) = _createMarket(3600);
-        (, , uint256 expiry, , , , , , ) = factory.marketMeta(fmId);
+        (, , uint256 expiry, , , , , , , ) = factory.marketMeta(fmId);
 
         // Create pair: user1 gets YES, user3 gets NO
         _mintTokensViaMatch(obId, 50, 10);
