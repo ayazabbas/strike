@@ -394,4 +394,70 @@ contract AIResolverTest is Test {
 
         assertEq(challenger1.balance, challengerBal + 0.11 ether);
     }
+
+    // -------------------------------------------------------------------------
+    // Challenge timeout tests
+    // -------------------------------------------------------------------------
+
+    function test_finaliseAfterChallengeTimeout_success() public {
+        uint256 marketId = _createResolveAndFulfill(0); // AI says YES
+
+        vm.prank(challenger1);
+        resolver.challenge{value: 0.1 ether}(marketId);
+
+        uint256 treasuryBal = treasuryAddr.balance;
+
+        // Fast forward past 24h challenge period
+        vm.warp(block.timestamp + 24 hours + 1);
+
+        // Anyone can call it
+        vm.prank(address(0xBEEF));
+        resolver.finaliseAfterChallengeTimeout(marketId);
+
+        // Market resolved with AI's original answer (YES)
+        (, , , , MarketState state, bool outcomeYes, , , , ) = factory.marketMeta(marketId);
+        assertEq(uint8(state), uint8(MarketState.Resolved));
+        assertTrue(outcomeYes);
+
+        // Challenger lost bond to treasury
+        assertEq(treasuryAddr.balance, treasuryBal + 0.1 ether);
+    }
+
+    function test_finaliseAfterChallengeTimeout_beforeExpiry_reverts() public {
+        uint256 marketId = _createResolveAndFulfill(0);
+
+        vm.prank(challenger1);
+        resolver.challenge{value: 0.1 ether}(marketId);
+
+        // Only 12 hours passed
+        vm.warp(block.timestamp + 12 hours);
+
+        vm.expectRevert(AIResolver.ChallengeNotExpired.selector);
+        resolver.finaliseAfterChallengeTimeout(marketId);
+    }
+
+    function test_finaliseAfterChallengeTimeout_noChallengeReverts() public {
+        uint256 marketId = _createResolveAndFulfill(0);
+
+        // No challenge was made
+        vm.warp(block.timestamp + 24 hours + 1);
+
+        vm.expectRevert(AIResolver.NotChallenged.selector);
+        resolver.finaliseAfterChallengeTimeout(marketId);
+    }
+
+    function test_finaliseAfterChallengeTimeout_alreadyFinalized_reverts() public {
+        uint256 marketId = _createResolveAndFulfill(0);
+
+        vm.prank(challenger1);
+        resolver.challenge{value: 0.1 ether}(marketId);
+
+        // Admin confirms first
+        resolver.confirmResolution(marketId);
+
+        vm.warp(block.timestamp + 24 hours + 1);
+
+        vm.expectRevert(AIResolver.AlreadyFinalized.selector);
+        resolver.finaliseAfterChallengeTimeout(marketId);
+    }
 }

@@ -55,6 +55,7 @@ contract AIResolver is FlapAIConsumerBase {
     event AIResolutionConfirmed(uint256 indexed marketId, uint8 choice);
     event AIResolutionOverridden(uint256 indexed marketId, uint8 oldChoice, bool newOutcome);
     event AIResolutionRefunded(uint256 indexed marketId, uint256 requestId);
+    event AIResolutionDefaulted(uint256 indexed marketId, uint8 choice, address challenger);
 
     // -------------------------------------------------------------------------
     // Errors
@@ -73,6 +74,7 @@ contract AIResolver is FlapAIConsumerBase {
     error NotChallenged();
     error AlreadyFinalized();
     error ChallengeActive();
+    error ChallengeNotExpired();
     error TransferFailed();
 
     // -------------------------------------------------------------------------
@@ -299,6 +301,33 @@ contract AIResolver is FlapAIConsumerBase {
         factory.setResolved(marketId, newOutcome, 0);
 
         emit AIResolutionOverridden(marketId, oldChoice, newOutcome);
+    }
+
+    // -------------------------------------------------------------------------
+    // Challenge timeout (anyone can call after 24h if admin didn't act)
+    // -------------------------------------------------------------------------
+
+    /// @notice Finalise resolution after challenge period expires without admin action.
+    ///         AI's original answer is accepted, challenger loses bond to treasury.
+    ///         Anyone can call this — ensures markets don't stay stuck indefinitely.
+    function finaliseAfterChallengeTimeout(uint256 marketId) external {
+        ProposedResolution storage proposal = proposals[marketId];
+        if (proposal.livenessEnd == 0) revert NoProposal();
+        if (proposal.finalized) revert AlreadyFinalized();
+        if (proposal.challenger == address(0)) revert NotChallenged();
+        if (block.timestamp < proposal.challengeEnd) revert ChallengeNotExpired();
+
+        proposal.finalized = true;
+        aiMarkets[marketId].resolved = true;
+
+        // Challenger loses bond to treasury (same as confirmResolution)
+        (bool ok, ) = treasury.call{value: CHALLENGE_BOND}("");
+        if (!ok) revert TransferFailed();
+
+        bool outcomeYes = proposal.choice == 0;
+        factory.setResolved(marketId, outcomeYes, 0);
+
+        emit AIResolutionDefaulted(marketId, proposal.choice, proposal.challenger);
     }
 
     // -------------------------------------------------------------------------
