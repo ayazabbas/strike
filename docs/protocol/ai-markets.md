@@ -31,7 +31,7 @@ The Flap AI Oracle supports multiple LLM models. Market creators choose the mode
 A market creator calls `createAIMarket(prompt, modelId, expiryTime, minLots)` on `MarketFactory`, sending the model fee in BNB. The prompt is stored on-chain in the `AIResolver` contract.
 
 Example prompts:
-- "Fetch BNB/USD price from Binance. Answer YES if above $1000, NO otherwise. Include the exact price."
+- "Count tweets from @cz_binance between March 20-27, 2026 using X/Twitter. Answer YES if ≥50, NO otherwise. Include the raw count."
 - "Search federalreserve.gov for the May 2026 FOMC statement. Answer YES if it announces a rate cut, NO otherwise. Quote the relevant text."
 - "Check Steam and PlayStation Store for GTA VI availability. Answer YES if available for purchase, NO otherwise. Include links."
 
@@ -118,19 +118,21 @@ AI prompts must be **actionable instructions**, not vague questions. The LLM nee
 
 | ❌ Bad (vague) | ✅ Good (actionable) |
 |---|---|
-| "Will CZ tweet a lot this week?" | "Use X/Twitter search to count how many times @caborinfin tweeted between March 20-27, 2026. Include the exact count in your reasoning. Answer YES if the count is 50 or more, NO otherwise." |
-| "Will BNB go up?" | "Fetch the current BNB/USD price from CoinGecko or Binance. Answer YES if the price is above $750, NO otherwise. Include the exact price and source in your reasoning." |
+| "Will CZ tweet a lot this week?" | "Use X/Twitter search to count how many times @cz_binance tweeted between March 20-27, 2026. Include the exact count in your reasoning. Answer YES if the count is 50 or more, NO otherwise." |
 | "Will the Fed cut rates?" | "Search for the official FOMC statement from the May 2026 meeting on federalreserve.gov. Answer YES if the statement announces a rate cut, NO otherwise. Quote the relevant text." |
+| "Did the proposal pass?" | "Check the Uniswap governance portal for proposal #42 final results. Include the vote counts (for/against/abstain). Answer YES if the proposal passed quorum and majority, NO otherwise." |
 
 ### Example Prompts by Category
 
 | Category | Market Question | AI Prompt |
 |---|---|---|
-| **Social** | Did CZ tweet 50+ times this week? | "Use X/Twitter to count tweets from @caborinfin between March 20-27, 2026. Include the raw count. Answer YES if ≥50, NO otherwise." |
-| **Price** | Is BNB above $750? | "Fetch BNB/USD spot price from Binance or CoinGecko. Include the exact price and timestamp. Answer YES if above $750, NO otherwise." |
+| **Social** | Did CZ tweet 50+ times this week? | "Use X/Twitter to count tweets from @cz_binance between March 20-27, 2026. Include the raw count. Answer YES if ≥50, NO otherwise." |
 | **Events** | Did GTA VI release? | "Search for official Rockstar Games announcements and Steam/PlayStation store listings for GTA VI. Answer YES if the game is available for purchase/download, NO otherwise. Include sources." |
 | **Sports** | Did Argentina win the match? | "Search for the final score of the Argentina vs Brazil match on March 26, 2026. Include the score and source. Answer YES if Argentina won, NO otherwise." |
-| **Governance** | Did the proposal pass? | "Check the Uniswap governance portal for proposal #XX final results. Include the vote counts. Answer YES if the proposal passed, NO otherwise." |
+| **Governance** | Did the proposal pass? | "Check the Uniswap governance portal for proposal #42 final results. Include the vote counts. Answer YES if the proposal passed, NO otherwise." |
+| **Macro** | Did the Fed cut rates? | "Search federalreserve.gov for the May 2026 FOMC statement. Answer YES if it announces a rate cut, NO otherwise. Quote the relevant sentence." |
+
+> **Note:** For price-based markets (e.g., "Will BTC be above $100k?"), use [Price Markets](./market-lifecycle.md) with Pyth oracle instead of AI markets.
 
 ### Prompt Guidelines
 
