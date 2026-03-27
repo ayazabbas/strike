@@ -10,6 +10,7 @@ import {BatchAuction} from "../src/BatchAuction.sol";
 import {MarketFactory} from "../src/MarketFactory.sol";
 import {PythResolver} from "../src/PythResolver.sol";
 import {Redemption} from "../src/Redemption.sol";
+import {AIResolver} from "../src/AIResolver.sol";
 
 /// @notice Deploy Strike protocol to BSC testnet or mainnet using real Pyth Core.
 contract DeployTestnetScript is Script {
@@ -28,6 +29,7 @@ contract DeployTestnetScript is Script {
         address batchAuction;
         address factory;
         address pythResolver;
+        address aiResolver;
         address redemption;
         address pyth;
         address usdt;
@@ -78,6 +80,9 @@ contract DeployTestnetScript is Script {
         PythResolver pythResolver = new PythResolver(pythAddr, address(factory));
         d.pythResolver = address(pythResolver);
 
+        AIResolver aiResolver = new AIResolver(address(factory), deployer);
+        d.aiResolver = address(aiResolver);
+
         Redemption redemption = new Redemption(address(factory), address(outcomeToken), address(vault));
         d.redemption = address(redemption);
 
@@ -91,9 +96,12 @@ contract DeployTestnetScript is Script {
         outcomeToken.grantRole(outcomeToken.MINTER_ROLE(), address(redemption));
         outcomeToken.grantRole(outcomeToken.ESCROW_ROLE(), address(batchAuction));
         factory.grantRole(factory.ADMIN_ROLE(), address(pythResolver));
+        factory.grantRole(factory.ADMIN_ROLE(), address(aiResolver));
         factory.grantRole(factory.ADMIN_ROLE(), keeper);
         factory.grantRole(factory.MARKET_CREATOR_ROLE(), deployer);
         factory.grantRole(factory.MARKET_CREATOR_ROLE(), keeper);
+        factory.setAIResolver(address(aiResolver));
+        aiResolver.grantRole(aiResolver.KEEPER_ROLE(), keeper);
 
         vm.stopBroadcast();
 
@@ -114,6 +122,7 @@ contract DeployTestnetScript is Script {
             '","usdt":"', vm.toString(d.usdt),
             '","marketFactory":"', vm.toString(d.factory),
             '","pythResolver":"', vm.toString(d.pythResolver),
+            '","aiResolver":"', vm.toString(d.aiResolver),
             '","redemption":"', vm.toString(d.redemption),
             '","btcUsdPriceId":"', vm.toString(BTC_USD_PRICE_ID),
             '"}'
