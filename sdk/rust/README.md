@@ -147,6 +147,35 @@ strike-sdk = { version = "0.1", default-features = false }
 | `indexer` | REST client: markets, positions, trades, stats (API v1) |
 | `nonce` | `NonceSender` for sequential TX sends |
 
+## AI Markets
+
+Markets with `is_ai_market: true` are resolved by the Flap AI Oracle instead of Pyth price feeds. The `Market` struct includes:
+
+- `is_ai_market` — whether this market uses AI resolution
+- `ai_prompt` — the question sent to the LLM
+- `ai_status` — resolution status: `pending`, `proposed`, `challenged`, `finalized`, `refunded`
+
+### Checking AI Resolution
+
+```rust
+let market = client.indexer().get_market(920).await?;
+if market.is_ai_market {
+    println!("AI market: {}", market.ai_prompt.as_deref().unwrap_or(""));
+    println!("Status: {:?}", market.ai_status);
+}
+```
+
+### AI Resolution Details
+
+Use the indexer endpoint to fetch full resolution data including the IPFS proof:
+
+```rust
+// GET /v1/markets/{id}/ai-resolution
+let resolution = client.indexer().get_ai_resolution(920).await?;
+println!("Choice: {} ({})", resolution.choice, resolution.choice_label);
+println!("IPFS proof: {}", resolution.reasoning_url);
+```
+
 ## Coming Soon
 
 - Python SDK

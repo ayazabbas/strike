@@ -1,6 +1,19 @@
 # Oracle Resolution
 
-Strike markets are resolved exclusively by **Pyth Network** oracle price feeds. No human intervention, no subjective arbitration, no governance votes.
+Strike supports two resolution methods: **Pyth Price Feeds** for price-based markets and the **Flap AI Oracle** for question-based markets. This page covers both.
+
+## Resolution Methods
+
+| Method | Used For | Source |
+|--------|----------|--------|
+| **Pyth Price Feeds** | Price markets ("Will BTC be above $X?") | Cryptographically signed price data |
+| **Flap AI Oracle** | AI markets ("Will the Fed cut rates?") | LLM reasoning with IPFS proof |
+
+---
+
+## Pyth Price Feed Resolution
+
+Price markets are resolved by Pyth Network oracle price feeds. No human intervention, no subjective arbitration, no governance votes.
 
 ## Settlement Rule
 
@@ -52,3 +65,25 @@ This "procedural challenge" mechanism ensures the deterministic rule (earliest u
 - **Cryptographic verification** — signed data is verified on-chain, not trusted from an EOA
 - **Historical data available** — Hermes API serves signed updates for past timestamps
 - **Low cost** — update fees are negligible on BSC (1 wei default)
+
+---
+
+## AI Oracle Resolution
+
+AI markets are resolved by the **Flap AI Oracle**, which uses large language models to evaluate question-based prompts. The `AIResolver` contract manages the full lifecycle:
+
+1. **Request** — At market expiry, a keeper calls `resolveMarket()` which sends the prompt to the oracle
+2. **LLM reasoning** (~90 seconds) — The oracle backend feeds the prompt to the selected model, which reasons over the question using current information
+3. **Callback** — The oracle calls back with a binary choice (0 = YES, 1 = NO)
+4. **Liveness window** (5 minutes) — The proposed resolution can be challenged
+5. **Finalisation** — If unchallenged, anyone calls `finalise()` to settle the market
+
+### Challenge Mechanism
+
+During the 5-minute liveness window, anyone can challenge the AI's proposed outcome by posting a 0.1 BNB bond. This extends the window to 24 hours for admin review. The admin either confirms the original resolution (challenger loses bond) or overrides it (challenger gets bond + 0.01 BNB reward).
+
+### IPFS Verification
+
+Every AI resolution produces an IPFS proof containing the full prompt, reasoning trace, tool calls, and model metadata. The CID is available via the indexer API or on-chain via `FlapAIProvider.getRequest(requestId)`.
+
+For full details, see [AI Markets](ai-markets.md).

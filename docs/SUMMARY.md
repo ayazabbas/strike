@@ -16,6 +16,7 @@
 * [Batch Auctions](protocol/batch-auctions.md)
 * [Positions & Settlement](protocol/outcome-tokens.md)
 * [Oracle Resolution](protocol/oracle-resolution.md)
+* [AI Markets](protocol/ai-markets.md)
 * [Fees & Incentives](protocol/fees-and-incentives.md)
 
 ## Smart Contracts
@@ -26,6 +27,7 @@
 * [Vault.sol](contracts/vault.md)
 * [OutcomeToken.sol](contracts/outcome-token.md)
 * [PythResolver.sol](contracts/pyth-resolver.md)
+* [AIResolver.sol](contracts/ai-resolver.md)
 * [MarketFactory.sol](contracts/market-factory.md)
 * [FeeModel.sol](contracts/fee-model.md)
 * [SegmentTree.sol](contracts/segment-tree.md)
@@ -69,7 +71,6 @@
 
 ## Coming Soon
 
-* [AI-Resolved Markets](coming-soon/ai-resolved-markets.md)
 * [Leveraged Positions](coming-soon/leveraged-positions.md)
 
 ## Project

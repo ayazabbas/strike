@@ -2,7 +2,7 @@
 
 ## Overview
 
-Strike's protocol is composed of eight core contracts:
+Strike's protocol is composed of nine core contracts:
 
 ```
 MarketFactory (singleton)
@@ -30,6 +30,10 @@ MarketFactory (singleton)
   PythResolver ──→ Redemption
        │
   Pyth Oracle (on-chain)
+
+  AIResolver ───→ Redemption (via MarketFactory.setResolved)
+       │
+  Flap AI Oracle (on-chain)
 ```
 
 ## Contract Relationships
@@ -41,7 +45,8 @@ MarketFactory (singleton)
 | **BatchAuction** | Clearing algorithm, batch results | Integrated with OrderBook |
 | **Vault** | Collateral custody, locks, accounting | Singleton |
 | **OutcomeToken** | ERC-1155 YES/NO tokens (used for future market types; current 5-min markets use internal positions) | Singleton |
-| **PythResolver** | Oracle verification, resolution | Singleton (called per-market) |
+| **PythResolver** | Pyth price feed resolution | Singleton (called per-market) |
+| **AIResolver** | AI oracle resolution (Flap) | Singleton (called per-market) |
 | **SegmentTree** | Price-level aggregate volumes | Library (used by OrderBook) |
 | **FeeModel** | Fee calculation, bounties | Library or singleton |
 
@@ -90,7 +95,7 @@ MarketFactory (singleton)
 - `OPERATOR_ROLE` on OrderBook → granted to BatchAuction + MarketFactory
 - `PROTOCOL_ROLE` on Vault → granted to OrderBook + BatchAuction + Redemption
 - `MINTER_ROLE` on OutcomeToken → granted to BatchAuction + Redemption
-- `ADMIN_ROLE` on MarketFactory → granted to PythResolver
+- `ADMIN_ROLE` on MarketFactory → granted to PythResolver + AIResolver
 
 ## Sequence: Approve → Place Order → Clear (atomic) → Redeem
 

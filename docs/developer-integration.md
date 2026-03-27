@@ -136,6 +136,50 @@ redemption.redeem(factoryMarketId, tokenAmount);
 
 Burns `tokenAmount` winning outcome tokens and pays out `tokenAmount * LOT_SIZE` ($0.01 per lot) USDT from the market's redemption pool.
 
+### 5. Create an AI Market
+
+```solidity
+// MarketFactory — requires MARKET_CREATOR_ROLE
+// msg.value = oracle fee in BNB (query from Flap AI Oracle)
+uint256 marketId = factory.createAIMarket{value: 0.01 ether}(
+    "Will BNB reach $1000 by June 2026?",  // prompt
+    0,                                       // modelId (0 = Gemini Flash)
+    1751302800,                              // expiryTime (Unix timestamp)
+    1                                        // minLots
+);
+```
+
+In TypeScript (ethers.js v6):
+
+```typescript
+const factory = new Contract(MARKET_FACTORY_ADDRESS, MarketFactoryABI, signer);
+const tx = await factory.createAIMarket(
+  "Will BNB reach $1000 by June 2026?",
+  0,          // modelId
+  1751302800, // expiryTime
+  1,          // minLots
+  { value: parseEther('0.01') }
+);
+```
+
+The BNB fee varies by model. Query the oracle at runtime:
+
+```typescript
+const provider = new Contract(FLAP_AI_PROVIDER, FlapAIProviderABI, signer);
+const model = await provider.getModel(0); // modelId
+const fee = model.price; // BNB in wei
+```
+
+### AI Resolution API
+
+After an AI market resolves, fetch resolution details from the indexer:
+
+```
+GET /v1/markets/{id}/ai-resolution
+```
+
+Returns the prompt, model, proposed choice, liveness window, challenge status, and IPFS proof CID. See the [API Reference](https://github.com/ayazabbas/strike-infra/blob/master/docs/API.md) for the full response schema.
+
 ## Collateral Formulas
 
 All values in wei. `LOT_SIZE = 1e16` ($0.01).

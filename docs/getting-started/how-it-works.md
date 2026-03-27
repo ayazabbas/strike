@@ -8,6 +8,8 @@ Strike runs continuous short-duration prediction markets (default: 5 minutes). E
 
 Where `$X` is the strike price (captured from Pyth at market creation) and `T` is the expiry timestamp.
 
+Markets can also be resolved by **AI oracle** instead of price feeds. AI markets ask open-ended questions — "Will the Fed cut rates in May?" or "Will GTA VI release before June 2026?" — and are resolved by the [Flap AI Oracle](../protocol/ai-markets.md). Trading mechanics are identical for both market types.
+
 Traders express their view by placing orders on the orderbook:
 - **Buy UP** if you think the price will be above the strike at expiry
 - **Buy DOWN** if you think the price will be below the strike at expiry
