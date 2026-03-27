@@ -31,9 +31,9 @@ The Flap AI Oracle supports multiple LLM models. Market creators choose the mode
 A market creator calls `createAIMarket(prompt, modelId, expiryTime, minLots)` on `MarketFactory`, sending the model fee in BNB. The prompt is stored on-chain in the `AIResolver` contract.
 
 Example prompts:
-- "Will BNB reach $1000 by June 2026?"
-- "Will the Fed cut interest rates at the May 2026 FOMC meeting?"
-- "Will GTA VI release before June 2026?"
+- "Fetch BNB/USD price from Binance. Answer YES if above $1000, NO otherwise. Include the exact price."
+- "Search federalreserve.gov for the May 2026 FOMC statement. Answer YES if it announces a rate cut, NO otherwise. Quote the relevant text."
+- "Check Steam and PlayStation Store for GTA VI availability. Answer YES if available for purchase, NO otherwise. Include links."
 
 ### 2. Trading
 
@@ -106,15 +106,39 @@ Every AI resolution produces a verifiable proof pinned to IPFS. The proof contai
 
 The CID is also available on-chain via `FlapAIProvider.getRequest(requestId)` (decode the struct to extract the CID field).
 
-## Example Prompts
+## Writing Good Prompts
 
-| Category | Prompt |
+AI prompts must be **actionable instructions**, not vague questions. The LLM needs clear guidance on:
+1. **What data to find** — specific, measurable criteria
+2. **Where to look** — which tools or sources to use
+3. **How to report** — include raw data in reasoning
+4. **What to answer** — explicit yes/no criteria
+
+### Bad vs Good Prompts
+
+| ❌ Bad (vague) | ✅ Good (actionable) |
 |---|---|
-| **Crypto** | "Will BNB reach $1000 by June 2026?" |
-| **Macro** | "Will the Fed cut interest rates at the May 2026 FOMC meeting?" |
-| **Geopolitics** | "Will there be a Russia-Ukraine ceasefire agreement by Q2 2026?" |
-| **Tech** | "Will GTA VI release before June 2026?" |
-| **Sports** | "Will Argentina win the 2026 FIFA World Cup?" |
+| "Will CZ tweet a lot this week?" | "Use X/Twitter search to count how many times @caborinfin tweeted between March 20-27, 2026. Include the exact count in your reasoning. Answer YES if the count is 50 or more, NO otherwise." |
+| "Will BNB go up?" | "Fetch the current BNB/USD price from CoinGecko or Binance. Answer YES if the price is above $750, NO otherwise. Include the exact price and source in your reasoning." |
+| "Will the Fed cut rates?" | "Search for the official FOMC statement from the May 2026 meeting on federalreserve.gov. Answer YES if the statement announces a rate cut, NO otherwise. Quote the relevant text." |
+
+### Example Prompts by Category
+
+| Category | Market Question | AI Prompt |
+|---|---|---|
+| **Social** | Did CZ tweet 50+ times this week? | "Use X/Twitter to count tweets from @caborinfin between March 20-27, 2026. Include the raw count. Answer YES if ≥50, NO otherwise." |
+| **Price** | Is BNB above $750? | "Fetch BNB/USD spot price from Binance or CoinGecko. Include the exact price and timestamp. Answer YES if above $750, NO otherwise." |
+| **Events** | Did GTA VI release? | "Search for official Rockstar Games announcements and Steam/PlayStation store listings for GTA VI. Answer YES if the game is available for purchase/download, NO otherwise. Include sources." |
+| **Sports** | Did Argentina win the match? | "Search for the final score of the Argentina vs Brazil match on March 26, 2026. Include the score and source. Answer YES if Argentina won, NO otherwise." |
+| **Governance** | Did the proposal pass? | "Check the Uniswap governance portal for proposal #XX final results. Include the vote counts. Answer YES if the proposal passed, NO otherwise." |
+
+### Prompt Guidelines
+
+1. **Be specific about thresholds** — "above $750" not "high price"
+2. **Specify date ranges** — "between March 20-27" not "this week"
+3. **Name your sources** — "from CoinGecko" not "from somewhere"
+4. **Request evidence** — "include the exact count" forces verifiable reasoning
+5. **Define YES/NO clearly** — "YES if ≥50, NO otherwise" removes ambiguity
 
 ## Contract Reference
 
