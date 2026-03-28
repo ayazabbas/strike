@@ -195,7 +195,9 @@ impl<'a> OrdersClient<'a> {
     }
 }
 
-/// Parse `OrderPlaced` events from a transaction receipt.
+/// Parse `OrderPlaced` and `OrderResting` events from a transaction receipt.
+/// Resting orders are placed far from the clearing price and emit `OrderResting`
+/// instead of `OrderPlaced`, but they're still live orders that need tracking.
 fn parse_placed_orders(
     receipt: &alloy::rpc::types::TransactionReceipt,
     market_id: u64,
@@ -206,6 +208,14 @@ fn parse_placed_orders(
             placed.push(PlacedOrder {
                 order_id: event.orderId,
                 side: Side::try_from(event.side).unwrap_or(Side::Bid),
+                market_id,
+            });
+        } else if let Ok(event) = OrderBook::OrderResting::decode_log(&log.inner) {
+            // OrderResting doesn't include side — read from on-chain order storage.
+            // Use Bid as fallback; the quoter cancels all tracked IDs regardless of side.
+            placed.push(PlacedOrder {
+                order_id: event.orderId,
+                side: Side::Bid,
                 market_id,
             });
         }
