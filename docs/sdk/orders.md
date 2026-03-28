@@ -118,7 +118,9 @@ pub struct PlacedOrder {
 }
 ```
 
-Order IDs are parsed from `OrderPlaced` events emitted in the transaction receipt.
+Order IDs are parsed from `OrderPlaced` and `OrderResting` events emitted in the transaction receipt.
+
+> **Resting orders**: When an order's tick is far from the last clearing price (>20 ticks away), the contract adds it to a resting list instead of the active batch. Resting orders emit `OrderResting` instead of `OrderPlaced`. The SDK tracks both — callers don't need to handle this distinction. Resting orders are automatically pulled into the batch when the price moves closer.
 
 ## Selling Outcome Tokens
 

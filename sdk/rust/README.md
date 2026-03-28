@@ -118,6 +118,7 @@ The `get_markets()` call now fetches active markets only by default (equivalent 
 - **Order types**: GoodTilBatch (GTB) expires after one batch, GoodTilCancelled (GTC) rolls forward
 - **Batch auctions**: orders are collected into batches and cleared atomically
 - All fills pay the **clearing tick**, not the limit tick
+- **Resting orders**: orders >20 ticks from last clearing tick are placed on a resting list (emit `OrderResting` instead of `OrderPlaced`). The SDK tracks both automatically.
 - 1 YES + 1 NO = 1 USDT (always)
 
 ## Features
