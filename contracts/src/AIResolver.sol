@@ -149,11 +149,22 @@ contract AIResolver is FlapAIConsumerBase {
     // -------------------------------------------------------------------------
 
     function depositFee(uint256 marketId, string calldata prompt, uint8 modelId) external payable {
-        require(msg.value > 0, "AIResolver: zero fee");
+        // Validate against the live oracle price — model fees can change at any time.
+        IFlapAIProvider provider = IFlapAIProvider(_getFlapAIProvider());
+        uint256 requiredFee = provider.getModel(modelId).price;
+        require(msg.value >= requiredFee, "AIResolver: insufficient fee");
+
         AIMarketConfig storage config = aiMarkets[marketId];
         config.prompt = prompt;
         config.modelId = modelId;
         config.oracleFee = msg.value;
+
+        // Refund any excess BNB back to the caller (factory forwards msg.value from creator).
+        uint256 excess = msg.value - requiredFee;
+        if (excess > 0) {
+            (bool ok, ) = msg.sender.call{value: excess}("");
+            require(ok, "AIResolver: refund failed");
+        }
     }
 
     // -------------------------------------------------------------------------
