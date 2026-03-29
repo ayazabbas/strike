@@ -146,7 +146,7 @@ contract BatchOrderBookTest is Test {
 
         // Verify each order
         for (uint256 i = 0; i < 4; i++) {
-            (address owner, Side side, , uint8 tick, uint64 oLots, , uint32 marketId, uint32 batchId, ) = book.orders(orderIds[i]);
+            (address owner, Side side, , uint8 tick, uint64 oLots, , uint32 marketId, uint32 batchId, , ) = book.orders(orderIds[i]);
             assertEq(owner, user1);
             assertEq(uint8(side), uint8(params[i].side));
             assertEq(tick, params[i].tick);
@@ -180,8 +180,8 @@ contract BatchOrderBookTest is Test {
         vm.prank(user1);
         uint256[] memory orderIds = book.placeOrders(mId, params);
 
-        (, , OrderType ot0, , , , , , ) = book.orders(orderIds[0]);
-        (, , OrderType ot1, , , , , , ) = book.orders(orderIds[1]);
+        (, , OrderType ot0, , , , , , , ) = book.orders(orderIds[0]);
+        (, , OrderType ot1, , , , , , , ) = book.orders(orderIds[1]);
         assertEq(uint8(ot0), uint8(OrderType.GoodTilCancel));
         assertEq(uint8(ot1), uint8(OrderType.GoodTilBatch));
     }
@@ -343,7 +343,7 @@ contract BatchOrderBookTest is Test {
         uint256[] memory orderIds = book.placeOrders(mId, params);
         assertEq(orderIds.length, 4);
 
-        (, , , , , , , uint32 batchId, ) = book.orders(orderIds[0]);
+        (, , , , , , , uint32 batchId, , ) = book.orders(orderIds[0]);
         assertEq(batchId, 2);
     }
 
@@ -414,13 +414,13 @@ contract BatchOrderBookTest is Test {
 
         // Old orders cancelled
         for (uint256 i = 0; i < 4; i++) {
-            (, , , , uint64 remainingLots, , , , ) = book.orders(cancelIds[i]);
+            (, , , , uint64 remainingLots, , , , , ) = book.orders(cancelIds[i]);
             assertEq(remainingLots, 0);
         }
 
         // New orders created
         for (uint256 i = 0; i < 4; i++) {
-            (address owner, Side side, , uint8 tick, uint64 oLots, , , , ) = book.orders(newIds[i]);
+            (address owner, Side side, , uint8 tick, uint64 oLots, , , , , ) = book.orders(newIds[i]);
             assertEq(owner, user1);
             assertEq(uint8(side), uint8(params[i].side));
             assertEq(tick, params[i].tick);
@@ -665,12 +665,12 @@ contract BatchOrderBookTest is Test {
 
         assertEq(newIds.length, 2);
 
-        (address owner0, Side side0, , uint8 tick0, , , , , ) = book.orders(newIds[0]);
+        (address owner0, Side side0, , uint8 tick0, , , , , , ) = book.orders(newIds[0]);
         assertEq(owner0, user1);
         assertEq(uint8(side0), uint8(Side.Bid));
         assertEq(tick0, 45);
 
-        (address owner1, Side side1, , uint8 tick1, , , , , ) = book.orders(newIds[1]);
+        (address owner1, Side side1, , uint8 tick1, , , , , , ) = book.orders(newIds[1]);
         assertEq(owner1, user1);
         assertEq(uint8(side1), uint8(Side.SellYes));
         assertEq(tick1, 55);

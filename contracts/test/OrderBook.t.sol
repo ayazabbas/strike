@@ -196,6 +196,7 @@ contract OrderBookTest is Test {
             uint64 id,
             uint32 marketId,
             uint32 batchId,
+            ,
         ) = book.orders(orderId);
 
         assertEq(id, 1);
@@ -211,7 +212,7 @@ contract OrderBookTest is Test {
         uint256 mId = _setupMarket();
         uint256 orderId = _placeOrder(user1, mId, Side.Ask, 60, 5);
 
-        (, Side side, , uint8 tick, uint64 lots, , , , ) = book.orders(orderId);
+        (, Side side, , uint8 tick, uint64 lots, , , , , ) = book.orders(orderId);
         assertTrue(side == Side.Ask);
         assertEq(tick, 60);
         assertEq(lots, 5);
@@ -348,12 +349,12 @@ contract OrderBookTest is Test {
 
         vm.prank(user1);
         uint256 oid1 = book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 1, 1);
-        (, , , , uint64 lots1, , , , ) = book.orders(oid1);
+        (, , , , uint64 lots1, , , , , ) = book.orders(oid1);
         assertEq(lots1, 1);
 
         vm.prank(user2);
         uint256 oid2 = book.placeOrder(mId, Side.Ask, OrderType.GoodTilCancel, 99, 1);
-        (, , , , uint64 lots2, , , , ) = book.orders(oid2);
+        (, , , , uint64 lots2, , , , , ) = book.orders(oid2);
         assertEq(lots2, 1);
     }
 
@@ -371,7 +372,7 @@ contract OrderBookTest is Test {
         vm.prank(user1);
         book.cancelOrder(orderId);
 
-        (, , , , uint64 lots, , , , ) = book.orders(orderId);
+        (, , , , uint64 lots, , , , , ) = book.orders(orderId);
         assertEq(lots, 0);
         assertEq(vault.locked(user1), 0);
         assertEq(vault.balance(user1), 0);
@@ -452,10 +453,10 @@ contract OrderBookTest is Test {
         book.cancelOrders(ids);
 
         // All orders should have lots == 0
-        (, , , , uint64 lots1, , , , ) = book.orders(oid1);
-        (, , , , uint64 lots2, , , , ) = book.orders(oid2);
-        (, , , , uint64 lots3, , , , ) = book.orders(oid3);
-        (, , , , uint64 lots4, , , , ) = book.orders(oid4);
+        (, , , , uint64 lots1, , , , , ) = book.orders(oid1);
+        (, , , , uint64 lots2, , , , , ) = book.orders(oid2);
+        (, , , , uint64 lots3, , , , , ) = book.orders(oid3);
+        (, , , , uint64 lots4, , , , , ) = book.orders(oid4);
         assertEq(lots1, 0);
         assertEq(lots2, 0);
         assertEq(lots3, 0);
@@ -487,7 +488,7 @@ contract OrderBookTest is Test {
         vm.prank(user1);
         book.cancelOrders(ids);
 
-        (, , , , uint64 lots2, , , , ) = book.orders(oid2);
+        (, , , , uint64 lots2, , , , , ) = book.orders(oid2);
         assertEq(lots2, 0);
         assertEq(usdt.balanceOf(user1) - walletBefore, expected);
     }

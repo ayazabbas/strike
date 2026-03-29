@@ -86,26 +86,36 @@ contract DeployTestnetScript is Script {
         Redemption redemption = new Redemption(address(factory), address(outcomeToken), address(vault));
         d.redemption = address(redemption);
 
-        // Wire roles
-        orderBook.grantRole(orderBook.OPERATOR_ROLE(), address(batchAuction));
-        orderBook.grantRole(orderBook.OPERATOR_ROLE(), address(factory));
-        vault.grantRole(vault.PROTOCOL_ROLE(), address(orderBook));
-        vault.grantRole(vault.PROTOCOL_ROLE(), address(batchAuction));
-        vault.grantRole(vault.PROTOCOL_ROLE(), address(redemption));
-        outcomeToken.grantRole(outcomeToken.MINTER_ROLE(), address(batchAuction));
-        outcomeToken.grantRole(outcomeToken.MINTER_ROLE(), address(redemption));
-        outcomeToken.grantRole(outcomeToken.ESCROW_ROLE(), address(batchAuction));
-        factory.grantRole(factory.ADMIN_ROLE(), address(pythResolver));
-        factory.grantRole(factory.ADMIN_ROLE(), address(aiResolver));
-        factory.grantRole(factory.ADMIN_ROLE(), keeper);
-        factory.grantRole(factory.MARKET_CREATOR_ROLE(), deployer);
-        factory.grantRole(factory.MARKET_CREATOR_ROLE(), keeper);
-        factory.setAIResolver(address(aiResolver));
-        aiResolver.grantRole(aiResolver.KEEPER_ROLE(), keeper);
+        // Wire roles — use d.* addresses to avoid stack-too-deep
+        _wireRoles(d, deployer, keeper);
 
         vm.stopBroadcast();
 
         _printJson(d);
+    }
+
+    function _wireRoles(Deployed memory d, address deployer, address keeper) internal {
+        OrderBook orderBook = OrderBook(d.orderBook);
+        Vault vault = Vault(d.vault);
+        OutcomeToken outcomeToken = OutcomeToken(d.outcomeToken);
+        MarketFactory factory = MarketFactory(d.factory);
+        AIResolver aiResolver = AIResolver(payable(d.aiResolver));
+
+        orderBook.grantRole(orderBook.OPERATOR_ROLE(), d.batchAuction);
+        orderBook.grantRole(orderBook.OPERATOR_ROLE(), d.factory);
+        vault.grantRole(vault.PROTOCOL_ROLE(), d.orderBook);
+        vault.grantRole(vault.PROTOCOL_ROLE(), d.batchAuction);
+        vault.grantRole(vault.PROTOCOL_ROLE(), d.redemption);
+        outcomeToken.grantRole(outcomeToken.MINTER_ROLE(), d.batchAuction);
+        outcomeToken.grantRole(outcomeToken.MINTER_ROLE(), d.redemption);
+        outcomeToken.grantRole(outcomeToken.ESCROW_ROLE(), d.batchAuction);
+        factory.grantRole(factory.ADMIN_ROLE(), d.pythResolver);
+        factory.grantRole(factory.ADMIN_ROLE(), d.aiResolver);
+        factory.grantRole(factory.ADMIN_ROLE(), keeper);
+        factory.grantRole(factory.MARKET_CREATOR_ROLE(), deployer);
+        factory.grantRole(factory.MARKET_CREATOR_ROLE(), keeper);
+        factory.setAIResolver(d.aiResolver);
+        aiResolver.grantRole(aiResolver.KEEPER_ROLE(), keeper);
     }
 
     function _printJson(Deployed memory d) internal view {

@@ -225,7 +225,8 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
                 id: oid,
                 marketId: uint32(marketId),
                 batchId: uint32(batchId),
-                timestamp: uint40(block.timestamp)
+                timestamp: uint40(block.timestamp),
+                feeBps: uint16(feeModel.feeBps())
             });
         }
 
@@ -249,11 +250,9 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
     function _cancelForReplace(uint256 orderId, address caller) internal returns (uint256 refund) {
         Order storage o = orders[orderId];
         if (o.lots == 0) {
-            // Order already settled by a concurrent clearBatch.
-            // Still decrement activeOrderCount to prevent desync.
-            if (activeOrderCount[caller][o.marketId] > 0) {
-                activeOrderCount[caller][o.marketId]--;
-            }
+            // Order already settled by clearBatch — settlement already decremented
+            // activeOrderCount. Do NOT decrement again; that would desync the counter
+            // and cause "counter underflow" reverts when cancelling other live orders.
             return 0;
         }
         require(o.owner == caller, "OrderBook: not owner");
@@ -262,6 +261,7 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
         uint256 tick = o.tick;
         uint256 mktId = o.marketId;
         Side side = o.side;
+        uint256 storedFeeBps = o.feeBps;
         o.lots = 0;
 
         require(activeOrderCount[caller][mktId] > 0, "OrderBook: counter underflow");
@@ -291,7 +291,8 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
             uint256 collateral = (side == Side.Bid)
                 ? (lots * LOT_SIZE * tick) / 100
                 : (lots * LOT_SIZE * (100 - tick)) / 100;
-            refund = collateral + feeModel.calculateFee(collateral);
+            uint256 fee = (collateral * storedFeeBps) / 10_000;
+            refund = collateral + fee;
         }
 
         emit OrderCancelled(orderId, mktId, caller);
@@ -313,7 +314,8 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
             id: oid,
             marketId: uint32(marketId),
             batchId: batchId,
-            timestamp: uint40(block.timestamp)
+            timestamp: uint40(block.timestamp),
+            feeBps: uint16(feeModel.feeBps())
         });
 
         bool shouldRest = isTickFar(marketId, p.tick, p.side);
@@ -469,6 +471,7 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
         uint256 tick = o.tick;
         uint256 marketId = o.marketId;
         Side side = o.side;
+        uint256 storedFeeBps = o.feeBps;
 
         o.lots = 0;
 
@@ -501,7 +504,8 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
             uint256 collateral = (side == Side.Bid)
                 ? (lots * LOT_SIZE * tick) / 100
                 : (lots * LOT_SIZE * (100 - tick)) / 100;
-            uint256 totalReturn = collateral + feeModel.calculateFee(collateral);
+            uint256 fee = (collateral * storedFeeBps) / 10_000;
+            uint256 totalReturn = collateral + fee;
             vault.unlock(recipient, totalReturn);
             vault.withdrawTo(recipient, totalReturn);
         }

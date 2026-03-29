@@ -142,7 +142,7 @@ contract AuditFixesTest is Test {
 
         // user1's order got 0 fill (pro-rata rounds to 0 for 1 lot out of 10001)
         // Verify the order was cleaned up: lots should be 0
-        (, , , , uint64 lotsAfter, , , , ) = book.orders(smallOrderId);
+        (, , , , uint64 lotsAfter, , , , , ) = book.orders(smallOrderId);
         assertEq(lotsAfter, 0, "GTB zero-fill order should be cleaned up");
 
         // Verify collateral returned
@@ -182,7 +182,7 @@ contract AuditFixesTest is Test {
         auction.clearBatch(mId);
 
         // Verify order cleaned up
-        (, , , , uint64 lotsAfter, , , , ) = book.orders(sellOrderId);
+        (, , , , uint64 lotsAfter, , , , , ) = book.orders(sellOrderId);
         assertEq(lotsAfter, 0, "GTB sell zero-fill order should be cleaned up");
 
         // Verify tokens returned (user1 had 100, locked 1, should get 1 back = 100)
@@ -220,7 +220,7 @@ contract AuditFixesTest is Test {
         auction.clearBatch(mId);
 
         // Verify order cleaned up
-        (, , , , uint64 lotsAfter, , , , ) = book.orders(sellOrderId);
+        (, , , , uint64 lotsAfter, , , , , ) = book.orders(sellOrderId);
         assertEq(lotsAfter, 0, "GTB internal zero-fill order should be cleaned up");
 
         // Verify position unlocked (back to original)
@@ -549,7 +549,7 @@ contract AuditFixesTest is Test {
         assertTrue(balAfter > balBefore, "collateral should be returned on cancel");
 
         // Order lots should be 0
-        (, , , , uint64 lots, , , , ) = book.orders(orderId);
+        (, , , , uint64 lots, , , , , ) = book.orders(orderId);
         assertEq(lots, 0, "cancelled resting order should have 0 lots");
     }
 
@@ -612,7 +612,7 @@ contract AuditFixesTest is Test {
 
         // id1 should be lazy-skipped (already cancelled), id2 should be pulled in
         assertFalse(book.isResting(id2), "id2 should be pulled in");
-        (, , , , uint64 lots1, , , , ) = book.orders(id1);
+        (, , , , uint64 lots1, , , , , ) = book.orders(id1);
         assertEq(lots1, 0, "id1 stays cancelled");
     }
 
@@ -932,7 +932,7 @@ contract AuditFixesTest is Test {
         auction.clearBatch(mId);
 
         // The GTC order should have been rolled with remaining 15 lots
-        (, , , , uint64 remainingLots, , , , ) = book.orders(bidId);
+        (, , , , uint64 remainingLots, , , , , ) = book.orders(bidId);
         assertEq(remainingLots, 15, "remaining lots should be 15 after partial fill");
 
         // Tree should have 15 lots at tick 50 (remaining volume after roll)
@@ -965,7 +965,7 @@ contract AuditFixesTest is Test {
         auction.clearBatch(mId);
 
         // Remaining should be 10
-        (, , , , uint64 remainingLots, , , , ) = book.orders(sellId);
+        (, , , , uint64 remainingLots, , , , , ) = book.orders(sellId);
         assertEq(remainingLots, 10, "sell order remaining lots should be 10 after partial fill");
     }
 
@@ -1004,8 +1004,8 @@ contract AuditFixesTest is Test {
         // 2. clearBatch settles both orders -> lots become 0
         auction.clearBatch(mId);
 
-        (, , , , uint64 lotsA, , , , ) = book.orders(orderA);
-        (, , , , uint64 lotsB, , , , ) = book.orders(orderB);
+        (, , , , uint64 lotsA, , , , , ) = book.orders(orderA);
+        (, , , , uint64 lotsB, , , , , ) = book.orders(orderB);
         assertEq(lotsA, 0, "orderA should be fully filled");
         assertEq(lotsB, 0, "orderB should be fully filled");
 
@@ -1028,8 +1028,8 @@ contract AuditFixesTest is Test {
         assertEq(book.activeOrderCount(user1, mId), 2, "post-replace: should have exactly 2 active orders");
 
         // 5. New orders should have non-zero lots
-        (, , , , uint64 lotsC, , , , ) = book.orders(newIds[0]);
-        (, , , , uint64 lotsD, , , , ) = book.orders(newIds[1]);
+        (, , , , uint64 lotsC, , , , , ) = book.orders(newIds[0]);
+        (, , , , uint64 lotsD, , , , , ) = book.orders(newIds[1]);
         assertEq(lotsC, 3, "newC should have 3 lots");
         assertEq(lotsD, 3, "newD should have 3 lots");
 

@@ -344,7 +344,7 @@ contract IntegrationTest is Test {
 
         assertEq(za.clearBatch(obId).matchedLots, 5);
 
-        (, , , , uint64 remainingLots, , , , ) = book.orders(bidId);
+        (, , , , uint64 remainingLots, , , , , ) = book.orders(bidId);
         assertEq(remainingLots, 15);
         assertEq(token.balanceOf(user1, token.yesTokenId(obId)), 5);
 
@@ -354,7 +354,7 @@ contract IntegrationTest is Test {
 
         assertEq(za.clearBatch(obId).matchedLots, 15);
 
-        (, , , , uint64 finalLots, , , , ) = book.orders(bidId);
+        (, , , , uint64 finalLots, , , , , ) = book.orders(bidId);
         assertEq(finalLots, 0);
         assertEq(token.balanceOf(user1, token.yesTokenId(obId)), 20);
     }

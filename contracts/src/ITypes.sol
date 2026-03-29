@@ -29,11 +29,12 @@ struct Order {
     OrderType orderType; // 1 byte  — GTC or GTB
     uint8 tick;          // 1 byte  — price tick 1-99 (price = tick/100)
     uint64 lots;         // 8 bytes — remaining lots (each lot = 0.01 USDT = 1e16)
-    // --- Slot 2 (21 bytes) ---
+    // --- Slot 2 (23 bytes) ---
     uint64 id;           // 8 bytes — unique order ID
     uint32 marketId;     // 4 bytes — market this order belongs to
     uint32 batchId;      // 4 bytes — batch ID when order was placed
     uint40 timestamp;    // 5 bytes — block.timestamp when placed
+    uint16 feeBps;       // 2 bytes — feeBps at order placement (for locked calc)
 }
 
 /// @notice Result of a batch auction clearing.

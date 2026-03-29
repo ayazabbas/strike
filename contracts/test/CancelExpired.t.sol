@@ -62,7 +62,7 @@ contract CancelExpiredTest is Test {
         book.cancelExpiredOrder(orderId);
 
         // Order should be zeroed
-        (, , , , uint64 lots, , , , ) = book.orders(orderId);
+        (, , , , uint64 lots, , , , , ) = book.orders(orderId);
         assertEq(lots, 0);
 
         // User1 should get refund
@@ -87,8 +87,8 @@ contract CancelExpiredTest is Test {
         vm.prank(anyone);
         book.cancelExpiredOrders(ids);
 
-        (, , , , uint64 lots1, , , , ) = book.orders(id1);
-        (, , , , uint64 lots2, , , , ) = book.orders(id2);
+        (, , , , uint64 lots1, , , , , ) = book.orders(id1);
+        (, , , , uint64 lots2, , , , , ) = book.orders(id2);
         assertEq(lots1, 0);
         assertEq(lots2, 0);
 
@@ -126,11 +126,11 @@ contract CancelExpiredTest is Test {
         book.cancelExpiredOrders(ids);
 
         // First order should be cancelled
-        (, , , , uint64 lots1, , , , ) = book.orders(id1);
+        (, , , , uint64 lots1, , , , , ) = book.orders(id1);
         assertEq(lots1, 0);
 
         // Second order should still be active (not expired)
-        (, , , , uint64 lots2, , , , ) = book.orders(id2);
+        (, , , , uint64 lots2, , , , , ) = book.orders(id2);
         assertEq(lots2, 10);
     }
 

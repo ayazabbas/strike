@@ -138,7 +138,7 @@ contract SellOrdersTest is Test {
         assertEq(token.balanceOf(address(book), yesId), 10);
 
         // Order exists
-        (address owner, Side side, , , uint64 lots, , , , ) = book.orders(orderId);
+        (address owner, Side side, , , uint64 lots, , , , , ) = book.orders(orderId);
         assertEq(owner, user1);
         assertEq(uint8(side), uint8(Side.SellYes));
         assertEq(lots, 10);
@@ -159,7 +159,7 @@ contract SellOrdersTest is Test {
         assertEq(token.balanceOf(user3, noId), 0);
         assertEq(token.balanceOf(address(book), noId), 10);
 
-        (address owner, Side side, , , uint64 lots, , , , ) = book.orders(orderId);
+        (address owner, Side side, , , uint64 lots, , , , , ) = book.orders(orderId);
         assertEq(owner, user3);
         assertEq(uint8(side), uint8(Side.SellNo));
         assertEq(lots, 10);
@@ -474,7 +474,7 @@ contract SellOrdersTest is Test {
 
         // Batch 1: no bids — GTC rolls over
         auction.clearBatch(obId);
-        (, , , , uint64 lots1, , , , ) = book.orders(sellId);
+        (, , , , uint64 lots1, , , , , ) = book.orders(sellId);
         assertEq(lots1, 10); // still alive
 
         // Tokens still in OrderBook custody
@@ -512,7 +512,7 @@ contract SellOrdersTest is Test {
         auction.clearBatch(obId);
 
         // 10 lots filled, 10 remaining
-        (, , , , uint64 remaining, , , , ) = book.orders(sellId);
+        (, , , , uint64 remaining, , , , , ) = book.orders(sellId);
         assertEq(remaining, 10);
 
         // Seller received payout for 10 lots

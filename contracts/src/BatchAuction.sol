@@ -257,6 +257,7 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
         uint256 tick;
         uint256 lots;
         uint256 batchId;
+        uint256 feeBps;
     }
 
     struct SettleAmounts {
@@ -279,9 +280,11 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
             uint64 id,
             uint32 marketId,
             uint32 batchId,
+            ,
+            uint16 storedFeeBps
         ) = orderBook.orders(orderId);
         require(id != 0, "BatchAuction: order not found");
-        info = OrderInfo(marketId, owner, side, orderType, tick, lots, batchId);
+        info = OrderInfo(marketId, owner, side, orderType, tick, lots, batchId, storedFeeBps);
     }
 
     /// @dev Compute fills for all orders with rounding remainder correction.
@@ -345,6 +348,7 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
 
     /// @dev Settle amounts: pool gets full filledCollateral, fee from locked excess.
     ///      Buy side pays half fee (rounded down); sell side pays other half (rounded up).
+    ///      Uses the feeBps stored at order placement to match the locked amount exactly.
     function _settleAmounts(OrderInfo memory o, BatchResult memory result, uint256 filledLots)
         internal
         view
@@ -353,21 +357,22 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
         s.filledLots = filledLots;
         uint256 unfilledLots = o.lots - s.filledLots;
 
-        // Use OrderBook's feeModel for locked amounts (matches what was locked at placement)
-        FeeModel obFee = feeModel;
+        // Use the feeBps that was active when the order was placed (stored in Order struct).
+        // This ensures the computed "locked" amount exactly matches what vault.lock() recorded.
+        uint256 orderFeeBps = o.feeBps;
 
         uint256 lockedForFilled = _collateral(s.filledLots, o.tick, o.side);
-        uint256 lockedFeeForFilled = obFee.calculateFee(lockedForFilled);
+        uint256 lockedFeeForFilled = (lockedForFilled * orderFeeBps) / 10_000;
 
         s.filledCollateral = _collateral(s.filledLots, result.clearingTick, o.side);
         // Buy side pays the other half (full - ceil(full/2)) so sell side gets the rounding extra
-        s.protocolFee = obFee.calculateOtherHalfFee(s.filledCollateral);
+        s.protocolFee = feeModel.calculateOtherHalfFee(s.filledCollateral);
         s.toPool = s.filledCollateral;
 
         s.excessRefund = (lockedForFilled + lockedFeeForFilled) - s.filledCollateral - s.protocolFee;
 
         s.unfilledCollateral = _collateral(unfilledLots, o.tick, o.side);
-        s.unfilledFee = obFee.calculateFee(s.unfilledCollateral);
+        s.unfilledFee = (s.unfilledCollateral * orderFeeBps) / 10_000;
     }
 
     /// @dev Roll GTC order to next batch, or move to resting list if far from price.
@@ -418,7 +423,7 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
                     }
                 } else {
                     uint256 collateral = _collateral(o.lots, o.tick, o.side);
-                    uint256 fee = feeModel.calculateFee(collateral);
+                    uint256 fee = (collateral * o.feeBps) / 10_000;
                     if (collateral + fee > 0) {
                         vault.unlock(o.owner, collateral + fee);
                         vault.withdrawTo(o.owner, collateral + fee);
@@ -453,7 +458,7 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
                     }
                 } else {
                     uint256 collateral = _collateral(o.lots, o.tick, o.side);
-                    uint256 fee = feeModel.calculateFee(collateral);
+                    uint256 fee = (collateral * o.feeBps) / 10_000;
                     if (collateral + fee > 0) {
                         vault.unlock(o.owner, collateral + fee);
                         vault.withdrawTo(o.owner, collateral + fee);

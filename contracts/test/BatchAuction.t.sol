@@ -144,8 +144,8 @@ contract BatchAuctionTest is Test {
         assertEq(r.totalAskLots, 10);
 
         // Orders should be settled atomically
-        (, , , , uint64 bidLots, , , , ) = book.orders(1);
-        (, , , , uint64 askLots, , , , ) = book.orders(2);
+        (, , , , uint64 bidLots, , , , , ) = book.orders(1);
+        (, , , , uint64 askLots, , , , , ) = book.orders(2);
         assertEq(bidLots, 0, "bid should be fully settled");
         assertEq(askLots, 0, "ask should be fully settled");
     }
@@ -344,7 +344,7 @@ contract BatchAuctionTest is Test {
         auction.clearBatch(mId);
 
         // Low bid was GTB non-participating → collateral + fee returned, order removed
-        (, , , , uint64 lots, , , , ) = book.orders(lowBidId);
+        (, , , , uint64 lots, , , , , ) = book.orders(lowBidId);
         assertEq(lots, 0, "GTB non-participating should be removed");
         assertEq(usdt.balanceOf(user3) - user3UsdtBefore, lowBidCollateral + lowBidFee, "collateral+fee should be returned");
     }
@@ -363,7 +363,7 @@ contract BatchAuctionTest is Test {
         auction.clearBatch(mId);
 
         // Low GTC bid should still have lots and be in next batch
-        (, , , , uint64 lots, , , , ) = book.orders(lowBidId);
+        (, , , , uint64 lots, , , , , ) = book.orders(lowBidId);
         assertEq(lots, 5, "GTC non-participating should keep lots");
 
         // Check it was pushed to batch 2
@@ -389,7 +389,7 @@ contract BatchAuctionTest is Test {
 
         za.clearBatch(mId);
 
-        (, , , , uint64 remainingLots, , , , ) = book.orders(bidId);
+        (, , , , uint64 remainingLots, , , , , ) = book.orders(bidId);
         assertEq(remainingLots, 10, "GTC partial fill should have 10 lots remaining");
         assertEq(token.balanceOf(user1, token.yesTokenId(mId)), 10, "should have 10 YES tokens");
 
@@ -416,7 +416,7 @@ contract BatchAuctionTest is Test {
 
         za.clearBatch(mId);
 
-        (, , , , uint64 lots1, , , , ) = book.orders(bidId);
+        (, , , , uint64 lots1, , , , , ) = book.orders(bidId);
         assertEq(lots1, 15);
         assertEq(token.balanceOf(user1, token.yesTokenId(mId)), 5);
 
@@ -425,7 +425,7 @@ contract BatchAuctionTest is Test {
 
         za.clearBatch(mId);
 
-        (, , , , uint64 lots2, , , , ) = book.orders(bidId);
+        (, , , , uint64 lots2, , , , , ) = book.orders(bidId);
         assertEq(lots2, 0, "should be fully filled");
         assertEq(token.balanceOf(user1, token.yesTokenId(mId)), 20);
     }
@@ -451,8 +451,8 @@ contract BatchAuctionTest is Test {
         assertEq(token.balanceOf(user2, token.yesTokenId(mId)), 5);
 
         // GTB orders should be fully removed
-        (, , , , uint64 lots1, , , , ) = book.orders(bid1);
-        (, , , , uint64 lots2, , , , ) = book.orders(bid2);
+        (, , , , uint64 lots1, , , , , ) = book.orders(bid1);
+        (, , , , uint64 lots2, , , , , ) = book.orders(bid2);
         assertEq(lots1, 0);
         assertEq(lots2, 0);
     }
@@ -512,8 +512,8 @@ contract BatchAuctionTest is Test {
         assertEq(r.clearingTick, 0);
         assertEq(r.matchedLots, 0);
 
-        (, , , , uint64 bidLots, , , , ) = book.orders(bidId);
-        (, , , , uint64 askLots, , , , ) = book.orders(askId);
+        (, , , , uint64 bidLots, , , , , ) = book.orders(bidId);
+        (, , , , uint64 askLots, , , , , ) = book.orders(askId);
         assertEq(bidLots, 10);
         assertEq(askLots, 10);
 
