@@ -19,27 +19,53 @@ impl IndexerClient {
         }
     }
 
-    /// Fetch all markets from the indexer.
+    /// Fetch all markets from the indexer (defaults to active only).
     pub async fn get_markets(&self) -> Result<Vec<Market>> {
-        let url = format!("{}/markets", self.base_url);
-        let resp: MarketsResponse = self
-            .http
-            .get(&url)
-            .send()
-            .await?
-            .json()
-            .await
-            .map_err(|e| StrikeError::Indexer(e.to_string()))?;
-        Ok(resp.data)
+        self.get_markets_by_status(None).await
     }
 
     /// Fetch only active markets (status == "active").
     pub async fn get_active_markets(&self) -> Result<Vec<Market>> {
-        let markets = self.get_markets().await?;
-        Ok(markets
-            .into_iter()
-            .filter(|m| m.status == "active")
-            .collect())
+        self.get_markets_by_status(Some("active")).await
+    }
+
+    /// Fetch resolved markets, paginating through all results.
+    pub async fn get_resolved_markets(&self) -> Result<Vec<Market>> {
+        self.get_markets_by_status(Some("resolved")).await
+    }
+
+    /// Fetch markets with an optional status filter, handling pagination.
+    async fn get_markets_by_status(&self, status: Option<&str>) -> Result<Vec<Market>> {
+        let mut all_markets = Vec::new();
+        let limit = 500;
+        let mut offset = 0;
+
+        loop {
+            let mut url = format!("{}/markets?limit={}&offset={}", self.base_url, limit, offset);
+            if let Some(s) = status {
+                url.push_str(&format!("&status={}", s));
+            }
+
+            let resp: MarketsResponse = self
+                .http
+                .get(&url)
+                .send()
+                .await?
+                .json()
+                .await
+                .map_err(|e| StrikeError::Indexer(e.to_string()))?;
+
+            let count = resp.data.len();
+            all_markets.extend(resp.data);
+
+            // If we got fewer than limit, we've reached the end
+            if count < limit {
+                break;
+            }
+            offset += limit;
+        }
+
+        Ok(all_markets)
     }
 
     /// Fetch the orderbook snapshot for a market.
