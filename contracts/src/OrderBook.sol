@@ -41,6 +41,12 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
     uint64 public nextOrderId = 1;
     uint32 public nextMarketId = 1;
 
+    /// @notice Set the next market ID counter (admin only, for redeployments).
+    function setNextMarketId(uint32 _nextId) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(_nextId >= nextMarketId, "OrderBook: cannot decrease");
+        nextMarketId = _nextId;
+    }
+
     mapping(uint256 => Market) public markets;
     mapping(uint256 => Order) public orders;
     mapping(uint256 => SegmentTree.Tree) internal bidTrees;
