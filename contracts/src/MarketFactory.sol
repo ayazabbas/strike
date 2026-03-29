@@ -27,6 +27,12 @@ contract MarketFactory is AccessControl, ReentrancyGuard {
     OutcomeToken public immutable outcomeToken;
 
     uint256 public nextFactoryMarketId = 1;
+
+    /// @notice Set the next market ID counter (admin only, for redeployments).
+    function setNextFactoryMarketId(uint256 _nextId) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(_nextId >= nextFactoryMarketId, "MarketFactory: cannot decrease");
+        nextFactoryMarketId = _nextId;
+    }
     bool public paused;
 
     /// @notice Default market parameters
