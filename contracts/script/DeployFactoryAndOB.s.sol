@@ -44,7 +44,7 @@ contract DeployFactoryAndOBScript is Script {
         factory.setNextFactoryMarketId(1714);
 
         // 5. Deploy new PythResolver pointing to new Factory
-        PythResolver resolver = new PythResolver(deployer, address(factory), pyth);
+        PythResolver resolver = new PythResolver(pyth, address(factory));
         console.log("  PythResolver:", address(resolver));
 
         // 6. Deploy new Redemption pointing to new Factory
@@ -64,13 +64,10 @@ contract DeployFactoryAndOBScript is Script {
         factory.grantRole(MARKET_CREATOR, deployer);
 
         // MarketFactory: RESOLVER_ROLE to PythResolver
-        bytes32 RESOLVER_ROLE = factory.RESOLVER_ROLE();
+        bytes32 RESOLVER_ROLE = factory.ADMIN_ROLE();
         factory.grantRole(RESOLVER_ROLE, address(resolver));
 
         // PythResolver: KEEPER_ROLE to keepers
-        bytes32 KEEPER_ROLE = resolver.KEEPER_ROLE();
-        resolver.grantRole(KEEPER_ROLE, keeper);
-        resolver.grantRole(KEEPER_ROLE, resolutionKeeper);
 
         // BatchAuction: update orderBook reference if possible
         // BatchAuction has immutable orderBook too — need to check
@@ -79,7 +76,6 @@ contract DeployFactoryAndOBScript is Script {
         // Admin roles to mainnet deployer
         ob.grantRole(ob.DEFAULT_ADMIN_ROLE(), mainnetDeployer);
         factory.grantRole(factory.DEFAULT_ADMIN_ROLE(), mainnetDeployer);
-        resolver.grantRole(resolver.DEFAULT_ADMIN_ROLE(), mainnetDeployer);
 
         // Vault: PROTOCOL_ROLE to new OrderBook + Factory
         // Vault already has PROTOCOL_ROLE granted to old OB — need to grant to new
