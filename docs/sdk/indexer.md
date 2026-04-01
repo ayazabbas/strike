@@ -8,6 +8,15 @@ All indexer endpoints are available under the `/v1/` prefix. The legacy unprefix
 
 Responses use a standard envelope: `{ data: [...], meta: { total, limit, offset } }`. The SDK handles this transparently — callers receive plain `Vec<Market>`, `Vec<IndexerOrder>`, etc. with no change to existing code.
 
+## Canonical OpenAPI Reference
+
+The generated OpenAPI spec is the source of truth for the public indexer API:
+
+- `https://app.strike.pm/openapi.json`
+- `https://app.strike.pm/v1/openapi.json`
+
+If this page and the OpenAPI spec ever disagree, trust the generated spec.
+
 ## Get Markets
 
 `get_markets()` fetches all markets from the indexer:
@@ -37,7 +46,7 @@ If you query the indexer directly (without the SDK), the `/v1/markets` endpoint 
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `status` | string | — | Filter by status (`active`, `halted`, `resolved`) |
+| `status` | string | — | Filter by status (`active`, `closed`, `resolving`, `resolved`, `cancelled`) |
 | `limit` | int | 50 | Max results per page |
 | `offset` | int | 0 | Number of results to skip |
 | `since` | int | — | Unix timestamp; return markets created after this time |
@@ -61,7 +70,7 @@ Response:
 pub struct Market {
     pub id: i64,
     pub expiry_time: i64,
-    pub status: String,            // "active", "halted", "resolved", etc.
+    pub status: String,            // "active", "closed", "resolving", "resolved", "cancelled"
     pub pyth_feed_id: Option<String>,
     pub strike_price: Option<i64>,
     pub batch_interval: i64,

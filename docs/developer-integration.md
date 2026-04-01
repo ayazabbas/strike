@@ -178,7 +178,10 @@ After an AI market resolves, fetch resolution details from the indexer:
 GET /v1/markets/{id}/ai-resolution
 ```
 
-Returns the prompt, model, proposed choice, liveness window, challenge status, and IPFS proof CID. See the [API Reference](https://github.com/ayazabbas/strike-infra/blob/master/docs/API.md) for the full response schema.
+Returns the prompt, model, proposed choice, liveness window, challenge status, and IPFS proof CID. See the live generated OpenAPI reference for the full response schema:
+
+- `https://app.strike.pm/openapi.json`
+- `https://app.strike.pm/v1/openapi.json`
 
 ## Collateral Formulas
 
