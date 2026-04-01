@@ -25,11 +25,12 @@ async fn main() -> Result<()> {
     let active = client.markets().active_market_count().await?;
     println!("active markets: {active}");
 
-    // Get orderbook for first active market
+    // Get orderbook for first active market using the tradable OrderBook ID
     let active_markets: Vec<_> = markets.iter().filter(|m| m.status == "active").collect();
     if let Some(market) = active_markets.first() {
-        let ob = client.indexer().get_orderbook(market.id as u64).await?;
-        println!("market {} — {} bid levels, {} ask levels", market.id, ob.bids.len(), ob.asks.len());
+        let market_id = market.tradable_market_id()?;
+        let ob = client.indexer().get_orderbook(market_id).await?;
+        println!("market {} (ob {}) — {} bid levels, {} ask levels", market.factory_market_id, market_id, ob.bids.len(), ob.asks.len());
     }
 
     Ok(())

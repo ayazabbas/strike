@@ -25,8 +25,12 @@ async fn main() -> Result<()> {
 
     for market in &markets {
         println!(
-            "  market {} | status: {} | expiry: {} | batch_interval: {}s",
-            market.id, market.status, market.expiry_time, market.batch_interval,
+            "  factory {} | orderbook {:?} | status: {} | expiry: {} | batch_interval: {}s",
+            market.factory_market_id,
+            market.orderbook_market_id,
+            market.status,
+            market.expiry_time,
+            market.batch_interval,
         );
     }
 
@@ -34,11 +38,12 @@ async fn main() -> Result<()> {
     let active_count = client.markets().active_market_count().await?;
     println!("active markets: {active_count}");
 
-    // Get orderbook for first active market
+    // Get orderbook for first active market using the tradable OrderBook ID
     let active_markets: Vec<_> = markets.iter().filter(|m| m.status == "active").collect();
     if let Some(market) = active_markets.first() {
-        let ob = client.indexer().get_orderbook(market.id as u64).await?;
-        println!("\norderbook for market {}:", market.id);
+        let market_id = market.tradable_market_id()?;
+        let ob = client.indexer().get_orderbook(market_id).await?;
+        println!("\norderbook for factory market {} (ob {}):", market.factory_market_id, market_id);
         for level in &ob.bids {
             println!("  bid: tick {} | {} lots", level.tick, level.lots);
         }
@@ -334,7 +339,7 @@ async fn main() -> Result<()> {
 
 ## simple_bot — Minimal Market Maker Skeleton
 
-Event-driven market maker that demonstrates real bot patterns from the Strike MM. Quotes around the orderbook midpoint with a fixed spread, requotes atomically via `replaceOrders`, tracks fills, and cancels all orders on shutdown.
+Event-driven market maker that demonstrates real bot patterns from the Strike MM. On startup it bootstraps from the indexer's active markets so it can quote immediately, then continues reacting to live events. Quotes are placed around the orderbook midpoint with a fixed spread, requotes atomically via `replaceOrders`, tracks fills, and cancels all orders on shutdown.
 
 ```bash
 PRIVATE_KEY=0x... cargo run --example simple_bot
@@ -346,6 +351,7 @@ Key patterns demonstrated:
 |---------|---------------|
 | `init_nonce_sender()` | Prevents nonce-too-low errors under rapid sends |
 | `scan_orders()` startup recovery | Cancels stale orders from previous runs |
+| `get_active_markets()` bootstrap | Quotes current active markets immediately on startup |
 | `replace()` for requoting | Atomic cancel + place — zero empty-book time |
 | `tokio::select!` event loop | React to events, handle graceful shutdown |
 | Position tracking via `OrderSettled` | Know your net exposure per market |
@@ -361,11 +367,13 @@ loop {
         }
         Some(event) = events.next() => {
             match event {
+                // Bootstrap uses indexer markets + place_market() so the bot
+                // trades with orderbook_market_id instead of the legacy ID.
                 StrikeEvent::MarketCreated { market_id, .. } => {
-                    // Initial quote: read orderbook → compute fair → place()
+                    // New market: resolve active market metadata → place_market()
                 }
                 StrikeEvent::BatchCleared { market_id, .. } => {
-                    // Requote: replace() = atomic cancel + place
+                    // Requote: replace_market() = atomic cancel + place
                 }
                 StrikeEvent::OrderSettled { filled_lots, .. } => {
                     // Track position: bid fill = +lots, ask fill = -lots

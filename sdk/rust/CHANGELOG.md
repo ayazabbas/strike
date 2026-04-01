@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.2.4 (2026-04-01)
+
+### Fixed
+- **Market ID domain bug**: indexer/API market responses now expose `orderbook_market_id` alongside the legacy/factory `id`.
+- Added `factory_market_id`, `orderbook_market_id`, and `tradable_market_id()` to SDK `Market`.
+- Added safer trading helpers like `place_market()` / `replace_market()` so callers trade with the correct OrderBook market ID instead of the legacy factory ID.
+- Updated SDK examples/docs to use tradable OrderBook IDs for orderbook reads and order placement.
+- `simple_bot` now bootstraps from current active markets on startup instead of waiting only for future `MarketCreated` events.
+
 ## v0.2.3 (2026-03-28)
 
 ### Fixed
