@@ -110,16 +110,14 @@ async fn main() -> Result<()> {
 
 ## active_market_quote — Find the Active Market and Quote It
 
-This example follows the same basic pattern as the Strike MM bot:
+This example shows a clean two-sided quoting flow:
 
 1. fetch active markets from the indexer
-2. pick the market you want to quote
+2. pick a market
 3. read the current orderbook
 4. derive bid/ask quote ticks from the book
 5. approve USDT if needed
 6. place both sides in one transaction
-
-It is intentionally simple — no inventory skew, no PM hedge, no requote loop — but the market-selection and quote-placement flow mirrors the real bot.
 
 ```bash
 PRIVATE_KEY=0x... cargo run --example active_market_quote
@@ -167,10 +165,8 @@ async fn main() -> Result<()> {
     println!("best bid: {:?} | best ask: {:?}", best_bid, best_ask);
 
     // 3) Derive a simple two-sided quote.
-    // This is intentionally conservative and only meant as a clean SDK example.
     let (bid_tick, ask_tick) = match (best_bid, best_ask) {
         (Some(bid), Some(ask)) if bid < ask => {
-            // Step one tick inside the spread when possible.
             let next_bid = (bid + 1).min(98);
             let next_ask = ask.saturating_sub(1).max(2);
 
@@ -216,24 +212,85 @@ async fn main() -> Result<()> {
 }
 ```
 
-### Why this matches the MM bot flow
+**What it demonstrates:** active market discovery, orderbook-based quote selection, paired order placement.
 
-This example deliberately mirrors the real bot’s first steps:
+## atomic_requote — Replace Existing Quotes in One Transaction
 
-- market discovery comes from `get_active_markets()`
-- quote inputs come from the live orderbook snapshot
-- both sides are placed together in a single call
-- the example treats market selection and quote construction as separate steps
+This example shows how to cancel stale quotes and place fresh ones atomically using `replace()`.
 
-What it does **not** include from the production MM bot:
+Use this when you already have resting quotes on a market and want to move them without creating a cancel/place gap.
 
-- Polymarket fair value / hedge logic
-- inventory skew
-- atomic requoting via `replace()`
-- startup recovery / local order tracking
-- risk caps and panic/reconciliation paths
+```bash
+PRIVATE_KEY=0x... cargo run --example atomic_requote
+```
 
-For those patterns, see the production MM bot and the simpler event-driven example below.
+```rust
+use anyhow::{anyhow, Result};
+use strike_sdk::prelude::*;
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    tracing_subscriber::fmt::init();
+
+    let private_key = std::env::var("PRIVATE_KEY").expect("PRIVATE_KEY required");
+
+    let client = StrikeClient::new(StrikeConfig::bsc_mainnet())
+        .with_private_key(&private_key)
+        .build()?;
+
+    let signer = client.signer_address().expect("wallet required");
+    let market = client
+        .indexer()
+        .get_active_markets()
+        .await?
+        .into_iter()
+        .min_by_key(|m| m.expiry_time)
+        .ok_or_else(|| anyhow!("no active markets found"))?;
+
+    let market_id = market.id as u64;
+
+    // Start with an initial two-sided quote.
+    let initial = client
+        .orders()
+        .place(
+            market_id,
+            &[
+                OrderParam::bid(45, 100),
+                OrderParam::ask(55, 100),
+            ],
+        )
+        .await?;
+
+    let old_ids: Vec<_> = initial.iter().map(|o| o.order_id).collect();
+
+    println!("wallet: {signer}");
+    println!("initial order ids: {:?}", old_ids);
+
+    // Move both sides tighter using one atomic replace.
+    let updated = client
+        .orders()
+        .replace(
+            &old_ids,
+            market_id,
+            &[
+                OrderParam::bid(46, 100),
+                OrderParam::ask(54, 100),
+            ],
+        )
+        .await?;
+
+    for order in &updated {
+        println!(
+            "replacement order {} | side {:?} | market {}",
+            order.order_id, order.side, order.market_id
+        );
+    }
+
+    Ok(())
+}
+```
+
+**What it demonstrates:** atomic cancel-and-place, quote refresh without a gap, and practical use of `replace()`.
 
 ## stream_events — Event-Driven Architecture
 
