@@ -1,6 +1,6 @@
 # Example Bots
 
-The SDK ships with four runnable examples in `sdk/rust/examples/`. Clone the repo and run them directly.
+The SDK ships with runnable examples and patterns for bots and integrations.
 
 ## read_markets — Read-Only Market Discovery
 
@@ -107,6 +107,133 @@ async fn main() -> Result<()> {
 ```
 
 **What it demonstrates:** [Wallet setup](client.md), [USDT approval](vault-and-tokens.md), [order placement and cancellation](orders.md).
+
+## active_market_quote — Find the Active Market and Quote It
+
+This example follows the same basic pattern as the Strike MM bot:
+
+1. fetch active markets from the indexer
+2. pick the market you want to quote
+3. read the current orderbook
+4. derive bid/ask quote ticks from the book
+5. approve USDT if needed
+6. place both sides in one transaction
+
+It is intentionally simple — no inventory skew, no PM hedge, no requote loop — but the market-selection and quote-placement flow mirrors the real bot.
+
+```bash
+PRIVATE_KEY=0x... cargo run --example active_market_quote
+```
+
+```rust
+use anyhow::{anyhow, Result};
+use strike_sdk::prelude::*;
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    tracing_subscriber::fmt::init();
+
+    let private_key = std::env::var("PRIVATE_KEY").expect("PRIVATE_KEY required");
+
+    let client = StrikeClient::new(StrikeConfig::bsc_mainnet())
+        .with_private_key(&private_key)
+        .build()?;
+
+    let signer = client.signer_address().expect("wallet required");
+    println!("wallet: {signer}");
+
+    // One-time approval; safe to call repeatedly.
+    client.vault().approve_usdt().await?;
+
+    // 1) Fetch active markets.
+    let markets = client.indexer().get_active_markets().await?;
+    let market = markets
+        .into_iter()
+        .min_by_key(|m| m.expiry_time)
+        .ok_or_else(|| anyhow!("no active markets found"))?;
+
+    let market_id = market.id as u64;
+    println!(
+        "selected market {} | expiry {} | batch interval {}s",
+        market.id, market.expiry_time, market.batch_interval
+    );
+
+    // 2) Read orderbook snapshot.
+    let ob = client.indexer().get_orderbook(market_id).await?;
+
+    let best_bid = ob.bids.iter().map(|l| l.tick).max();
+    let best_ask = ob.asks.iter().map(|l| l.tick).min();
+
+    println!("best bid: {:?} | best ask: {:?}", best_bid, best_ask);
+
+    // 3) Derive a simple two-sided quote.
+    // This is intentionally conservative and only meant as a clean SDK example.
+    let (bid_tick, ask_tick) = match (best_bid, best_ask) {
+        (Some(bid), Some(ask)) if bid < ask => {
+            // Step one tick inside the spread when possible.
+            let next_bid = (bid + 1).min(98);
+            let next_ask = ask.saturating_sub(1).max(2);
+
+            if next_bid < next_ask {
+                (next_bid, next_ask)
+            } else {
+                (bid, ask)
+            }
+        }
+        (Some(bid), None) => (bid.min(98), (bid + 10).min(99)),
+        (None, Some(ask)) => (ask.saturating_sub(10).max(1), ask.max(2)),
+        (None, None) => (45, 55),
+        _ => return Err(anyhow!("crossed or invalid orderbook; refusing to quote")),
+    };
+
+    let quote_lots = 100u64;
+
+    println!(
+        "placing quote on market {} | bid {} | ask {} | lots {}",
+        market_id, bid_tick, ask_tick, quote_lots
+    );
+
+    // 4) Place both sides atomically.
+    let placed = client
+        .orders()
+        .place(
+            market_id,
+            &[
+                OrderParam::bid(bid_tick, quote_lots),
+                OrderParam::ask(ask_tick, quote_lots),
+            ],
+        )
+        .await?;
+
+    for order in &placed {
+        println!(
+            "placed order {} | side {:?} | market {}",
+            order.order_id, order.side, order.market_id
+        );
+    }
+
+    Ok(())
+}
+```
+
+### Why this matches the MM bot flow
+
+This example deliberately mirrors the real bot’s first steps:
+
+- market discovery comes from `get_active_markets()`
+- quote inputs come from the live orderbook snapshot
+- both sides are placed together in a single call
+- the example treats market selection and quote construction as separate steps
+
+What it does **not** include from the production MM bot:
+
+- Polymarket fair value / hedge logic
+- inventory skew
+- atomic requoting via `replace()`
+- startup recovery / local order tracking
+- risk caps and panic/reconciliation paths
+
+For those patterns, see the production MM bot and the simpler event-driven example below.
 
 ## stream_events — Event-Driven Architecture
 
