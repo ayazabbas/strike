@@ -60,12 +60,11 @@ async fn main() -> Result<()> {
     // Find an active market
     let markets = client.indexer().get_active_markets().await?;
     let market = markets.first().expect("no active markets");
-    let market_id = market.id as u64;
 
     // Place a bid at tick 40 and an ask at tick 60, 100 lots each
     let orders = client
         .orders()
-        .place(market_id, &[OrderParam::bid(40, 100), OrderParam::ask(60, 100)])
+        .place_market(market, &[OrderParam::bid(40, 100), OrderParam::ask(60, 100)])
         .await?;
 
     for o in &orders {

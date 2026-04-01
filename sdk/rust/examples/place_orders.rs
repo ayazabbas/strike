@@ -39,17 +39,15 @@ async fn main() -> Result<()> {
         }
     };
     println!(
-        "using market {} (expiry: {})",
-        market.id, market.expiry_time
+        "using factory market {} / orderbook market {:?} (expiry: {})",
+        market.factory_market_id, market.orderbook_market_id, market.expiry_time
     );
-
-    let market_id = market.id as u64;
 
     // Place orders: bid at tick 40, ask at tick 60
     let orders = client
         .orders()
-        .place(
-            market_id,
+        .place_market(
+            market,
             &[OrderParam::bid(40, 100), OrderParam::ask(60, 100)],
         )
         .await?;

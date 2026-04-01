@@ -121,8 +121,10 @@ pub struct PlacedOrder {
     pub order_id: U256,
     /// The side this order was placed on.
     pub side: Side,
-    /// Market ID.
+    /// Legacy alias of `orderbook_market_id`.
     pub market_id: u64,
+    /// OrderBook market ID used on-chain for this order.
+    pub orderbook_market_id: u64,
 }
 
 /// On-chain event types emitted by Strike contracts.

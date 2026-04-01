@@ -1,16 +1,83 @@
 //! Response types from the Strike indexer API.
 
+use serde::de::{self, Deserializer};
 use serde::Deserialize;
 
+use crate::error::{Result, StrikeError};
+
 /// A market as returned by the indexer.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Market {
+    /// Legacy API field. This remains the factory market ID for backward compatibility.
     pub id: i64,
+    /// Canonical market ID in `MarketFactory`.
+    pub factory_market_id: i64,
+    /// Tradable market ID in `OrderBook`, used for order placement.
+    pub orderbook_market_id: Option<i64>,
     pub expiry_time: i64,
     pub status: String,
     pub pyth_feed_id: Option<String>,
     pub strike_price: Option<i64>,
     pub batch_interval: i64,
+}
+
+#[derive(Debug, Deserialize)]
+struct MarketWire {
+    #[serde(default)]
+    id: Option<i64>,
+    #[serde(default, alias = "factoryMarketId")]
+    factory_market_id: Option<i64>,
+    #[serde(default, alias = "orderBookMarketId", alias = "orderbookMarketId")]
+    orderbook_market_id: Option<i64>,
+    expiry_time: i64,
+    status: String,
+    pyth_feed_id: Option<String>,
+    strike_price: Option<i64>,
+    batch_interval: i64,
+}
+
+impl<'de> Deserialize<'de> for Market {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let wire = MarketWire::deserialize(deserializer)?;
+        let factory_market_id = wire
+            .factory_market_id
+            .or(wire.id)
+            .ok_or_else(|| de::Error::missing_field("id"))?;
+
+        Ok(Self {
+            id: wire.id.unwrap_or(factory_market_id),
+            factory_market_id,
+            orderbook_market_id: wire.orderbook_market_id,
+            expiry_time: wire.expiry_time,
+            status: wire.status,
+            pyth_feed_id: wire.pyth_feed_id,
+            strike_price: wire.strike_price,
+            batch_interval: wire.batch_interval,
+        })
+    }
+}
+
+impl Market {
+    /// Return the tradable OrderBook market ID, failing closed if the indexer
+    /// response did not expose it yet.
+    pub fn tradable_market_id(&self) -> Result<u64> {
+        let orderbook_market_id = self.orderbook_market_id.ok_or_else(|| {
+            StrikeError::Config(format!(
+                "market {} is missing orderbook_market_id; upgrade the indexer/API before using this market for trading",
+                self.factory_market_id
+            ))
+        })?;
+
+        u64::try_from(orderbook_market_id).map_err(|_| {
+            StrikeError::Config(format!(
+                "market {} has invalid orderbook_market_id {}",
+                self.factory_market_id, orderbook_market_id
+            ))
+        })
+    }
 }
 
 /// Wrapper for the `/markets` response.

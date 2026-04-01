@@ -27,8 +27,12 @@ let markets = client.indexer().get_markets().await?;
 
 for market in &markets {
     println!(
-        "market {} | expiry: {} | interval: {}s | status: {}",
-        market.id, market.expiry_time, market.batch_interval, market.status,
+        "factory {} | orderbook {:?} | expiry: {} | interval: {}s | status: {}",
+        market.factory_market_id,
+        market.orderbook_market_id,
+        market.expiry_time,
+        market.batch_interval,
+        market.status,
     );
 }
 ```
@@ -67,7 +71,9 @@ Response:
 
 ```rust
 pub struct Market {
-    pub id: i64,
+    pub id: i64,                      // legacy alias of factory_market_id
+    pub factory_market_id: i64,
+    pub orderbook_market_id: Option<i64>,
     pub expiry_time: i64,
     pub status: String,            // "active", "closed", "resolving", "resolved", "cancelled"
     pub pyth_feed_id: Option<String>,
@@ -75,6 +81,8 @@ pub struct Market {
     pub batch_interval: i64,
 }
 ```
+
+Use `factory_market_id` for lifecycle/resolution flows and `orderbook_market_id` for trading. The legacy `id` field is kept for backward compatibility and still maps to the factory market ID.
 
 ## Get Orderbook
 

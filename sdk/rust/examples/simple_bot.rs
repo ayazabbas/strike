@@ -15,9 +15,9 @@
 //! PRIVATE_KEY=0x... cargo run --example simple_bot
 //! ```
 
+use alloy::primitives::U256;
 use std::collections::HashMap;
 use strike_sdk::prelude::*;
-use alloy::primitives::U256;
 
 /// Active quote state for a market
 struct QuotedMarket {
@@ -26,7 +26,7 @@ struct QuotedMarket {
     position: i64, // net lots: positive = long YES, negative = long NO
 }
 
-const SPREAD: u8 = 5;  // 5 ticks each side of fair
+const SPREAD: u8 = 5; // 5 ticks each side of fair
 const LOTS: u64 = 100;
 
 #[tokio::main]
@@ -53,7 +53,10 @@ async fn main() -> Result<()> {
     let from_block = client.block_number().await?.saturating_sub(5000);
     let open_orders = client.scan_orders(from_block, signer).await?;
     if !open_orders.is_empty() {
-        println!("found {} markets with open orders from previous run", open_orders.len());
+        println!(
+            "found {} markets with open orders from previous run",
+            open_orders.len()
+        );
         // Cancel stale orders from previous session
         let all_ids: Vec<U256> = open_orders
             .values()

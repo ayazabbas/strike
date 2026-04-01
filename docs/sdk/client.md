@@ -101,7 +101,7 @@ All SDK methods return `strike_sdk::Result<T>`, which is `std::result::Result<T,
 ```rust
 use strike_sdk::prelude::*;
 
-match client.orders().place(market_id, &params).await {
+match client.orders().place(orderbook_market_id, &params).await {
     Ok(orders) => { /* success */ }
     Err(StrikeError::NoWallet) => { /* no private key configured */ }
     Err(StrikeError::Rpc(e)) => { /* RPC transport error */ }

@@ -85,12 +85,11 @@ async fn main() -> Result<()> {
     // Find active market
     let markets = client.indexer().get_active_markets().await?;
     let market = markets.first().expect("no active markets");
-    let market_id = market.id as u64;
 
     // Place bid at 40, ask at 60
     let orders = client
         .orders()
-        .place(market_id, &[OrderParam::bid(40, 100), OrderParam::ask(60, 100)])
+        .place_market(market, &[OrderParam::bid(40, 100), OrderParam::ask(60, 100)])
         .await?;
 
     for o in &orders {
@@ -150,10 +149,9 @@ async fn main() -> Result<()> {
         .min_by_key(|m| m.expiry_time)
         .ok_or_else(|| anyhow!("no active markets found"))?;
 
-    let market_id = market.id as u64;
     println!(
-        "selected market {} | expiry {} | batch interval {}s",
-        market.id, market.expiry_time, market.batch_interval
+        "selected factory market {} | orderbook {:?} | expiry {} | batch interval {}s",
+        market.factory_market_id, market.orderbook_market_id, market.expiry_time, market.batch_interval
     );
 
     // 2) Read orderbook snapshot.
@@ -186,14 +184,14 @@ async fn main() -> Result<()> {
 
     println!(
         "placing quote on market {} | bid {} | ask {} | lots {}",
-        market_id, bid_tick, ask_tick, quote_lots
+        market.tradable_market_id()?, bid_tick, ask_tick, quote_lots
     );
 
     // 4) Place both sides atomically.
     let placed = client
         .orders()
-        .place(
-            market_id,
+        .place_market(
+            &market,
             &[
                 OrderParam::bid(bid_tick, quote_lots),
                 OrderParam::ask(ask_tick, quote_lots),
@@ -203,8 +201,8 @@ async fn main() -> Result<()> {
 
     for order in &placed {
         println!(
-            "placed order {} | side {:?} | market {}",
-            order.order_id, order.side, order.market_id
+            "placed order {} | side {:?} | orderbook market {}",
+            order.order_id, order.side, order.orderbook_market_id
         );
     }
 
@@ -247,13 +245,11 @@ async fn main() -> Result<()> {
         .min_by_key(|m| m.expiry_time)
         .ok_or_else(|| anyhow!("no active markets found"))?;
 
-    let market_id = market.id as u64;
-
     // Start with an initial two-sided quote.
     let initial = client
         .orders()
-        .place(
-            market_id,
+        .place_market(
+            &market,
             &[
                 OrderParam::bid(45, 100),
                 OrderParam::ask(55, 100),
@@ -269,9 +265,9 @@ async fn main() -> Result<()> {
     // Move both sides tighter using one atomic replace.
     let updated = client
         .orders()
-        .replace(
+        .replace_market(
             &old_ids,
-            market_id,
+            &market,
             &[
                 OrderParam::bid(46, 100),
                 OrderParam::ask(54, 100),
@@ -281,8 +277,8 @@ async fn main() -> Result<()> {
 
     for order in &updated {
         println!(
-            "replacement order {} | side {:?} | market {}",
-            order.order_id, order.side, order.market_id
+            "replacement order {} | side {:?} | orderbook market {}",
+            order.order_id, order.side, order.orderbook_market_id
         );
     }
 

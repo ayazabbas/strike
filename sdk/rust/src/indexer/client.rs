@@ -41,7 +41,10 @@ impl IndexerClient {
         let mut offset = 0;
 
         loop {
-            let mut url = format!("{}/markets?limit={}&offset={}", self.base_url, limit, offset);
+            let mut url = format!(
+                "{}/markets?limit={}&offset={}",
+                self.base_url, limit, offset
+            );
             if let Some(s) = status {
                 url.push_str(&format!("&status={}", s));
             }

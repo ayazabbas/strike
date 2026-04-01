@@ -19,8 +19,12 @@ async fn main() -> Result<()> {
 
     for market in &markets {
         println!(
-            "  market {} | status: {} | expiry: {} | batch_interval: {}s",
-            market.id, market.status, market.expiry_time, market.batch_interval,
+            "  factory {} | orderbook {:?} | status: {} | expiry: {} | batch_interval: {}s",
+            market.factory_market_id,
+            market.orderbook_market_id,
+            market.status,
+            market.expiry_time,
+            market.batch_interval,
         );
     }
 

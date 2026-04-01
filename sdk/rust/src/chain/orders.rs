@@ -12,6 +12,7 @@ use crate::chain::send_tx;
 use crate::config::StrikeConfig;
 use crate::contracts::OrderBook;
 use crate::error::{Result, StrikeError};
+use crate::indexer::types::Market as IndexerMarket;
 use crate::nonce::NonceSender;
 use crate::types::{OrderParam, PlacedOrder, Side};
 
@@ -44,16 +45,20 @@ impl<'a> OrdersClient<'a> {
 
     /// Place one or more orders on a market in a single transaction.
     ///
-    /// Uses `placeOrders(marketId, OrderParam[])`. Returns placed orders with
+    /// Uses `placeOrders(orderbookMarketId, OrderParam[])`. Returns placed orders with
     /// their assigned on-chain IDs (parsed from `OrderPlaced` events in the receipt).
-    pub async fn place(&self, market_id: u64, params: &[OrderParam]) -> Result<Vec<PlacedOrder>> {
+    pub async fn place(
+        &self,
+        orderbook_market_id: u64,
+        params: &[OrderParam],
+    ) -> Result<Vec<PlacedOrder>> {
         self.require_wallet()?;
 
         let contract_params: Vec<OrderBook::OrderParam> =
             params.iter().map(|p| p.to_contract_param()).collect();
 
         let calldata = OrderBook::placeOrdersCall {
-            marketId: U256::from(market_id),
+            marketId: U256::from(orderbook_market_id),
             params: contract_params,
         }
         .abi_encode();
@@ -67,7 +72,7 @@ impl<'a> OrdersClient<'a> {
         let pending = send_tx(self.provider, &self.nonce_sender, tx).await?;
 
         let tx_hash = *pending.tx_hash();
-        info!(market_id, order_count, tx = %tx_hash, "placeOrders tx sent");
+        info!(orderbook_market_id, order_count, tx = %tx_hash, "placeOrders tx sent");
 
         let receipt = pending
             .get_receipt()
@@ -76,15 +81,27 @@ impl<'a> OrdersClient<'a> {
 
         if !receipt.status() {
             return Err(StrikeError::Contract(format!(
-                "placeOrders reverted (market_id={market_id}, tx={tx_hash}, gas_used={})",
+                "placeOrders reverted (orderbook_market_id={orderbook_market_id}, tx={tx_hash}, gas_used={})",
                 receipt.gas_used
             )));
         }
 
-        let placed = parse_placed_orders(&receipt, market_id);
-        info!(market_id, tx = %tx_hash, gas_used = receipt.gas_used, placed = placed.len(), "placeOrders confirmed");
+        let placed = parse_placed_orders(&receipt, orderbook_market_id);
+        info!(orderbook_market_id, tx = %tx_hash, gas_used = receipt.gas_used, placed = placed.len(), "placeOrders confirmed");
 
         Ok(placed)
+    }
+
+    /// Place one or more orders using an indexer market object.
+    ///
+    /// This resolves the tradable `orderbook_market_id` and fails closed if the
+    /// indexer response only exposed the legacy factory ID.
+    pub async fn place_market(
+        &self,
+        market: &IndexerMarket,
+        params: &[OrderParam],
+    ) -> Result<Vec<PlacedOrder>> {
+        self.place(market.tradable_market_id()?, params).await
     }
 
     /// Atomically cancel existing orders and place new ones via `replaceOrders`.
@@ -94,7 +111,7 @@ impl<'a> OrdersClient<'a> {
     pub async fn replace(
         &self,
         cancel_ids: &[U256],
-        market_id: u64,
+        orderbook_market_id: u64,
         params: &[OrderParam],
     ) -> Result<Vec<PlacedOrder>> {
         self.require_wallet()?;
@@ -104,7 +121,7 @@ impl<'a> OrdersClient<'a> {
 
         let calldata = OrderBook::replaceOrdersCall {
             cancelIds: cancel_ids.to_vec(),
-            marketId: U256::from(market_id),
+            marketId: U256::from(orderbook_market_id),
             params: contract_params,
         }
         .abi_encode();
@@ -118,7 +135,7 @@ impl<'a> OrdersClient<'a> {
         let pending = send_tx(self.provider, &self.nonce_sender, tx).await?;
 
         let tx_hash = *pending.tx_hash();
-        info!(market_id, cancels = cancel_ids.len(), places = params.len(), tx = %tx_hash, "replaceOrders tx sent");
+        info!(orderbook_market_id, cancels = cancel_ids.len(), places = params.len(), tx = %tx_hash, "replaceOrders tx sent");
 
         let receipt = pending
             .get_receipt()
@@ -127,15 +144,29 @@ impl<'a> OrdersClient<'a> {
 
         if !receipt.status() {
             return Err(StrikeError::Contract(format!(
-                "replaceOrders reverted (market_id={market_id}, tx={tx_hash}, gas_used={})",
+                "replaceOrders reverted (orderbook_market_id={orderbook_market_id}, tx={tx_hash}, gas_used={})",
                 receipt.gas_used
             )));
         }
 
-        let placed = parse_placed_orders(&receipt, market_id);
-        info!(market_id, tx = %tx_hash, gas_used = receipt.gas_used, cancelled = cancel_ids.len(), placed = placed.len(), "replaceOrders confirmed");
+        let placed = parse_placed_orders(&receipt, orderbook_market_id);
+        info!(orderbook_market_id, tx = %tx_hash, gas_used = receipt.gas_used, cancelled = cancel_ids.len(), placed = placed.len(), "replaceOrders confirmed");
 
         Ok(placed)
+    }
+
+    /// Replace one or more orders using an indexer market object.
+    ///
+    /// This resolves the tradable `orderbook_market_id` and fails closed if the
+    /// indexer response only exposed the legacy factory ID.
+    pub async fn replace_market(
+        &self,
+        cancel_ids: &[U256],
+        market: &IndexerMarket,
+        params: &[OrderParam],
+    ) -> Result<Vec<PlacedOrder>> {
+        self.replace(cancel_ids, market.tradable_market_id()?, params)
+            .await
     }
 
     /// Cancel one or more orders in a single transaction via `cancelOrders`.
@@ -200,7 +231,7 @@ impl<'a> OrdersClient<'a> {
 /// instead of `OrderPlaced`, but they're still live orders that need tracking.
 fn parse_placed_orders(
     receipt: &alloy::rpc::types::TransactionReceipt,
-    market_id: u64,
+    orderbook_market_id: u64,
 ) -> Vec<PlacedOrder> {
     let mut placed = Vec::new();
     for log in receipt.inner.logs() {
@@ -208,7 +239,8 @@ fn parse_placed_orders(
             placed.push(PlacedOrder {
                 order_id: event.orderId,
                 side: Side::try_from(event.side).unwrap_or(Side::Bid),
-                market_id,
+                market_id: orderbook_market_id,
+                orderbook_market_id,
             });
         } else if let Ok(event) = OrderBook::OrderResting::decode_log(&log.inner) {
             // OrderResting doesn't include side — read from on-chain order storage.
@@ -216,7 +248,8 @@ fn parse_placed_orders(
             placed.push(PlacedOrder {
                 order_id: event.orderId,
                 side: Side::Bid,
-                market_id,
+                market_id: orderbook_market_id,
+                orderbook_market_id,
             });
         }
     }

@@ -60,20 +60,25 @@ let gtb_bid = OrderParam::new(Side::Bid, OrderType::GoodTilBatch, 50, 100);
 Place one or more orders in a single transaction using `client.orders().place()`:
 
 ```rust
+let market = client.indexer().get_active_markets().await?
+    .into_iter()
+    .next()
+    .expect("no active markets");
+
 let orders = client
     .orders()
-    .place(
-        market_id,
-        &[OrderParam::bid(40, 100), OrderParam::ask(60, 100)],
-    )
+    .place_market(&market, &[OrderParam::bid(40, 100), OrderParam::ask(60, 100)])
     .await?;
 
 for o in &orders {
-    println!("order {} | {:?} | market {}", o.order_id, o.side, o.market_id);
+    println!(
+        "order {} | {:?} | orderbook market {}",
+        o.order_id, o.side, o.orderbook_market_id
+    );
 }
 ```
 
-This calls `OrderBook.placeOrders()` on-chain. The returned `Vec<PlacedOrder>` contains the order IDs parsed from `OrderPlaced` events in the transaction receipt.
+This calls `OrderBook.placeOrders()` on-chain using the market's `orderbook_market_id`. The returned `Vec<PlacedOrder>` contains the order IDs parsed from `OrderPlaced` events in the transaction receipt.
 
 ## Cancelling Orders
 
@@ -100,7 +105,7 @@ let new_params = vec![OrderParam::bid(45, 100), OrderParam::ask(55, 100)];
 
 let new_orders = client
     .orders()
-    .replace(&old_ids, market_id, &new_params)
+    .replace_market(&old_ids, &market, &new_params)
     .await?;
 ```
 
@@ -112,9 +117,10 @@ The return type from `place()` and `replace()`:
 
 ```rust
 pub struct PlacedOrder {
-    pub order_id: U256,    // unique on-chain order ID
-    pub side: Side,        // Bid, Ask, SellYes, or SellNo
-    pub market_id: u64,    // market the order belongs to
+    pub order_id: U256,
+    pub side: Side,
+    pub market_id: u64,              // legacy alias of orderbook_market_id
+    pub orderbook_market_id: u64,
 }
 ```
 
@@ -136,7 +142,7 @@ client.tokens().set_approval_for_all(order_book, true).await?;
 // Place a sell order
 let orders = client
     .orders()
-    .place(market_id, &[OrderParam::sell_yes(55, 50)])
+    .place_market(&market, &[OrderParam::sell_yes(55, 50)])
     .await?;
 ```
 

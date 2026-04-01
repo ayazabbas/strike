@@ -52,11 +52,22 @@ async fn main() -> Result<()> {
     // Approve USDT (one-time, idempotent)
     client.vault().approve_usdt().await?;
 
-    // Place orders: bid at tick 50, ask at tick 60, 1000 lots each
-    let orders = client.orders().place(1, &[
-        OrderParam::bid(50, 1000),
-        OrderParam::ask(60, 1000),
-    ]).await?;
+    // Fetch a market from the indexer and trade using its tradable orderbook ID
+    let market = client
+        .indexer()
+        .get_active_markets()
+        .await?
+        .into_iter()
+        .next()
+        .expect("no active markets");
+
+    let orders = client
+        .orders()
+        .place_market(&market, &[
+            OrderParam::bid(50, 1000),
+            OrderParam::ask(60, 1000),
+        ])
+        .await?;
 
     // Cancel all placed orders
     let ids: Vec<_> = orders.iter().map(|o| o.order_id).collect();
@@ -71,7 +82,7 @@ async fn main() -> Result<()> {
 ```rust
 let new_orders = client.orders().replace(
     &old_order_ids,
-    market_id,
+    orderbook_market_id,
     &[OrderParam::bid(52, 1000), OrderParam::ask(58, 1000)],
 ).await?;
 ```
@@ -110,6 +121,13 @@ The SDK handles both the new `{ data }` envelope and the legacy `{ markets }` fo
 
 The `get_markets()` call now fetches active markets only by default (equivalent to `?status=active`). To fetch all markets use the underlying indexer client directly with query params.
 
+Market IDs matter:
+
+- `market.id` is retained as a backward-compatible alias of the factory market ID.
+- `market.factory_market_id` is the canonical lifecycle/resolution ID.
+- `market.orderbook_market_id` is the tradable ID for `OrderBook.placeOrders` and `replaceOrders`.
+- `orders().place_market()` and `orders().replace_market()` fail closed if the indexer response does not include `orderbook_market_id`.
+
 ## Key Concepts
 
 - **LOT_SIZE** = 1e16 wei ($0.01 per lot)
@@ -130,7 +148,7 @@ The `get_markets()` call now fetches active markets only by default (equivalent 
 Disable the nonce manager if you manage nonces yourself:
 
 ```toml
-strike-sdk = { version = "0.1", default-features = false }
+strike-sdk = { version = "0.2", default-features = false }
 ```
 
 ## Modules

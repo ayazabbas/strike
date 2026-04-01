@@ -78,7 +78,11 @@ impl NonceSender {
         let mut tx = tx;
         // Force legacy gas price — BSC doesn't use EIP-1559
         let gp = tx.gas_price.unwrap_or(BSC_MIN_GAS_PRICE);
-        tx.gas_price = Some(if gp < BSC_MIN_GAS_PRICE { BSC_MIN_GAS_PRICE } else { gp });
+        tx.gas_price = Some(if gp < BSC_MIN_GAS_PRICE {
+            BSC_MIN_GAS_PRICE
+        } else {
+            gp
+        });
         // Clear EIP-1559 fields so alloy sends a type-0 (legacy) tx
         tx.max_fee_per_gas = None;
         tx.max_priority_fee_per_gas = None;
