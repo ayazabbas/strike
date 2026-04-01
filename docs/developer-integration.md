@@ -180,8 +180,8 @@ GET /v1/markets/{id}/ai-resolution
 
 Returns the prompt, model, proposed choice, liveness window, challenge status, and IPFS proof CID. See the live generated OpenAPI reference for the full response schema:
 
-- `https://app.strike.pm/openapi.json`
-- `https://app.strike.pm/v1/openapi.json`
+- [https://app.strike.pm/openapi.json](https://app.strike.pm/openapi.json)
+- [https://app.strike.pm/v1/openapi.json](https://app.strike.pm/v1/openapi.json)
 
 ## Collateral Formulas
 

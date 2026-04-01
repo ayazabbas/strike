@@ -23,8 +23,8 @@ The canonical versioned API surface lives under `/v1/`.
 
 The generated OpenAPI spec is published at:
 
-- `https://app.strike.pm/openapi.json`
-- `https://app.strike.pm/v1/openapi.json`
+- [https://app.strike.pm/openapi.json](https://app.strike.pm/openapi.json)
+- [https://app.strike.pm/v1/openapi.json](https://app.strike.pm/v1/openapi.json)
 
 Use this as the source of truth for routes, params, enums, and response schemas.
 

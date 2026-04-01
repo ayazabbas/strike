@@ -12,8 +12,8 @@ Responses use a standard envelope: `{ data: [...], meta: { total, limit, offset 
 
 The generated OpenAPI spec is the source of truth for the public indexer API:
 
-- `https://app.strike.pm/openapi.json`
-- `https://app.strike.pm/v1/openapi.json`
+- [https://app.strike.pm/openapi.json](https://app.strike.pm/openapi.json)
+- [https://app.strike.pm/v1/openapi.json](https://app.strike.pm/v1/openapi.json)
 
 If this page and the OpenAPI spec ever disagree, trust the generated spec.
 
