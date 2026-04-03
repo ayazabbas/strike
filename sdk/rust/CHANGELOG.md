@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.2.5 (2026-04-03)
+
+### Fixed
+- Updated built-in `StrikeConfig::bsc_mainnet()` contract addresses to match the live rotated mainnet deployment.
+- Updated built-in `StrikeConfig::bsc_testnet()` contract addresses to match the current testnet deployment.
+- Removed the stale note claiming mainnet contracts were not yet deployed.
+
 ## v0.2.4 (2026-04-01)
 
 ### Fixed

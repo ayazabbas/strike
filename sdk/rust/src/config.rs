@@ -39,28 +39,28 @@ impl StrikeConfig {
                 usdt: "0xb242dc031998b06772C63596Bfce091c80D4c3fA"
                     .parse()
                     .unwrap(),
-                fee_model: "0x46C198Fa5e0E1CCEc3652bAB9A975B9F68B7F39E"
+                fee_model: "0xE7A18fAc36E4DF4F10C7d69a23AB45c01ea86781"
                     .parse()
                     .unwrap(),
-                outcome_token: "0x1c6622bE0D8cefD48009A337CD393cAe4530fc9a"
+                outcome_token: "0x88147c22E98B201493600e1Bbf9775Eea8B0E229"
                     .parse()
                     .unwrap(),
-                vault: "0x10909d11446e48551DA0366f59b9Ac9Cb9079314"
+                vault: "0xaa8b16F64e2dC9958F0dBe97D5f274571a80497a"
                     .parse()
                     .unwrap(),
-                order_book: "0x343d3f42562A8E5C794DFf8637664D2d03246FB9"
+                order_book: "0x48C5ccBb3034E8bB76D96974c66a900B1CdAEcE7"
                     .parse()
                     .unwrap(),
-                batch_auction: "0xF6233287fb878706B191b868a5e38E1DfdfAdDf7"
+                batch_auction: "0xEf0F96D0854C15265e40Dc5e7aD44a8D7405e51d"
                     .parse()
                     .unwrap(),
-                market_factory: "0xd2783195A8d4Ee2f99616c3b9048B43187951E67"
+                market_factory: "0xED39F523B9cD6D915ab76B17029A20A4132Cb952"
                     .parse()
                     .unwrap(),
-                pyth_resolver: "0xF83aE0cfd2D1546Bb4b15ecEB010C1B045d7Ddc9"
+                pyth_resolver: "0xc72B3Da051FB25125396c83fa89856fbBE1e5f42"
                     .parse()
                     .unwrap(),
-                redemption: "0x03961AcDb718D84079De1B0236a77A7a1A3df177"
+                redemption: "0xd3CcF8f19574F1Baf1117314Fd5131bC8B7059D1"
                     .parse()
                     .unwrap(),
             },
@@ -73,36 +73,34 @@ impl StrikeConfig {
     }
 
     /// BSC Mainnet deployment (chain ID 56).
-    ///
-    /// Note: Mainnet contracts are not yet deployed. Update addresses when available.
     pub fn bsc_mainnet() -> Self {
         Self {
             addresses: ContractAddresses {
                 usdt: "0x55d398326f99059fF775485246999027B3197955"
                     .parse()
                     .unwrap(),
-                fee_model: "0xBB628007734963352b1cF9094847B902b0fca9aB"
+                fee_model: "0x115a7dda16926eddc048281e1fb80c15bc724a6a"
                     .parse()
                     .unwrap(),
-                outcome_token: "0xBd65B054a08fe0e8d26325e69B6EB6aD6dfF1516"
+                outcome_token: "0x161f2222684842cf1b5fb03e016365a91626690a"
                     .parse()
                     .unwrap(),
-                vault: "0x2556E5DE92281EdA3300F044dfB9158416407eed"
+                vault: "0x223a1c6eb44cc6d7e74d11b3235941da2b02f164"
                     .parse()
                     .unwrap(),
-                order_book: "0x074Ca415B501Bcca0020e9c312cf1F80796Ae3b1"
+                order_book: "0xa5ec8b3ac82853438bbb1788e0bd9d906b7c8d4e"
                     .parse()
                     .unwrap(),
-                batch_auction: "0xa8e9a6B62B93A4360969972Dc7300C6Be7B5f9D8"
+                batch_auction: "0xddc0eb9fd6ce697294b8935d09acaebb494a491b"
                     .parse()
                     .unwrap(),
-                market_factory: "0x9c045dc57c1132e5D13b234F8e166cAaD8CE2c3D"
+                market_factory: "0xb7f4b97b95b85d7c285ac0f6319785657dc0f1da"
                     .parse()
                     .unwrap(),
-                pyth_resolver: "0x1B3335A22D410713A4Cd32eF8ffBEe672aD4e65d"
+                pyth_resolver: "0x09c0574bfb7465ebc115258137e321e42ef813f8"
                     .parse()
                     .unwrap(),
-                redemption: "0x03961AcDb718D84079De1B0236a77A7a1A3df177"
+                redemption: "0xb61c6880db469fb40e49757aa25b49baac26b451"
                     .parse()
                     .unwrap(),
             },
