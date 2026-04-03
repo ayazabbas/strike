@@ -11,6 +11,27 @@ use alloy::rpc::types::TransactionRequest;
 use eyre::{Result, WrapErr};
 use tracing::{info, warn};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SendErrorKind {
+    NonceDrift,
+    PendingConflict,
+    Other,
+}
+
+fn classify_send_error(err: &str) -> SendErrorKind {
+    let err = err.to_ascii_lowercase();
+
+    if err.contains("replacement transaction underpriced") || err.contains("already known") {
+        return SendErrorKind::PendingConflict;
+    }
+
+    if err.contains("nonce") {
+        return SendErrorKind::NonceDrift;
+    }
+
+    SendErrorKind::Other
+}
+
 /// BSC RPC providers enforce a minimum gas price of 0.05 gwei.
 const BSC_MIN_GAS_PRICE: u128 = 50_000_000; // 0.05 gwei in wei
 
@@ -91,7 +112,11 @@ impl NonceSender {
 
     /// Send a transaction, stamping it with the next nonce.
     ///
-    /// On nonce-related errors: syncs from chain and retries once.
+    /// Nonce drift errors are retried once after syncing from chain. Pending
+    /// mempool conflicts (for example replacement underpriced / already known)
+    /// are treated conservatively: refresh local nonce state, but do not blindly
+    /// resend into the same nonce lane.
+    ///
     /// The returned [`PendingTx`] can be `.await`ed for the receipt
     /// **after** releasing the Mutex lock.
     pub async fn send(&mut self, tx: TransactionRequest) -> Result<PendingTx> {
@@ -103,25 +128,64 @@ impl NonceSender {
                 Ok(pending)
             }
             Err(e) => {
-                let err_str = e.to_string();
-                if err_str.contains("nonce")
-                    || err_str.contains("replacement")
-                    || err_str.contains("already known")
-                {
-                    warn!(nonce = self.nonce, err = %e, "nonce error — syncing and retrying");
-                    self.sync().await?;
-                    let retry = tx.nonce(self.nonce);
-                    let pending = self
-                        .provider
-                        .send_transaction(retry)
-                        .await
-                        .wrap_err("retry after nonce sync failed")?;
-                    self.nonce += 1;
-                    Ok(pending)
-                } else {
-                    Err(e.into())
+                match classify_send_error(&e.to_string()) {
+                    SendErrorKind::NonceDrift => {
+                        warn!(nonce = self.nonce, err = %e, "nonce drift detected — syncing and retrying");
+                        self.sync().await?;
+                        let retry = tx.nonce(self.nonce);
+                        let pending = self
+                            .provider
+                            .send_transaction(retry)
+                            .await
+                            .wrap_err("retry after nonce sync failed")?;
+                        self.nonce += 1;
+                        Ok(pending)
+                    }
+                    SendErrorKind::PendingConflict => {
+                        warn!(nonce = self.nonce, err = %e, "pending nonce conflict detected — syncing without blind retry");
+                        self.sync().await?;
+                        Err(e.into())
+                    }
+                    SendErrorKind::Other => Err(e.into()),
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{classify_send_error, SendErrorKind};
+
+    #[test]
+    fn classifies_nonce_drift_errors() {
+        assert_eq!(
+            classify_send_error("nonce too low: next nonce 12, tx nonce 11"),
+            SendErrorKind::NonceDrift
+        );
+        assert_eq!(
+            classify_send_error("invalid transaction nonce"),
+            SendErrorKind::NonceDrift
+        );
+    }
+
+    #[test]
+    fn classifies_pending_conflicts() {
+        assert_eq!(
+            classify_send_error("replacement transaction underpriced"),
+            SendErrorKind::PendingConflict
+        );
+        assert_eq!(
+            classify_send_error("already known"),
+            SendErrorKind::PendingConflict
+        );
+    }
+
+    #[test]
+    fn leaves_unrelated_errors_alone() {
+        assert_eq!(
+            classify_send_error("execution reverted: not enough balance"),
+            SendErrorKind::Other
+        );
     }
 }
