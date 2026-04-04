@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.2.8 (2026-04-04)
+## v0.2.9 (2026-04-04)
 
 ### Fixed
 - `IndexerClient::get_orderbook()` now uses the live indexer route `/orderbook/{market_id}` instead of the stale `/markets/{market_id}/orderbook` path.
