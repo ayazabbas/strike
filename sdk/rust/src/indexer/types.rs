@@ -129,6 +129,7 @@ pub(crate) struct PositionsResponse {
 #[derive(Debug, Clone, Deserialize)]
 pub struct OrderbookLevel {
     pub tick: u64,
+    #[serde(alias = "total_lots")]
     pub lots: u64,
 }
 

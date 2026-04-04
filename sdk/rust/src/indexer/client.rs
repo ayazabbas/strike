@@ -71,9 +71,9 @@ impl IndexerClient {
         Ok(all_markets)
     }
 
-    /// Fetch the orderbook snapshot for a market.
+    /// Fetch the orderbook snapshot for a tradable OrderBook market ID.
     pub async fn get_orderbook(&self, market_id: u64) -> Result<OrderbookSnapshot> {
-        let url = format!("{}/markets/{}/orderbook", self.base_url, market_id);
+        let url = format!("{}/orderbook/{}", self.base_url, market_id);
         let resp: OrderbookSnapshot = self
             .http
             .get(&url)

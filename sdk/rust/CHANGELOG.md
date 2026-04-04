@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.2.8 (2026-04-04)
+
+### Fixed
+- `IndexerClient::get_orderbook()` now uses the live indexer route `/orderbook/{market_id}` instead of the stale `/markets/{market_id}/orderbook` path.
+- SDK orderbook decoding now accepts the live indexer field name `total_lots` for book levels.
+- `read_markets` example now reads orderbooks using `tradable_market_id()` and labels factory vs tradable IDs clearly.
+
 ## v0.2.5 (2026-04-03)
 
 ### Fixed

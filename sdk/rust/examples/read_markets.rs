@@ -39,8 +39,9 @@ async fn main() -> Result<()> {
     // Get orderbook snapshot for first active market
     let active_markets: Vec<_> = markets.iter().filter(|m| m.status == "active").collect();
     if let Some(market) = active_markets.first() {
-        println!("\norderbook for market {}:", market.id);
-        match client.indexer().get_orderbook(market.id as u64).await {
+        let tradable_market_id = market.tradable_market_id()?;
+        println!("\norderbook for tradable market {} (factory {}):", tradable_market_id, market.factory_market_id);
+        match client.indexer().get_orderbook(tradable_market_id).await {
             Ok(ob) => {
                 println!("  bids: {} levels", ob.bids.len());
                 for level in &ob.bids {
