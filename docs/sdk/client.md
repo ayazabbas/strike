@@ -65,7 +65,12 @@ let mut client = StrikeClient::new(StrikeConfig::bsc_mainnet())
 client.init_nonce_sender().await?;
 ```
 
-The `NonceSender` fetches the current nonce from the chain at init, then tracks it locally. It auto-recovers on nonce errors by re-syncing with the chain and retrying. Enabled by the `nonce-manager` feature flag (on by default).
+The `NonceSender` fetches the current nonce from the chain at init, then tracks it locally. It distinguishes between simple nonce drift and pending mempool conflicts:
+
+- **Nonce drift** (for example `nonce too low`) → re-sync from chain and retry once
+- **Pending conflict** (for example `replacement transaction underpriced` or `already known`) → re-sync from chain, but do **not** blindly retry into the same nonce lane
+
+Enabled by the `nonce-manager` feature flag (on by default).
 
 You generally don't need this for simple scripts — it's designed for bots that place and cancel orders in tight loops.
 

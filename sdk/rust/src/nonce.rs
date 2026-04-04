@@ -127,28 +127,26 @@ impl NonceSender {
                 self.nonce += 1;
                 Ok(pending)
             }
-            Err(e) => {
-                match classify_send_error(&e.to_string()) {
-                    SendErrorKind::NonceDrift => {
-                        warn!(nonce = self.nonce, err = %e, "nonce drift detected — syncing and retrying");
-                        self.sync().await?;
-                        let retry = tx.nonce(self.nonce);
-                        let pending = self
-                            .provider
-                            .send_transaction(retry)
-                            .await
-                            .wrap_err("retry after nonce sync failed")?;
-                        self.nonce += 1;
-                        Ok(pending)
-                    }
-                    SendErrorKind::PendingConflict => {
-                        warn!(nonce = self.nonce, err = %e, "pending nonce conflict detected — syncing without blind retry");
-                        self.sync().await?;
-                        Err(e.into())
-                    }
-                    SendErrorKind::Other => Err(e.into()),
+            Err(e) => match classify_send_error(&e.to_string()) {
+                SendErrorKind::NonceDrift => {
+                    warn!(nonce = self.nonce, err = %e, "nonce drift detected — syncing and retrying");
+                    self.sync().await?;
+                    let retry = tx.nonce(self.nonce);
+                    let pending = self
+                        .provider
+                        .send_transaction(retry)
+                        .await
+                        .wrap_err("retry after nonce sync failed")?;
+                    self.nonce += 1;
+                    Ok(pending)
                 }
-            }
+                SendErrorKind::PendingConflict => {
+                    warn!(nonce = self.nonce, err = %e, "pending nonce conflict detected — syncing without blind retry");
+                    self.sync().await?;
+                    Err(e.into())
+                }
+                SendErrorKind::Other => Err(e.into()),
+            },
         }
     }
 }

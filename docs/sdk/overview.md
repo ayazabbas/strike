@@ -28,7 +28,7 @@ strike-sdk = "0.2"           # nonce-manager enabled by default
 strike-sdk = { version = "0.2", default-features = false }  # disable nonce-manager
 ```
 
-The `nonce-manager` feature enables `NonceSender`, a local nonce tracker that avoids nonce-too-low errors when sending multiple transactions in quick succession. Enabled by default — disable it if you manage nonces externally.
+The `nonce-manager` feature enables `NonceSender`, a local nonce tracker for rapid transaction sending. It re-syncs and retries on simple nonce drift, and handles pending mempool conflicts conservatively without blind replacement retries. Enabled by default — disable it if you manage nonces externally.
 
 ## Installation
 
