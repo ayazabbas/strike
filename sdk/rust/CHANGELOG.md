@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.2.10 (2026-04-05)
+
+### Changed
+- Replaced naive fixed gas allocation in order submission with deterministic contract-aware heuristics:
+  - `placeOrders`: `550k + 175k * (n - 1)`
+  - `replaceOrders`: `300k + 120k * cancels + 180k * places`
+  - `cancelOrders`: `120k + 70k * count`
+  - `cancelOrder`: `250k`
+- Added SDK logging for `gas_limit`, `gas_used`, and gas utilization percentage on order submission/confirmation paths.
+
 ## v0.2.9 (2026-04-04)
 
 ### Fixed

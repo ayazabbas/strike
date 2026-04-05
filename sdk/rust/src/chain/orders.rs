@@ -64,15 +64,16 @@ impl<'a> OrdersClient<'a> {
         .abi_encode();
 
         let order_count = params.len();
+        let gas_limit = gas_limit_place_orders(order_count);
         let mut tx = TransactionRequest::default()
             .to(self.config.addresses.order_book)
             .input(Bytes::from(calldata).into());
-        tx.gas = Some(350_000 * order_count as u64);
+        tx.gas = Some(gas_limit);
 
         let pending = send_tx(self.provider, &self.nonce_sender, tx).await?;
 
         let tx_hash = *pending.tx_hash();
-        info!(orderbook_market_id, order_count, tx = %tx_hash, "placeOrders tx sent");
+        info!(orderbook_market_id, order_count, gas_limit, tx = %tx_hash, "placeOrders tx sent");
 
         let receipt = pending
             .get_receipt()
@@ -87,7 +88,15 @@ impl<'a> OrdersClient<'a> {
         }
 
         let placed = parse_placed_orders(&receipt, orderbook_market_id);
-        info!(orderbook_market_id, tx = %tx_hash, gas_used = receipt.gas_used, placed = placed.len(), "placeOrders confirmed");
+        info!(
+            orderbook_market_id,
+            tx = %tx_hash,
+            gas_limit,
+            gas_used = receipt.gas_used,
+            gas_utilization_pct = %format_gas_utilization_pct(receipt.gas_used, gas_limit),
+            placed = placed.len(),
+            "placeOrders confirmed"
+        );
 
         Ok(placed)
     }
@@ -126,16 +135,23 @@ impl<'a> OrdersClient<'a> {
         }
         .abi_encode();
 
-        let total_ops = cancel_ids.len() + params.len();
+        let gas_limit = gas_limit_replace_orders(cancel_ids.len(), params.len());
         let mut tx = TransactionRequest::default()
             .to(self.config.addresses.order_book)
             .input(Bytes::from(calldata).into());
-        tx.gas = Some(350_000 * total_ops as u64);
+        tx.gas = Some(gas_limit);
 
         let pending = send_tx(self.provider, &self.nonce_sender, tx).await?;
 
         let tx_hash = *pending.tx_hash();
-        info!(orderbook_market_id, cancels = cancel_ids.len(), places = params.len(), tx = %tx_hash, "replaceOrders tx sent");
+        info!(
+            orderbook_market_id,
+            cancels = cancel_ids.len(),
+            places = params.len(),
+            gas_limit,
+            tx = %tx_hash,
+            "replaceOrders tx sent"
+        );
 
         let receipt = pending
             .get_receipt()
@@ -150,7 +166,16 @@ impl<'a> OrdersClient<'a> {
         }
 
         let placed = parse_placed_orders(&receipt, orderbook_market_id);
-        info!(orderbook_market_id, tx = %tx_hash, gas_used = receipt.gas_used, cancelled = cancel_ids.len(), placed = placed.len(), "replaceOrders confirmed");
+        info!(
+            orderbook_market_id,
+            tx = %tx_hash,
+            gas_limit,
+            gas_used = receipt.gas_used,
+            gas_utilization_pct = %format_gas_utilization_pct(receipt.gas_used, gas_limit),
+            cancelled = cancel_ids.len(),
+            placed = placed.len(),
+            "replaceOrders confirmed"
+        );
 
         Ok(placed)
     }
@@ -184,22 +209,30 @@ impl<'a> OrdersClient<'a> {
         }
         .abi_encode();
 
+        let gas_limit = gas_limit_cancel_orders(order_ids.len());
         let mut tx = TransactionRequest::default()
             .to(self.config.addresses.order_book)
             .input(Bytes::from(calldata).into());
-        tx.gas = Some(100_000 * order_ids.len() as u64);
+        tx.gas = Some(gas_limit);
 
         let pending = send_tx(self.provider, &self.nonce_sender, tx).await?;
 
         let tx_hash = *pending.tx_hash();
-        info!(count = order_ids.len(), tx = %tx_hash, "cancelOrders tx sent");
+        info!(count = order_ids.len(), gas_limit, tx = %tx_hash, "cancelOrders tx sent");
 
         let receipt = pending
             .get_receipt()
             .await
             .map_err(|e| StrikeError::Contract(e.to_string()))?;
 
-        info!(tx = %tx_hash, gas_used = receipt.gas_used, count = order_ids.len(), "cancelOrders confirmed");
+        info!(
+            tx = %tx_hash,
+            gas_limit,
+            gas_used = receipt.gas_used,
+            gas_utilization_pct = %format_gas_utilization_pct(receipt.gas_used, gas_limit),
+            count = order_ids.len(),
+            "cancelOrders confirmed"
+        );
         Ok(())
     }
 
@@ -208,22 +241,55 @@ impl<'a> OrdersClient<'a> {
         self.require_wallet()?;
 
         let calldata = OrderBook::cancelOrderCall { orderId: order_id }.abi_encode();
+        let gas_limit = gas_limit_cancel_order();
         let mut tx = TransactionRequest::default()
             .to(self.config.addresses.order_book)
             .input(Bytes::from(calldata).into());
-        tx.gas = Some(200_000);
+        tx.gas = Some(gas_limit);
 
         let pending = send_tx(self.provider, &self.nonce_sender, tx).await?;
 
         let tx_hash = *pending.tx_hash();
+        info!(order_id = %order_id, gas_limit, tx = %tx_hash, "cancelOrder tx sent");
         let receipt = pending
             .get_receipt()
             .await
             .map_err(|e| StrikeError::Contract(e.to_string()))?;
 
-        info!(order_id = %order_id, tx = %tx_hash, gas_used = receipt.gas_used, "cancelOrder confirmed");
+        info!(
+            order_id = %order_id,
+            tx = %tx_hash,
+            gas_limit,
+            gas_used = receipt.gas_used,
+            gas_utilization_pct = %format_gas_utilization_pct(receipt.gas_used, gas_limit),
+            "cancelOrder confirmed"
+        );
         Ok(())
     }
+}
+
+fn gas_limit_place_orders(order_count: usize) -> u64 {
+    550_000 + 175_000 * (order_count.saturating_sub(1) as u64)
+}
+
+fn gas_limit_replace_orders(cancel_count: usize, place_count: usize) -> u64 {
+    300_000 + 120_000 * cancel_count as u64 + 180_000 * place_count as u64
+}
+
+fn gas_limit_cancel_orders(order_count: usize) -> u64 {
+    120_000 + 70_000 * order_count as u64
+}
+
+fn gas_limit_cancel_order() -> u64 {
+    250_000
+}
+
+fn format_gas_utilization_pct(gas_used: u64, gas_limit: u64) -> String {
+    if gas_limit == 0 {
+        return "0.0".to_string();
+    }
+
+    format!("{:.1}", gas_used as f64 / gas_limit as f64 * 100.0)
 }
 
 /// Parse `OrderPlaced` and `OrderResting` events from a transaction receipt.
@@ -254,4 +320,40 @@ fn parse_placed_orders(
         }
     }
     placed
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        gas_limit_cancel_order, gas_limit_cancel_orders, gas_limit_place_orders,
+        gas_limit_replace_orders,
+    };
+
+    #[test]
+    fn gas_limit_place_orders_formula() {
+        assert_eq!(gas_limit_place_orders(0), 550_000);
+        assert_eq!(gas_limit_place_orders(1), 550_000);
+        assert_eq!(gas_limit_place_orders(2), 725_000);
+        assert_eq!(gas_limit_place_orders(3), 900_000);
+    }
+
+    #[test]
+    fn gas_limit_replace_orders_formula() {
+        assert_eq!(gas_limit_replace_orders(0, 0), 300_000);
+        assert_eq!(gas_limit_replace_orders(1, 0), 420_000);
+        assert_eq!(gas_limit_replace_orders(0, 1), 480_000);
+        assert_eq!(gas_limit_replace_orders(2, 3), 1_080_000);
+    }
+
+    #[test]
+    fn gas_limit_cancel_orders_formula() {
+        assert_eq!(gas_limit_cancel_orders(0), 120_000);
+        assert_eq!(gas_limit_cancel_orders(1), 190_000);
+        assert_eq!(gas_limit_cancel_orders(3), 330_000);
+    }
+
+    #[test]
+    fn gas_limit_cancel_order_formula() {
+        assert_eq!(gas_limit_cancel_order(), 250_000);
+    }
 }
