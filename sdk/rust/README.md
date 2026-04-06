@@ -106,6 +106,27 @@ while let Some(event) = events.next().await {
 }
 ```
 
+### Track an Order Through Fill / Cancel Lifecycle
+
+For bots, treat a successful `place_market()` as **accepted/live**, not **filled**.
+Keep the returned `order_id` locally and classify the final outcome from events:
+
+- `OrderSettled` -> filled (`filled_lots` is authoritative)
+- `OrderCancelled` -> explicitly cancelled / cleaned up
+- `GtcAutoCancelled` -> auto-cancelled by the batch auction
+
+Minimal example:
+
+```bash
+PRIVATE_KEY=0x... cargo run --example track_order_lifecycle
+```
+
+Why local tracking matters:
+
+- `OrderSettled` currently includes `order_id`, `owner`, `filled_lots` — but not `market_id` or side
+- bots should therefore keep local metadata keyed by returned `order_id`
+- the SDK `nonce-manager` feature is enabled by default; use one serialized tx pipeline per wallet
+
 ## API Response Format (v0.2+)
 
 As of v0.2, the Strike indexer returns paginated envelopes for list endpoints:

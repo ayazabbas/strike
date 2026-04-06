@@ -293,6 +293,117 @@ async fn main() -> Result<()> {
 
 **What it demonstrates:** atomic cancel-and-place, quote refresh without a gap, and practical use of `replace()`.
 
+## track_order_lifecycle — Accepted/Live vs Filled
+
+Minimal bot-flow example for the most important execution-state distinction:
+
+- successful `place_market()` = **accepted/live**
+- later `OrderSettled` = **filled**
+- `OrderCancelled` = **explicitly cancelled / cleaned up**
+- `GtcAutoCancelled` = **auto-cancelled by batch auction**
+
+This example keeps local metadata keyed by returned `order_id`, which is the same core pattern used in the real market maker. That local tracking matters because `OrderSettled` currently includes `order_id`, `owner`, and `filled_lots`, but not `market_id` or side.
+
+```bash
+PRIVATE_KEY=0x... cargo run --example track_order_lifecycle
+```
+
+```rust
+use std::collections::HashMap;
+use std::env;
+
+use futures_util::StreamExt;
+use strike_sdk::prelude::*;
+
+#[derive(Debug, Clone)]
+struct LocalOrderMeta {
+    market_id: u64,
+    side: &'static str,
+    tick: u8,
+    lots: u64,
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let private_key = env::var("PRIVATE_KEY").expect("set PRIVATE_KEY=0x...");
+
+    let client = StrikeClient::new(StrikeConfig::bsc_testnet())
+        .with_private_key(&private_key)
+        .build()?;
+
+    let signer = client.address().expect("wallet configured");
+    let market = client
+        .indexer()
+        .get_active_markets()
+        .await?
+        .into_iter()
+        .next()
+        .expect("no active markets");
+
+    let market_id = market.tradable_market_id()?;
+    let mut events = client.events().await?;
+
+    let placed = client
+        .orders()
+        .place_market(&market, &[OrderParam::bid(50, 100)])
+        .await?;
+
+    let mut tracked: HashMap<alloy::primitives::U256, LocalOrderMeta> = HashMap::new();
+    for p in placed {
+        tracked.insert(
+            p.order_id,
+            LocalOrderMeta {
+                market_id,
+                side: "bid",
+                tick: 50,
+                lots: 100,
+            },
+        );
+        println!("accepted/live | order_id={}", p.order_id);
+    }
+
+    while let Some(event) = events.next().await {
+        match event {
+            StrikeEvent::OrderSettled { order_id, owner, filled_lots } if owner == signer => {
+                if let Some(meta) = tracked.get(&order_id) {
+                    println!(
+                        "filled | order_id={} | market={} | side={} | filled_lots={} | requested_lots={}",
+                        order_id, meta.market_id, meta.side, filled_lots, meta.lots
+                    );
+                    if filled_lots >= meta.lots {
+                        tracked.remove(&order_id);
+                    }
+                }
+            }
+            StrikeEvent::OrderCancelled { order_id, owner, .. } if owner == signer => {
+                if tracked.remove(&order_id).is_some() {
+                    println!("cancelled | order_id={}", order_id);
+                }
+            }
+            StrikeEvent::GtcAutoCancelled { order_id, owner } if owner == signer => {
+                if tracked.remove(&order_id).is_some() {
+                    println!("auto-cancelled | order_id={}", order_id);
+                }
+            }
+            _ => {}
+        }
+
+        if tracked.is_empty() {
+            break;
+        }
+    }
+
+    Ok(())
+}
+```
+
+**What it demonstrates:** correct bot execution-state handling, a tiny local lifecycle enum, local `order_id` tracking, and why accepted/live must be treated separately from filled.
+
+**Operational notes:**
+- the SDK `nonce-manager` feature is enabled by default. For bots, keep one serialized tx pipeline per wallet and avoid concurrent place/cancel/replace sends from the same wallet.
+- if no terminal event arrives before your timeout, mark the order as needing reconciliation and fall back to `scan_orders()` / indexer positions instead of guessing.
+- `OrderCancelled` is best treated as part of recovery/reconciliation as well; the live WSS stream is centered on settlement/batch events, so bots should always have a recovery path after reconnect gaps.
+
 ## stream_events — Event-Driven Architecture
 
 Subscribes to WSS events and prints market creations, batch clearings, and settlements.
