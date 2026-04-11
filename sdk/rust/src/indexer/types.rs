@@ -418,12 +418,15 @@ impl IndexerRedeemablePosition {
 }
 
 /// A paginated list wrapper for filled positions.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 #[serde(untagged)]
 pub(crate) enum FilledPositionsOrPaginated {
-    Paginated { data: Vec<IndexerFilledPosition> },
+    Paginated {
+        data: Vec<IndexerFilledPosition>,
+    },
     Plain(Vec<IndexerFilledPosition>),
     EmptyObject {},
+    #[default]
     Null,
 }
 
@@ -437,12 +440,6 @@ impl FilledPositionsOrPaginated {
     }
 }
 
-impl Default for FilledPositionsOrPaginated {
-    fn default() -> Self {
-        Self::Null
-    }
-}
-
 /// Wallet positions from the indexer.
 #[derive(Debug, Clone)]
 pub struct IndexerPositions {
@@ -451,7 +448,7 @@ pub struct IndexerPositions {
 }
 
 /// A paginated list wrapper for redeemable positions.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 #[serde(untagged)]
 pub(crate) enum RedeemablePositionsOrPaginated {
     Paginated {
@@ -459,6 +456,7 @@ pub(crate) enum RedeemablePositionsOrPaginated {
     },
     Plain(Vec<IndexerRedeemablePosition>),
     EmptyObject {},
+    #[default]
     Null,
 }
 
@@ -469,12 +467,6 @@ impl RedeemablePositionsOrPaginated {
             Self::Plain(v) => v,
             Self::EmptyObject {} | Self::Null => Vec::new(),
         }
-    }
-}
-
-impl Default for RedeemablePositionsOrPaginated {
-    fn default() -> Self {
-        Self::Null
     }
 }
 
