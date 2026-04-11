@@ -1,10 +1,20 @@
 //! On-chain market state reads.
 
+use alloy::primitives::U256;
 use alloy::providers::DynProvider;
 
 use crate::config::StrikeConfig;
 use crate::contracts::MarketFactory;
 use crate::error::{Result, StrikeError};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MarketMeta {
+    pub factory_market_id: u64,
+    pub orderbook_market_id: u64,
+    pub state: u8,
+    pub outcome_yes: bool,
+    pub use_internal_positions: bool,
+}
 
 /// Client for reading on-chain market state.
 pub struct MarketsClient<'a> {
@@ -52,5 +62,23 @@ impl<'a> MarketsClient<'a> {
             .await
             .map_err(|e| StrikeError::Contract(e.to_string()))?;
         Ok(id)
+    }
+
+    /// Get on-chain metadata for a factory market ID.
+    pub async fn market_meta(&self, factory_market_id: u64) -> Result<MarketMeta> {
+        let meta = self
+            .factory()
+            .marketMeta(U256::from(factory_market_id))
+            .call()
+            .await
+            .map_err(|e| StrikeError::Contract(e.to_string()))?;
+
+        Ok(MarketMeta {
+            factory_market_id,
+            orderbook_market_id: meta.orderBookMarketId.to::<u64>(),
+            state: meta.state,
+            outcome_yes: meta.outcomeYes,
+            use_internal_positions: meta.useInternalPositions,
+        })
     }
 }

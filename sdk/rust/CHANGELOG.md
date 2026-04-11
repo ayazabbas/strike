@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.11 (2026-04-11)
+
+### Added
+- Added `MarketsClient::market_meta()` for resolving on-chain factory market metadata, including whether a market uses internal positions.
+- Added indexer helpers `get_positions()` and `get_redeemable_positions()` plus normalized position types for filled and redeemable wallet payloads.
+
 ## v0.2.10 (2026-04-05)
 
 ### Changed

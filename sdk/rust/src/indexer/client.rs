@@ -87,6 +87,11 @@ impl IndexerClient {
 
     /// Fetch open orders for a given address.
     pub async fn get_open_orders(&self, address: &str) -> Result<Vec<IndexerOrder>> {
+        Ok(self.get_positions(address).await?.open_orders)
+    }
+
+    /// Fetch wallet positions for a given address.
+    pub async fn get_positions(&self, address: &str) -> Result<IndexerPositions> {
         let url = format!("{}/positions/{}", self.base_url, address);
         let resp: PositionsResponse = self
             .http
@@ -96,6 +101,23 @@ impl IndexerClient {
             .json()
             .await
             .map_err(|e| StrikeError::Indexer(e.to_string()))?;
-        Ok(resp.open_orders.into_vec())
+        Ok(resp.into_positions())
+    }
+
+    /// Fetch redeemable wallet backlog for a given address.
+    pub async fn get_redeemable_positions(
+        &self,
+        address: &str,
+    ) -> Result<Vec<IndexerRedeemablePosition>> {
+        let url = format!("{}/positions/{}/redeemable", self.base_url, address);
+        let resp: RedeemablePositionsResponse = self
+            .http
+            .get(&url)
+            .send()
+            .await?
+            .json()
+            .await
+            .map_err(|e| StrikeError::Indexer(e.to_string()))?;
+        Ok(resp.into_positions())
     }
 }
