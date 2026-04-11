@@ -34,6 +34,17 @@ async fn main() -> Result<()> {
     let count = client.markets().active_market_count().await?;
     println!("{count} active markets on-chain");
 
+    if let Some(first) = markets.first() {
+        let meta = client
+            .markets()
+            .market_meta(first.factory_market_id as u64)
+            .await?;
+        println!(
+            "factory {} -> orderbook {} | internal positions: {}",
+            meta.factory_market_id, meta.orderbook_market_id, meta.use_internal_positions
+        );
+    }
+
     Ok(())
 }
 ```
@@ -181,11 +192,38 @@ strike-sdk = { version = "0.2", default-features = false }
 | `chain::vault` | USDT approval, balance queries |
 | `chain::redeem` | Outcome token redemption |
 | `chain::tokens` | ERC-1155 outcome token helpers |
-| `chain::markets` | On-chain market state reads |
+| `chain::markets` | On-chain market state reads, including `market_meta(factory_market_id)` |
 | `events::subscribe` | WSS event stream with auto-reconnect |
 | `events::scan` | Historical event scanning (chunked getLogs) |
 | `indexer` | REST client: markets, positions, trades, stats (API v1) |
 | `nonce` | `NonceSender` for sequential TX sends |
+
+## Wallet Positions
+
+Use the indexer for wallet snapshots and redeem backlog discovery:
+
+```rust
+let wallet = "0x...";
+
+let positions = client.indexer().get_positions(wallet).await?;
+println!(
+    "open orders: {} | filled positions: {}",
+    positions.open_orders.len(),
+    positions.filled_positions.len()
+);
+
+let redeemable = client.indexer().get_redeemable_positions(wallet).await?;
+for entry in &redeemable {
+    println!(
+        "factory {:?} | lots {:?} | redeemable {:?}",
+        entry.factory_market_id(),
+        entry.lots_hint(),
+        entry.redeemable()
+    );
+}
+```
+
+The SDK normalizes evolving `/positions/:address` and `/positions/:address/redeemable` payloads into accessor-based position types, so callers do not need to chase field-name drift across indexer versions.
 
 ## AI Markets
 

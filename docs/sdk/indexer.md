@@ -8,6 +8,8 @@ All indexer endpoints are available under the `/v1/` prefix. The legacy unprefix
 
 Responses use a standard envelope: `{ data: [...], meta: { total, limit, offset } }`. The SDK handles this transparently — callers receive plain `Vec<Market>`, `Vec<IndexerOrder>`, etc. with no change to existing code.
 
+For wallet position endpoints, the SDK also normalizes known schema drift across legacy and v1 payloads. Filled and redeemable entries preserve the raw JSON but expose stable accessors like `factory_market_id()`, `orderbook_market_id()`, `redeemable()`, `resolved()`, and `lots_hint()`.
+
 ## Canonical OpenAPI Reference
 
 The generated OpenAPI spec is the source of truth for the public indexer API:
@@ -142,6 +144,60 @@ The v1 response from `/v1/positions/:address` is paginated:
 ```
 
 The SDK handles both the v1 paginated and legacy flat-array formats automatically — `get_open_orders` always returns `Vec<IndexerOrder>`.
+
+## Get Wallet Positions
+
+Fetch the full wallet snapshot from `/positions/:address`:
+
+```rust
+let address = "0x...";
+let positions = client.indexer().get_positions(address).await?;
+
+println!("open orders: {}", positions.open_orders.len());
+println!("filled positions: {}", positions.filled_positions.len());
+
+for pos in &positions.filled_positions {
+    println!(
+        "factory {:?} | orderbook {:?} | lots {:?} | redeemable {:?}",
+        pos.factory_market_id(),
+        pos.orderbook_market_id(),
+        pos.lots_hint(),
+        pos.redeemable()
+    );
+}
+```
+
+`get_positions()` returns:
+
+```rust
+pub struct IndexerPositions {
+    pub open_orders: Vec<IndexerOrder>,
+    pub filled_positions: Vec<IndexerFilledPosition>,
+}
+```
+
+Use the accessor methods on `IndexerFilledPosition` instead of relying on a specific upstream JSON shape.
+
+## Get Redeemable Positions
+
+Fetch the wallet's redeem backlog from `/positions/:address/redeemable`:
+
+```rust
+let address = "0x...";
+let redeemable = client.indexer().get_redeemable_positions(address).await?;
+
+for pos in &redeemable {
+    if let Some(factory_market_id) = pos.factory_market_id() {
+        println!(
+            "redeem backlog | factory {} | lots {:?}",
+            factory_market_id,
+            pos.lots_hint()
+        );
+    }
+}
+```
+
+This is the right discovery path before calling on-chain redemption. The SDK normalizes both paginated and legacy redeemable payloads, including nested and casing-drifted field names.
 
 ### IndexerOrder Type
 

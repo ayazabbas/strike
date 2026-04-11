@@ -4,7 +4,7 @@ The Strike SDK is a Rust crate for programmatic trading on Strike prediction mar
 
 ## Design Philosophy
 
-The SDK is **on-chain first**. All trading operations go directly to BNB Chain via RPC. Live data (events, balances, market state) comes from a WSS subscription or RPC reads. The [indexer](indexer.md) is available for startup snapshots (fetching all markets, orderbook state), but is never in the critical trading path.
+The SDK is **on-chain first**. All trading operations go directly to BNB Chain via RPC. Live data (events, balances, market state) comes from a WSS subscription or RPC reads. The [indexer](indexer.md) is available for startup snapshots (fetching all markets, orderbook state, wallet positions, redeem backlog), but is never in the critical trading path.
 
 ## Features
 
@@ -13,8 +13,11 @@ The SDK is **on-chain first**. All trading operations go directly to BNB Chain v
 | Order management | Place, cancel, and replace orders in batch transactions |
 | Event streaming | Real-time WSS subscriptions with auto-reconnect |
 | Vault & tokens | USDT approval, balance queries, outcome token / position operations |
-| Indexer client | REST client for market snapshots and orderbook state |
+| On-chain market reads | Market counts/IDs plus `market_meta(factory_market_id)` for factory-to-orderbook metadata |
+| Indexer client | REST client for market snapshots, wallet positions, redeem backlog, and orderbook state |
 | Nonce manager | Optional `nonce-manager` feature flag for bots sending rapid transactions |
+
+Wallet position helpers normalize known schema drift in filled-position and redeemable payloads, so integrations can use stable accessors instead of decoding multiple indexer variants themselves.
 
 ## Preset Configs
 

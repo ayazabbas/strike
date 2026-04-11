@@ -58,6 +58,39 @@ async fn main() -> Result<()> {
 
 **What it demonstrates:** [Client setup](client.md) in read-only mode, [indexer queries](indexer.md), on-chain market reads.
 
+## redeem_backlog_check — Find Redeemable Positions Before Redemption
+
+This is the concise discovery flow for redemption bots:
+
+1. query the indexer backlog with `get_redeemable_positions(address)`
+2. pull the factory market ID from each normalized entry
+3. pass that factory market ID into on-chain redemption
+
+```rust
+use strike_sdk::prelude::*;
+
+let address = "0x...";
+let redeemable = client.indexer().get_redeemable_positions(address).await?;
+
+for pos in redeemable {
+    let Some(factory_market_id) = pos.factory_market_id() else {
+        continue;
+    };
+
+    println!(
+        "redeem backlog | factory {} | lots {:?} | redeemable {:?}",
+        factory_market_id,
+        pos.lots_hint(),
+        pos.redeemable()
+    );
+
+    // Example on-chain call path once you choose an amount:
+    // client.redeem().redeem(factory_market_id, amount).await?;
+}
+```
+
+The SDK normalizes legacy and v1 redeemable payload variants here, so `factory_market_id()` and related accessors remain the stable interface.
+
 ## place_orders — Full Trading Lifecycle
 
 Connects with a wallet, approves USDT, finds an active market, places a bid and ask, then cancels both.
