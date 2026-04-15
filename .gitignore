@@ -5,3 +5,4 @@ contracts/cache/
 contracts/broadcast/
 bot/dist/
 scripts/node_modules/
+.codex
