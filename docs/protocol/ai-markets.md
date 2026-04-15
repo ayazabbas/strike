@@ -52,9 +52,9 @@ The oracle's off-chain backend:
 4. Pins the full reasoning trace to IPFS
 5. Calls back `AIResolver.fulfillReasoning(requestId, choice)` on-chain
 
-### 5. Liveness Window (5 minutes)
+### 5. Liveness Window (30 minutes)
 
-After the oracle callback, the proposed resolution enters a **5-minute liveness window**. If no one challenges, anyone can call `finalise(marketId)` to settle the market.
+After the oracle callback, the proposed resolution enters a **30-minute liveness window**. If no one challenges, anyone can call `finalise(marketId)` to settle the market.
 
 ### 6. Finalised
 
@@ -62,7 +62,7 @@ The market resolves with the AI's proposed outcome. Winning positions pay out no
 
 ## Challenge Process
 
-During the 5-minute liveness window, anyone who disagrees with the AI's proposed outcome can challenge it.
+During the 30-minute liveness window, anyone who disagrees with the AI's proposed outcome can challenge it.
 
 ### How to Challenge
 
@@ -81,7 +81,7 @@ During the 5-minute liveness window, anyone who disagrees with the AI's proposed
 
 ```
 Expiry → resolveMarket() → [~90s] Oracle callback
-  → Proposed resolution (5-min liveness)
+  → Proposed resolution (30-min liveness)
     → No challenge → finalise() → Resolved
     → Challenge (0.1 BNB) → 24h admin review
       → Confirmed → Resolved (original outcome)

@@ -7,7 +7,7 @@ The `AIResolver` contract manages AI-resolved markets. It extends `FlapAIConsume
 - Holds BNB oracle fees deposited at market creation
 - Sends prompts to the Flap AI Oracle at market expiry
 - Receives oracle callbacks with the LLM's binary choice
-- Enforces a 5-minute liveness window before finalising
+- Enforces a 30-minute liveness window before finalising
 - Supports challenges with a 0.1 BNB bond and 24-hour admin review
 
 ## State
@@ -17,7 +17,7 @@ mapping(uint256 => uint256) public requestToMarket;      // requestId => factory
 mapping(uint256 => AIMarketConfig) public aiMarkets;     // factoryMarketId => config
 mapping(uint256 => ProposedResolution) public proposals; // factoryMarketId => proposal
 
-uint256 public constant LIVENESS_PERIOD = 5 minutes;
+uint256 public constant LIVENESS_PERIOD = 30 minutes;
 uint256 public constant CHALLENGE_PERIOD = 24 hours;
 uint256 public constant CHALLENGE_BOND = 0.1 ether;
 uint256 public constant CHALLENGER_REWARD = 0.01 ether;

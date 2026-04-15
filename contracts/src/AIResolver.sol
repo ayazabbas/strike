@@ -9,7 +9,7 @@ contract AIResolver is FlapAIConsumerBase {
     // Constants
     // -------------------------------------------------------------------------
 
-    uint256 public constant LIVENESS_PERIOD = 5 minutes;
+    uint256 public constant LIVENESS_PERIOD = 30 minutes;
     uint256 public constant CHALLENGE_PERIOD = 24 hours;
     uint256 public constant CHALLENGE_BOND = 0.1 ether;
     uint256 public constant CHALLENGER_REWARD = 0.01 ether;

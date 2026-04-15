@@ -75,12 +75,12 @@ AI markets are resolved by the **Flap AI Oracle**, which uses large language mod
 1. **Request** — At market expiry, a keeper calls `resolveMarket()` which sends the prompt to the oracle
 2. **LLM reasoning** (~90 seconds) — The oracle backend feeds the prompt to the selected model, which reasons over the question using current information
 3. **Callback** — The oracle calls back with a binary choice (0 = YES, 1 = NO)
-4. **Liveness window** (5 minutes) — The proposed resolution can be challenged
+4. **Liveness window** (30 minutes) — The proposed resolution can be challenged
 5. **Finalisation** — If unchallenged, anyone calls `finalise()` to settle the market
 
 ### Challenge Mechanism
 
-During the 5-minute liveness window, anyone can challenge the AI's proposed outcome by posting a 0.1 BNB bond. This extends the window to 24 hours for admin review. The admin either confirms the original resolution (challenger loses bond) or overrides it (challenger gets bond + 0.01 BNB reward).
+During the 30-minute liveness window, anyone can challenge the AI's proposed outcome by posting a 0.1 BNB bond. This extends the window to 24 hours for admin review. The admin either confirms the original resolution (challenger loses bond) or overrides it (challenger gets bond + 0.01 BNB reward).
 
 ### IPFS Verification
 

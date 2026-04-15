@@ -119,7 +119,7 @@ contract AIResolverTest is Test {
     function test_fulfillAndFinalise() public {
         uint256 marketId = _createResolveAndFulfill(0);
 
-        vm.warp(block.timestamp + 5 minutes + 1);
+        vm.warp(block.timestamp + resolver.LIVENESS_PERIOD() + 1);
 
         vm.prank(anyone);
         resolver.finalise(marketId);
@@ -132,7 +132,7 @@ contract AIResolverTest is Test {
     function test_fulfillAndFinalise_choiceNo() public {
         uint256 marketId = _createResolveAndFulfill(1);
 
-        vm.warp(block.timestamp + 5 minutes + 1);
+        vm.warp(block.timestamp + resolver.LIVENESS_PERIOD() + 1);
 
         vm.prank(anyone);
         resolver.finalise(marketId);
@@ -148,7 +148,7 @@ contract AIResolverTest is Test {
 
     function test_createAIMarket_underpayment_reverts() public {
         vm.prank(user1);
-        vm.expectRevert("AIResolver: zero fee");
+        vm.expectRevert("AIResolver: insufficient fee");
         factory.createAIMarket{value: 0}(PROMPT, 0, block.timestamp + 3600, 1);
     }
 
@@ -192,7 +192,7 @@ contract AIResolverTest is Test {
     function test_challenge_afterLiveness_reverts() public {
         uint256 marketId = _createResolveAndFulfill(0);
 
-        vm.warp(block.timestamp + 5 minutes + 1);
+        vm.warp(block.timestamp + resolver.LIVENESS_PERIOD() + 1);
 
         vm.prank(challenger1);
         vm.expectRevert(AIResolver.LivenessExpired.selector);
@@ -334,7 +334,7 @@ contract AIResolverTest is Test {
         vm.prank(challenger1);
         resolver.challenge{value: 0.1 ether}(marketId);
 
-        vm.warp(block.timestamp + 5 minutes + 1);
+        vm.warp(block.timestamp + resolver.LIVENESS_PERIOD() + 1);
 
         vm.prank(anyone);
         vm.expectRevert(AIResolver.ChallengeActive.selector);
@@ -344,7 +344,7 @@ contract AIResolverTest is Test {
     function test_doubleResolve_reverts() public {
         uint256 marketId = _createResolveAndFulfill(0);
 
-        vm.warp(block.timestamp + 5 minutes + 1);
+        vm.warp(block.timestamp + resolver.LIVENESS_PERIOD() + 1);
         vm.prank(anyone);
         resolver.finalise(marketId);
 
@@ -360,7 +360,7 @@ contract AIResolverTest is Test {
     function test_finalise_byAnyone() public {
         uint256 marketId = _createResolveAndFulfill(0);
 
-        vm.warp(block.timestamp + 5 minutes + 1);
+        vm.warp(block.timestamp + resolver.LIVENESS_PERIOD() + 1);
 
         vm.prank(address(0xDEAD));
         resolver.finalise(marketId);
