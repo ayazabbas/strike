@@ -11,6 +11,8 @@ use alloy::rpc::types::TransactionRequest;
 use eyre::{Result, WrapErr};
 use tracing::{info, warn};
 
+use crate::config::TxConfig;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SendErrorKind {
     NonceDrift,
@@ -51,20 +53,28 @@ pub struct NonceSender {
     provider: DynProvider,
     signer_addr: Address,
     nonce: u64,
+    tx_config: TxConfig,
 }
 
 impl NonceSender {
     /// Create a new NonceSender, fetching the current nonce from chain.
-    pub async fn new(provider: DynProvider, signer_addr: Address) -> Result<Self> {
+    pub async fn new(provider: DynProvider, signer_addr: Address, tx_config: TxConfig) -> Result<Self> {
         let nonce = provider
             .get_transaction_count(signer_addr)
             .await
             .wrap_err("failed to get initial nonce")?;
-        info!(nonce, "NonceSender initialized");
+        info!(
+            nonce,
+            receipt_poll_interval_ms = tx_config.receipt_poll_interval_ms,
+            gas_price_multiplier_bps = tx_config.gas_price_multiplier_bps,
+            max_gas_price_wei = ?tx_config.max_gas_price_wei,
+            "NonceSender initialized"
+        );
         Ok(Self {
             provider,
             signer_addr,
             nonce,
+            tx_config,
         })
     }
 
@@ -89,25 +99,48 @@ impl NonceSender {
         self.nonce
     }
 
-    /// Enforce BSC minimum gas price on a transaction request.
-    ///
-    /// BSC uses legacy (non-EIP-1559) transactions. When no gas fields are set,
-    /// alloy auto-fills at the provider level — which can result in values below
-    /// the RPC's minimum. We force legacy `gas_price` to at least 0.05 gwei and
-    /// clear EIP-1559 fields to prevent alloy from choosing type-2 transactions.
-    fn apply_gas_floor(tx: TransactionRequest) -> TransactionRequest {
+    /// Choose a competitive legacy gas price while preserving a hard floor.
+    async fn resolve_gas_price(&self, explicit_gas_price: Option<u128>) -> Result<u128> {
+        let configured_multiplier_bps = self.tx_config.gas_price_multiplier_bps.max(10_000);
+        let live_gas_price = self
+            .provider
+            .get_gas_price()
+            .await
+            .wrap_err("failed to fetch live gas price")?;
+
+        let bumped_live_gas_price = live_gas_price
+            .saturating_mul(configured_multiplier_bps as u128)
+            .saturating_add(9_999)
+            / 10_000;
+
+        let mut chosen_gas_price = explicit_gas_price
+            .unwrap_or(bumped_live_gas_price)
+            .max(BSC_MIN_GAS_PRICE);
+
+        if let Some(max_gas_price_wei) = self.tx_config.max_gas_price_wei {
+            if chosen_gas_price > max_gas_price_wei {
+                warn!(
+                    live_gas_price,
+                    bumped_live_gas_price,
+                    chosen_gas_price,
+                    max_gas_price_wei,
+                    "capping legacy gas price at configured maximum"
+                );
+                chosen_gas_price = max_gas_price_wei.max(BSC_MIN_GAS_PRICE);
+            }
+        }
+
+        Ok(chosen_gas_price)
+    }
+
+    /// Enforce BSC legacy gas pricing on a transaction request.
+    async fn prepare_transaction(&self, tx: TransactionRequest) -> Result<TransactionRequest> {
         let mut tx = tx;
-        // Force legacy gas price — BSC doesn't use EIP-1559
-        let gp = tx.gas_price.unwrap_or(BSC_MIN_GAS_PRICE);
-        tx.gas_price = Some(if gp < BSC_MIN_GAS_PRICE {
-            BSC_MIN_GAS_PRICE
-        } else {
-            gp
-        });
-        // Clear EIP-1559 fields so alloy sends a type-0 (legacy) tx
+        let gas_price = self.resolve_gas_price(tx.gas_price).await?;
+        tx.gas_price = Some(gas_price);
         tx.max_fee_per_gas = None;
         tx.max_priority_fee_per_gas = None;
-        tx
+        Ok(tx)
     }
 
     /// Send a transaction, stamping it with the next nonce.
@@ -120,7 +153,7 @@ impl NonceSender {
     /// The returned [`PendingTx`] can be `.await`ed for the receipt
     /// **after** releasing the Mutex lock.
     pub async fn send(&mut self, tx: TransactionRequest) -> Result<PendingTx> {
-        let tx = Self::apply_gas_floor(tx);
+        let tx = self.prepare_transaction(tx).await?;
         let attempt = tx.clone().nonce(self.nonce);
         match self.provider.send_transaction(attempt).await {
             Ok(pending) => {

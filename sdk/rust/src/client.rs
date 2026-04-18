@@ -23,6 +23,7 @@ use alloy::primitives::Address;
 use alloy::providers::{DynProvider, Provider, ProviderBuilder};
 use alloy::signers::local::PrivateKeySigner;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::Mutex;
 
 use crate::chain::markets::MarketsClient;
@@ -107,6 +108,10 @@ impl StrikeClientBuilder {
             (DynProvider::new(p), None)
         };
 
+        provider.client().set_poll_interval(Duration::from_millis(
+            self.config.tx.receipt_poll_interval_ms,
+        ));
+
         Ok(StrikeClient {
             provider,
             config: self.config,
@@ -172,7 +177,7 @@ impl StrikeClient {
     /// The nonce manager is shared across clones of this client via `Arc`.
     pub async fn init_nonce_sender(&mut self) -> Result<()> {
         let signer = self.signer_addr.ok_or(StrikeError::NoWallet)?;
-        let ns = NonceSender::new(self.provider.clone(), signer)
+        let ns = NonceSender::new(self.provider.clone(), signer, self.config.tx.clone())
             .await
             .map_err(StrikeError::from)?;
         self.nonce_sender = Some(Arc::new(Mutex::new(ns)));

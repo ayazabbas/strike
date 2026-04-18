@@ -2,6 +2,27 @@
 
 use alloy::primitives::Address;
 
+/// Transaction send / confirmation tuning.
+#[derive(Debug, Clone)]
+pub struct TxConfig {
+    /// HTTP receipt polling interval for remote RPC transports.
+    pub receipt_poll_interval_ms: u64,
+    /// Legacy gas price multiplier in basis points (10000 = 1.00x).
+    pub gas_price_multiplier_bps: u64,
+    /// Optional hard cap for legacy gas price bids.
+    pub max_gas_price_wei: Option<u128>,
+}
+
+impl Default for TxConfig {
+    fn default() -> Self {
+        Self {
+            receipt_poll_interval_ms: 500,
+            gas_price_multiplier_bps: 11_000,
+            max_gas_price_wei: None,
+        }
+    }
+}
+
 /// Contract addresses for a Strike deployment.
 #[derive(Debug, Clone)]
 pub struct ContractAddresses {
@@ -29,6 +50,8 @@ pub struct StrikeConfig {
     pub wss_url: String,
     /// Indexer base URL.
     pub indexer_url: String,
+    /// Transaction send / confirmation tuning.
+    pub tx: TxConfig,
 }
 
 impl StrikeConfig {
@@ -69,6 +92,7 @@ impl StrikeConfig {
             wss_url: "wss://bsc-testnet.core.chainstack.com/e602061228197d446d43e62320004d74"
                 .to_string(),
             indexer_url: "https://testnet.strike.pm/api".to_string(),
+            tx: TxConfig::default(),
         }
     }
 
@@ -108,6 +132,7 @@ impl StrikeConfig {
             rpc_url: "https://bsc-dataseed1.binance.org".to_string(),
             wss_url: "wss://bsc-ws-node.nariox.org:443".to_string(),
             indexer_url: "https://app.strike.pm/api".to_string(),
+            tx: TxConfig::default(),
         }
     }
 
@@ -119,6 +144,7 @@ impl StrikeConfig {
             rpc_url: String::new(),
             wss_url: String::new(),
             indexer_url: String::new(),
+            tx: TxConfig::default(),
         }
     }
 }
