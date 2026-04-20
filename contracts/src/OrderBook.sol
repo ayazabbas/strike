@@ -18,6 +18,22 @@ import "./OutcomeToken.sol";
 contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
     using SegmentTree for SegmentTree.Tree;
 
+    struct AmendEventData {
+        uint256 orderId;
+        uint256 marketId;
+        address owner;
+        uint256 oldTick;
+        uint256 newTick;
+        uint256 oldLots;
+        uint256 newLots;
+        uint256 oldFeeBps;
+        uint256 newFeeBps;
+        uint256 oldBatchId;
+        uint256 newBatchId;
+        bool wasResting;
+        bool isResting;
+    }
+
     bytes32 public constant OPERATOR_ROLE = keccak256("OPERATOR_ROLE");
 
     // -------------------------------------------------------------------------
@@ -76,6 +92,9 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
     /// @notice orderId => true if the order is in the resting list (not in tree)
     mapping(uint256 => bool) public isResting;
 
+    /// @notice orderId => resting index + 1 for O(1) swap-removal
+    mapping(uint256 => uint256) public restingIndexPlusOne;
+
     // -------------------------------------------------------------------------
     // Events
     // -------------------------------------------------------------------------
@@ -95,6 +114,21 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
     );
     event OrderCancelled(uint256 indexed orderId, uint256 indexed marketId, address indexed owner);
     event OrderResting(uint256 indexed orderId, uint256 indexed marketId, address indexed owner);
+    event OrderAmended(
+        uint256 indexed orderId,
+        uint256 indexed marketId,
+        address indexed owner,
+        uint256 oldTick,
+        uint256 newTick,
+        uint256 oldLots,
+        uint256 newLots,
+        uint256 oldFeeBps,
+        uint256 newFeeBps,
+        uint256 oldBatchId,
+        uint256 newBatchId,
+        bool wasResting,
+        bool isResting
+    );
 
     // -------------------------------------------------------------------------
     // Constructor
@@ -114,7 +148,11 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
     // Market management
     // -------------------------------------------------------------------------
 
-    function registerMarket(uint256 minLots, uint256 batchInterval, uint256 expiryTime, bool useInternalPositions) external onlyRole(OPERATOR_ROLE) returns (uint256 marketId) {
+    function registerMarket(uint256 minLots, uint256 batchInterval, uint256 expiryTime, bool useInternalPositions)
+        external
+        onlyRole(OPERATOR_ROLE)
+        returns (uint256 marketId)
+    {
         require(minLots <= type(uint32).max, "OrderBook: minLots overflow");
         require(batchInterval <= type(uint32).max, "OrderBook: batchInterval overflow");
         require(expiryTime <= type(uint40).max, "OrderBook: expiryTime overflow");
@@ -169,9 +207,7 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
             if (markets[marketId].useInternalPositions) {
                 vault.lockPosition(msg.sender, marketId, uint128(lots), isYes);
             } else {
-                uint256 tokenId = isYes
-                    ? outcomeToken.yesTokenId(marketId)
-                    : outcomeToken.noTokenId(marketId);
+                uint256 tokenId = isYes ? outcomeToken.yesTokenId(marketId) : outcomeToken.noTokenId(marketId);
                 outcomeToken.safeTransferFrom(msg.sender, address(this), tokenId, lots, "");
             }
             if (addToTree) {
@@ -182,9 +218,8 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
                 }
             }
         } else {
-            uint256 collateral = (side == Side.Bid)
-                ? (lots * LOT_SIZE * tick) / 100
-                : (lots * LOT_SIZE * (100 - tick)) / 100;
+            uint256 collateral =
+                (side == Side.Bid) ? (lots * LOT_SIZE * tick) / 100 : (lots * LOT_SIZE * (100 - tick)) / 100;
             uint256 totalDeposit = collateral + feeModel.calculateFee(collateral);
             if (addToTree) {
                 if (side == Side.Bid) {
@@ -198,13 +233,68 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
         }
     }
 
-    function placeOrder(
-        uint256 marketId,
-        Side side,
-        OrderType orderType,
-        uint256 tick,
-        uint256 lots
-    ) external nonReentrant returns (uint256 orderId) {
+    function _requiredCollateral(Side side, uint256 tick, uint256 lots) internal pure returns (uint256) {
+        return (side == Side.Bid) ? (lots * LOT_SIZE * tick) / 100 : (lots * LOT_SIZE * (100 - tick)) / 100;
+    }
+
+    function _requiredLockedAmount(Side side, uint256 tick, uint256 lots, uint256 feeBps)
+        internal
+        pure
+        returns (uint256)
+    {
+        if (side == Side.SellYes || side == Side.SellNo) return 0;
+        uint256 collateral = _requiredCollateral(side, tick, lots);
+        return collateral + ((collateral * feeBps) / 10_000);
+    }
+
+    function _applyTreeDelta(uint256 marketId, Side side, uint256 tick, int256 delta) internal {
+        if (side == Side.Bid || side == Side.SellNo) {
+            bidTrees[marketId].update(tick, delta);
+        } else {
+            askTrees[marketId].update(tick, delta);
+        }
+    }
+
+    function _addRestingOrder(uint256 marketId, uint256 orderId) internal {
+        if (isResting[orderId]) return;
+        restingOrderIds[marketId].push(orderId);
+        restingIndexPlusOne[orderId] = restingOrderIds[marketId].length;
+        isResting[orderId] = true;
+    }
+
+    function _removeRestingOrderAtIndex(uint256 marketId, uint256 idx)
+        internal
+        returns (uint256 swappedOrderId, bool swapped)
+    {
+        uint256[] storage resting = restingOrderIds[marketId];
+        uint256 lastIdx = resting.length - 1;
+        uint256 removedOrderId = resting[idx];
+
+        restingIndexPlusOne[removedOrderId] = 0;
+        isResting[removedOrderId] = false;
+
+        if (idx != lastIdx) {
+            swappedOrderId = resting[lastIdx];
+            resting[idx] = swappedOrderId;
+            restingIndexPlusOne[swappedOrderId] = idx + 1;
+            swapped = true;
+        }
+
+        resting.pop();
+    }
+
+    function _removeRestingOrder(uint256 marketId, uint256 orderId) internal returns (bool removed) {
+        uint256 idxPlusOne = restingIndexPlusOne[orderId];
+        if (idxPlusOne == 0) return false;
+        _removeRestingOrderAtIndex(marketId, idxPlusOne - 1);
+        removed = true;
+    }
+
+    function placeOrder(uint256 marketId, Side side, OrderType orderType, uint256 tick, uint256 lots)
+        external
+        nonReentrant
+        returns (uint256 orderId)
+    {
         Market storage m = markets[marketId];
         require(m.active, "OrderBook: market not active");
         require(!m.halted, "OrderBook: market halted");
@@ -246,8 +336,7 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
         _lockAndTree(marketId, side, tick, lots, !shouldRest);
 
         if (shouldRest) {
-            isResting[orderId] = true;
-            restingOrderIds[marketId].push(orderId);
+            _addRestingOrder(marketId, orderId);
             emit OrderResting(orderId, marketId, msg.sender);
         } else {
             batchOrderIds[marketId][batchId].push(orderId);
@@ -280,13 +369,9 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
         activeOrderCount[caller][mktId]--;
 
         if (!isResting[orderId]) {
-            if (side == Side.Bid || side == Side.SellNo) {
-                bidTrees[mktId].update(tick, -int256(lots));
-            } else {
-                askTrees[mktId].update(tick, -int256(lots));
-            }
+            _applyTreeDelta(mktId, side, tick, -int256(lots));
         } else {
-            isResting[orderId] = false;
+            _removeRestingOrder(mktId, orderId);
         }
 
         if (side == Side.SellYes || side == Side.SellNo) {
@@ -294,15 +379,11 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
             if (markets[mktId].useInternalPositions) {
                 vault.unlockPosition(caller, mktId, uint128(lots), isYes);
             } else {
-                uint256 tokenId = isYes
-                    ? outcomeToken.yesTokenId(mktId)
-                    : outcomeToken.noTokenId(mktId);
+                uint256 tokenId = isYes ? outcomeToken.yesTokenId(mktId) : outcomeToken.noTokenId(mktId);
                 outcomeToken.safeTransferFrom(address(this), caller, tokenId, lots, "");
             }
         } else {
-            uint256 collateral = (side == Side.Bid)
-                ? (lots * LOT_SIZE * tick) / 100
-                : (lots * LOT_SIZE * (100 - tick)) / 100;
+            uint256 collateral = _requiredCollateral(side, tick, lots);
             uint256 fee = (collateral * storedFeeBps) / 10_000;
             refund = collateral + fee;
         }
@@ -310,12 +391,10 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
         emit OrderCancelled(orderId, mktId, caller);
     }
 
-    function _placeOne(
-        uint256 marketId,
-        uint32 batchId,
-        OrderParam calldata p,
-        address caller
-    ) internal returns (uint64 oid, uint256 deposit) {
+    function _placeOne(uint256 marketId, uint32 batchId, OrderParam calldata p, address caller)
+        internal
+        returns (uint64 oid, uint256 deposit)
+    {
         oid = nextOrderId++;
         orders[oid] = Order({
             owner: caller,
@@ -337,9 +416,7 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
             if (markets[marketId].useInternalPositions) {
                 vault.lockPosition(caller, marketId, uint128(p.lots), isYes);
             } else {
-                uint256 tokenId = isYes
-                    ? outcomeToken.yesTokenId(marketId)
-                    : outcomeToken.noTokenId(marketId);
+                uint256 tokenId = isYes ? outcomeToken.yesTokenId(marketId) : outcomeToken.noTokenId(marketId);
                 outcomeToken.safeTransferFrom(caller, address(this), tokenId, p.lots, "");
             }
             if (!shouldRest) {
@@ -364,8 +441,7 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
         }
 
         if (shouldRest) {
-            isResting[oid] = true;
-            restingOrderIds[marketId].push(oid);
+            _addRestingOrder(marketId, oid);
             emit OrderResting(oid, marketId, caller);
         } else {
             batchOrderIds[marketId][batchId].push(oid);
@@ -377,14 +453,21 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
     // Batch place orders
     // -------------------------------------------------------------------------
 
-    function placeOrders(uint256 marketId, OrderParam[] calldata params) external nonReentrant returns (uint256[] memory orderIds) {
+    function placeOrders(uint256 marketId, OrderParam[] calldata params)
+        external
+        nonReentrant
+        returns (uint256[] memory orderIds)
+    {
         Market storage m = markets[marketId];
         require(m.active, "OrderBook: market not active");
         require(!m.halted, "OrderBook: market halted");
         require(block.timestamp < m.expiryTime, "OrderBook: market expired");
         require(params.length > 0, "OrderBook: invalid batch size");
         require(marketId <= type(uint32).max, "OrderBook: marketId overflow");
-        require(activeOrderCount[msg.sender][marketId] + uint16(params.length) <= MAX_USER_ORDERS, "OrderBook: too many orders");
+        require(
+            activeOrderCount[msg.sender][marketId] + uint16(params.length) <= MAX_USER_ORDERS,
+            "OrderBook: too many orders"
+        );
 
         activeOrderCount[msg.sender][marketId] += uint16(params.length);
 
@@ -395,10 +478,12 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
         if (batchOrderIds[marketId][batchId].length + params.length > MAX_ORDERS_PER_BATCH) {
             batchId = batchId + 1;
         }
-        require(batchOrderIds[marketId][batchId].length + params.length <= MAX_ORDERS_PER_BATCH, "OrderBook: batch overflow");
+        require(
+            batchOrderIds[marketId][batchId].length + params.length <= MAX_ORDERS_PER_BATCH, "OrderBook: batch overflow"
+        );
 
         uint256 paramsLen = params.length;
-        for (uint256 i = 0; i < paramsLen; ) {
+        for (uint256 i = 0; i < paramsLen;) {
             require(params[i].tick >= 1 && params[i].tick <= SegmentTree.MAX_TICK, "OrderBook: tick out of range");
             require(params[i].lots > 0, "OrderBook: zero lots");
             require(params[i].lots >= m.minLots, "OrderBook: below min lots");
@@ -406,7 +491,9 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
             (uint64 oid, uint256 deposit) = _placeOne(marketId, uint32(batchId), params[i], msg.sender);
             orderIds[i] = oid;
             totalDeposit += deposit;
-            unchecked { ++i; }
+            unchecked {
+                ++i;
+            }
         }
 
         if (totalDeposit > 0) {
@@ -415,11 +502,190 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
         }
     }
 
+    function _applyAmendVaultDelta(address user, uint256 oldRequired, uint256 newRequired) internal {
+        if (newRequired > oldRequired) {
+            uint256 netIncrease = newRequired - oldRequired;
+            uint256 available = vault.available(user);
+            if (available < netIncrease) {
+                vault.depositFor(user, netIncrease - available);
+            }
+            vault.lock(user, netIncrease);
+        } else if (oldRequired > newRequired) {
+            vault.unlock(user, oldRequired - newRequired);
+        }
+    }
+
+    function _previewAmendOrders(
+        uint256 marketId,
+        Market storage m,
+        AmendOrderParam[] calldata params,
+        address caller,
+        bool[] memory wasResting,
+        bool[] memory willRest,
+        uint16[] memory refreshedFeeBps
+    ) internal view returns (uint256 totalOldRequired, uint256 totalNewRequired, uint256 activatingCount) {
+        uint256 len = params.length;
+        for (uint256 i = 0; i < len;) {
+            AmendOrderParam calldata p = params[i];
+            for (uint256 j = i + 1; j < len;) {
+                require(p.orderId != params[j].orderId, "OrderBook: duplicate amend");
+                unchecked {
+                    ++j;
+                }
+            }
+
+            Order storage o = orders[p.orderId];
+            require(o.owner == caller, "OrderBook: not owner");
+            require(o.lots > 0, "OrderBook: already cancelled/filled");
+            require(o.marketId == marketId, "OrderBook: wrong market");
+            require(o.orderType == OrderType.GoodTilCancel, "OrderBook: amend only GTC");
+            require(o.side == Side.Bid || o.side == Side.Ask, "OrderBook: amend buy-side only");
+            require(p.newTick >= 1 && p.newTick <= SegmentTree.MAX_TICK, "OrderBook: tick out of range");
+            require(p.newLots > 0, "OrderBook: zero lots");
+            require(p.newLots >= m.minLots, "OrderBook: below min lots");
+
+            wasResting[i] = isResting[p.orderId];
+            willRest[i] = isTickFar(marketId, p.newTick, o.side);
+            require(wasResting[i] || !willRest[i], "OrderBook: amend would rest");
+            if (wasResting[i] && !willRest[i]) {
+                activatingCount++;
+            }
+
+            refreshedFeeBps[i] = uint16(feeModel.feeBps());
+            totalOldRequired += _requiredLockedAmount(o.side, o.tick, o.lots, o.feeBps);
+            totalNewRequired += _requiredLockedAmount(o.side, p.newTick, p.newLots, refreshedFeeBps[i]);
+
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
+    function _resolveAmendBatchId(uint256 marketId, uint32 currentBatchId, uint256 activatingCount)
+        internal
+        view
+        returns (uint32 amendBatchId)
+    {
+        amendBatchId = currentBatchId;
+        if (activatingCount == 0) return amendBatchId;
+
+        if (batchOrderIds[marketId][amendBatchId].length + activatingCount > MAX_ORDERS_PER_BATCH) {
+            amendBatchId = amendBatchId + 1;
+        }
+        require(
+            batchOrderIds[marketId][amendBatchId].length + activatingCount <= MAX_ORDERS_PER_BATCH,
+            "OrderBook: batch overflow"
+        );
+    }
+
+    function _applySingleAmend(
+        uint256 marketId,
+        uint32 amendBatchId,
+        AmendOrderParam calldata p,
+        bool wasRestingOrder,
+        bool willRestOrder,
+        uint16 refreshedFeeBps,
+        address owner
+    ) internal {
+        Order storage o = orders[p.orderId];
+        AmendEventData memory eventData;
+        eventData.orderId = p.orderId;
+        eventData.marketId = marketId;
+        eventData.owner = owner;
+        eventData.oldTick = o.tick;
+        eventData.newTick = p.newTick;
+        eventData.oldLots = o.lots;
+        eventData.newLots = p.newLots;
+        eventData.oldFeeBps = o.feeBps;
+        eventData.newFeeBps = refreshedFeeBps;
+        eventData.oldBatchId = o.batchId;
+        eventData.wasResting = wasRestingOrder;
+        eventData.isResting = willRestOrder;
+
+        if (wasRestingOrder) {
+            if (!willRestOrder) {
+                _removeRestingOrder(marketId, p.orderId);
+                _applyTreeDelta(marketId, o.side, p.newTick, int256(uint256(p.newLots)));
+                batchOrderIds[marketId][amendBatchId].push(p.orderId);
+                o.batchId = amendBatchId;
+            }
+        } else if (o.tick == p.newTick) {
+            if (p.newLots > o.lots) {
+                _applyTreeDelta(marketId, o.side, p.newTick, int256(uint256(p.newLots - o.lots)));
+            } else if (o.lots > p.newLots) {
+                _applyTreeDelta(marketId, o.side, p.newTick, -int256(uint256(o.lots - p.newLots)));
+            }
+        } else {
+            _applyTreeDelta(marketId, o.side, o.tick, -int256(uint256(o.lots)));
+            _applyTreeDelta(marketId, o.side, p.newTick, int256(uint256(p.newLots)));
+        }
+
+        o.tick = p.newTick;
+        o.lots = p.newLots;
+        o.feeBps = refreshedFeeBps;
+        eventData.newBatchId = o.batchId;
+        _emitOrderAmended(eventData);
+    }
+
+    function _emitOrderAmended(AmendEventData memory eventData) internal {
+        emit OrderAmended(
+            eventData.orderId,
+            eventData.marketId,
+            eventData.owner,
+            eventData.oldTick,
+            eventData.newTick,
+            eventData.oldLots,
+            eventData.newLots,
+            eventData.oldFeeBps,
+            eventData.newFeeBps,
+            eventData.oldBatchId,
+            eventData.newBatchId,
+            eventData.wasResting,
+            eventData.isResting
+        );
+    }
+
+    // -------------------------------------------------------------------------
+    // Amend orders (in-place GTC update)
+    // -------------------------------------------------------------------------
+
+    function amendOrders(uint256 marketId, AmendOrderParam[] calldata params) external nonReentrant {
+        Market storage m = markets[marketId];
+        require(m.active, "OrderBook: market not active");
+        require(!m.halted, "OrderBook: market halted");
+        require(block.timestamp < m.expiryTime, "OrderBook: market expired");
+        require(params.length > 0, "OrderBook: invalid batch size");
+        require(marketId <= type(uint32).max, "OrderBook: marketId overflow");
+
+        uint256 len = params.length;
+        bool[] memory wasResting = new bool[](len);
+        bool[] memory willRest = new bool[](len);
+        uint16[] memory newFeeBps = new uint16[](len);
+        (uint256 totalOldRequired, uint256 totalNewRequired, uint256 activatingCount) =
+            _previewAmendOrders(marketId, m, params, msg.sender, wasResting, willRest, newFeeBps);
+
+        _applyAmendVaultDelta(msg.sender, totalOldRequired, totalNewRequired);
+
+        uint32 amendBatchId = _resolveAmendBatchId(marketId, m.currentBatchId, activatingCount);
+
+        for (uint256 i = 0; i < len;) {
+            _applySingleAmend(marketId, amendBatchId, params[i], wasResting[i], willRest[i], newFeeBps[i], msg.sender);
+
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Replace orders (atomic cancel + place with net settlement)
     // -------------------------------------------------------------------------
 
-    function replaceOrders(uint256[] calldata cancelIds, uint256 marketId, OrderParam[] calldata params) external nonReentrant returns (uint256[] memory orderIds) {
+    function replaceOrders(uint256[] calldata cancelIds, uint256 marketId, OrderParam[] calldata params)
+        external
+        nonReentrant
+        returns (uint256[] memory orderIds)
+    {
         Market storage m = markets[marketId];
         require(m.active, "OrderBook: market not active");
         require(!m.halted, "OrderBook: market halted");
@@ -428,26 +694,34 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
 
         uint256 totalRefund;
         uint256 cancelLen = cancelIds.length;
-        for (uint256 i = 0; i < cancelLen; ) {
+        for (uint256 i = 0; i < cancelLen;) {
             totalRefund += _cancelForReplace(cancelIds[i], msg.sender);
-            unchecked { ++i; }
+            unchecked {
+                ++i;
+            }
         }
 
         orderIds = new uint256[](params.length);
         uint256 totalDeposit;
 
         if (params.length > 0) {
-            require(activeOrderCount[msg.sender][marketId] + uint16(params.length) <= MAX_USER_ORDERS, "OrderBook: too many orders");
+            require(
+                activeOrderCount[msg.sender][marketId] + uint16(params.length) <= MAX_USER_ORDERS,
+                "OrderBook: too many orders"
+            );
             activeOrderCount[msg.sender][marketId] += uint16(params.length);
 
             uint256 batchId = m.currentBatchId;
             if (batchOrderIds[marketId][batchId].length + params.length > MAX_ORDERS_PER_BATCH) {
                 batchId = batchId + 1;
             }
-            require(batchOrderIds[marketId][batchId].length + params.length <= MAX_ORDERS_PER_BATCH, "OrderBook: batch overflow");
+            require(
+                batchOrderIds[marketId][batchId].length + params.length <= MAX_ORDERS_PER_BATCH,
+                "OrderBook: batch overflow"
+            );
 
             uint256 paramsLen2 = params.length;
-            for (uint256 i = 0; i < paramsLen2; ) {
+            for (uint256 i = 0; i < paramsLen2;) {
                 require(params[i].tick >= 1 && params[i].tick <= SegmentTree.MAX_TICK, "OrderBook: tick out of range");
                 require(params[i].lots > 0, "OrderBook: zero lots");
                 require(params[i].lots >= m.minLots, "OrderBook: below min lots");
@@ -455,7 +729,9 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
                 (uint64 oid, uint256 deposit) = _placeOne(marketId, uint32(batchId), params[i], msg.sender);
                 orderIds[i] = oid;
                 totalDeposit += deposit;
-                unchecked { ++i; }
+                unchecked {
+                    ++i;
+                }
             }
         }
 
@@ -492,14 +768,9 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
 
         // Only update tree if order is NOT resting (resting orders were never added to tree)
         if (!isResting[orderId]) {
-            if (side == Side.Bid || side == Side.SellNo) {
-                bidTrees[marketId].update(tick, -int256(lots));
-            } else {
-                askTrees[marketId].update(tick, -int256(lots));
-            }
+            _applyTreeDelta(marketId, side, tick, -int256(lots));
         } else {
-            // Mark resting order as cancelled — lazy-skipped during scan
-            isResting[orderId] = false;
+            _removeRestingOrder(marketId, orderId);
         }
 
         if (side == Side.SellYes || side == Side.SellNo) {
@@ -507,15 +778,11 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
             if (markets[marketId].useInternalPositions) {
                 vault.unlockPosition(recipient, marketId, uint128(lots), isYes);
             } else {
-                uint256 tokenId = isYes
-                    ? outcomeToken.yesTokenId(marketId)
-                    : outcomeToken.noTokenId(marketId);
+                uint256 tokenId = isYes ? outcomeToken.yesTokenId(marketId) : outcomeToken.noTokenId(marketId);
                 outcomeToken.safeTransferFrom(address(this), recipient, tokenId, lots, "");
             }
         } else {
-            uint256 collateral = (side == Side.Bid)
-                ? (lots * LOT_SIZE * tick) / 100
-                : (lots * LOT_SIZE * (100 - tick)) / 100;
+            uint256 collateral = _requiredCollateral(side, tick, lots);
             uint256 fee = (collateral * storedFeeBps) / 10_000;
             uint256 totalReturn = collateral + fee;
             vault.unlock(recipient, totalReturn);
@@ -537,12 +804,19 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
     ///      Reverts the whole batch if any order is not owned by msg.sender.
     function cancelOrders(uint256[] calldata orderIds) external nonReentrant {
         uint256 len = orderIds.length;
-        for (uint256 i = 0; i < len; ) {
+        for (uint256 i = 0; i < len;) {
             Order storage o = orders[orderIds[i]];
-            if (o.lots == 0) { unchecked { ++i; } continue; }
+            if (o.lots == 0) {
+                unchecked {
+                    ++i;
+                }
+                continue;
+            }
             require(o.owner == msg.sender, "OrderBook: not owner");
             _cancelCore(orderIds[i], msg.sender);
-            unchecked { ++i; }
+            unchecked {
+                ++i;
+            }
         }
     }
 
@@ -559,13 +833,25 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
     /// @notice Batch cancel expired orders. Anyone can call.
     function cancelExpiredOrders(uint256[] calldata orderIds) external nonReentrant {
         uint256 len = orderIds.length;
-        for (uint256 i = 0; i < len; ) {
+        for (uint256 i = 0; i < len;) {
             Order storage o = orders[orderIds[i]];
-            if (o.lots == 0) { unchecked { ++i; } continue; }
+            if (o.lots == 0) {
+                unchecked {
+                    ++i;
+                }
+                continue;
+            }
             Market storage m = markets[o.marketId];
-            if (block.timestamp <= m.expiryTime) { unchecked { ++i; } continue; }
+            if (block.timestamp <= m.expiryTime) {
+                unchecked {
+                    ++i;
+                }
+                continue;
+            }
             _cancelCore(orderIds[i], o.owner);
-            unchecked { ++i; }
+            unchecked {
+                ++i;
+            }
         }
     }
 
@@ -579,7 +865,11 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
 
     /// @notice Push an order ID to a batch's order list (for GTC rollover).
     ///         No cap — chunked clearBatch handles arbitrarily large batches.
-    function pushBatchOrderId(uint256 marketId, uint256 batchId, uint256 orderId) external onlyRole(OPERATOR_ROLE) returns (bool) {
+    function pushBatchOrderId(uint256 marketId, uint256 batchId, uint256 orderId)
+        external
+        onlyRole(OPERATOR_ROLE)
+        returns (bool)
+    {
         batchOrderIds[marketId][batchId].push(orderId);
         return true;
     }
@@ -614,12 +904,11 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
         o.lots -= uint64(lotsToReduce);
     }
 
-    function updateTreeVolume(uint256 marketId, Side side, uint256 tick, int256 delta) external onlyRole(OPERATOR_ROLE) {
-        if (side == Side.Bid || side == Side.SellNo) {
-            bidTrees[marketId].update(tick, delta);
-        } else {
-            askTrees[marketId].update(tick, delta);
-        }
+    function updateTreeVolume(uint256 marketId, Side side, uint256 tick, int256 delta)
+        external
+        onlyRole(OPERATOR_ROLE)
+    {
+        _applyTreeDelta(marketId, side, tick, delta);
     }
 
     /// @notice Transfer outcome tokens held in escrow to a recipient (for sell order settlement).
@@ -655,14 +944,8 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
     // Resting order management (price-proximity filtering)
     // -------------------------------------------------------------------------
 
-    /// @dev Returns true if order tick is far from the reference clearing tick.
-    ///      Bid/SellNo participate if tick >= clearingTick → far if tick < ref - threshold.
-    ///      Ask/SellYes participate if tick <= clearingTick → far if tick > ref + threshold.
-    ///      Before the first clear (lastClearingTick == 0), no filtering is applied.
-    function isTickFar(uint256 marketId, uint256 tick, Side side) public view returns (bool) {
-        uint256 ref = lastClearingTick[marketId];
-        if (ref == 0) return false; // no filtering before first clear
-
+    function _isTickFarFromReference(uint256 ref, uint256 tick, Side side) internal pure returns (bool) {
+        if (ref == 0) return false;
         if (side == Side.Bid || side == Side.SellNo) {
             if (ref > PROXIMITY_THRESHOLD) {
                 return tick < ref - PROXIMITY_THRESHOLD;
@@ -676,24 +959,34 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
         }
     }
 
-    /// @dev Check if a resting order's tick is now within proximity of the reference.
-    function isTickNear(uint256 marketId, uint256 tick, Side side) internal view returns (bool) {
-        return !isTickFar(marketId, tick, side);
+    /// @notice Returns the live reference tick used for active/resting classification.
+    ///         Uses the current active book when possible and falls back to the last
+    ///         clearing tick only when the book is empty.
+    function currentReferenceTick(uint256 marketId) public view returns (uint256 ref) {
+        uint256 bestBid = bidTrees[marketId].highestTick();
+        uint256 bestAsk = askTrees[marketId].lowestTick();
+
+        if (bestBid > 0 && bestAsk > 0) {
+            if (bestBid >= bestAsk) {
+                ref = SegmentTree.findClearingTick(bidTrees[marketId], askTrees[marketId]);
+                if (ref > 0) return ref;
+            }
+            return (bestBid + bestAsk) / 2;
+        }
+
+        if (bestBid > 0) return bestBid;
+        if (bestAsk > 0) return bestAsk;
+        return lastClearingTick[marketId];
     }
 
-    /// @dev Swap-remove element at index from storage array. Returns new length.
-    function _swapRemoveResting(uint256[] storage arr, uint256 idx) internal returns (uint256) {
-        uint256 lastIdx = arr.length - 1;
-        if (idx != lastIdx) {
-            arr[idx] = arr[lastIdx];
-        }
-        arr.pop();
-        return arr.length;
+    /// @dev Returns true if order tick is far from the current live reference.
+    function isTickFar(uint256 marketId, uint256 tick, Side side) public view returns (bool) {
+        return _isTickFarFromReference(currentReferenceTick(marketId), tick, side);
     }
 
     /// @notice Pull in-range resting orders into the current batch and tree.
     ///         Scans a bounded window (MAX_RESTING_SCAN) starting from restingScanIndex,
-    ///         compacting cancelled orders as encountered.
+    ///         pruning cancelled/stale GTB orders as encountered.
     ///         Pulls at most MAX_RESTING_PULL orders per call (gas-bounded).
     ///         Multiple clearBatch calls will eventually process the full list.
     ///         Called by BatchAuction before computing clearing price.
@@ -702,6 +995,7 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
         if (resting.length == 0) return 0;
 
         uint256 batchId = markets[marketId].currentBatchId;
+        uint256 ref = currentReferenceTick(marketId);
         uint256 i = restingScanIndex[marketId];
         if (i >= resting.length) i = 0;
         uint256 remaining = resting.length; // track original size for scan bound
@@ -714,38 +1008,40 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
             Order storage o = orders[oid];
 
             if (o.lots == 0) {
-                isResting[oid] = false;
-                _swapRemoveResting(resting, i);
+                _removeRestingOrderAtIndex(marketId, i);
                 if (resting.length > 0 && i >= resting.length) i = 0;
-            } else if (pulled < MAX_RESTING_PULL && isTickNear(marketId, o.tick, o.side)) {
+            } else if (o.orderType == OrderType.GoodTilBatch && o.batchId < batchId) {
+                _cancelCore(oid, o.owner);
+                if (resting.length > 0 && i >= resting.length) i = 0;
+            } else if (pulled < MAX_RESTING_PULL && !_isTickFarFromReference(ref, o.tick, o.side)) {
                 _addToTreeAndBatch(marketId, batchId, oid, o.side, o.tick, o.lots);
-                isResting[oid] = false;
+                _removeRestingOrderAtIndex(marketId, i);
                 pulled++;
-                _swapRemoveResting(resting, i);
                 if (resting.length > 0 && i >= resting.length) i = 0;
             } else {
-                unchecked { ++i; }
+                unchecked {
+                    ++i;
+                }
             }
-            unchecked { ++scanned; }
+            unchecked {
+                ++scanned;
+            }
         }
 
         restingScanIndex[marketId] = (resting.length > 0 && i < resting.length) ? i : 0;
     }
 
     /// @dev Add a resting order to the tree and batch list.
-    function _addToTreeAndBatch(uint256 marketId, uint256 batchId, uint256 oid, Side side, uint256 tick, uint256 lots) internal {
-        if (side == Side.Bid || side == Side.SellNo) {
-            bidTrees[marketId].update(tick, int256(lots));
-        } else {
-            askTrees[marketId].update(tick, int256(lots));
-        }
+    function _addToTreeAndBatch(uint256 marketId, uint256 batchId, uint256 oid, Side side, uint256 tick, uint256 lots)
+        internal
+    {
+        _applyTreeDelta(marketId, side, tick, int256(lots));
         batchOrderIds[marketId][batchId].push(oid);
     }
 
     /// @notice Push an order to the resting list (for GTC orders moving away from price).
     function pushRestingOrderId(uint256 marketId, uint256 orderId) external onlyRole(OPERATOR_ROLE) {
-        isResting[orderId] = true;
-        restingOrderIds[marketId].push(orderId);
+        _addRestingOrder(marketId, orderId);
     }
 
     /// @notice Update the last clearing tick reference price.
@@ -755,11 +1051,7 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
 
     /// @notice Remove order volume from the tree (for GTC orders moving to resting).
     function removeFromTree(uint256 marketId, Side side, uint256 tick, uint256 lots) external onlyRole(OPERATOR_ROLE) {
-        if (side == Side.Bid || side == Side.SellNo) {
-            bidTrees[marketId].update(tick, -int256(lots));
-        } else {
-            askTrees[marketId].update(tick, -int256(lots));
-        }
+        _applyTreeDelta(marketId, side, tick, -int256(lots));
     }
 
     /// @notice Get the resting order IDs for a market.

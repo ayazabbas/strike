@@ -58,7 +58,9 @@ library SegmentTree {
         if (delta >= 0) {
             uint256 absDelta = uint256(delta);
             while (idx >= 1) {
-                unchecked { tree.nodes[idx] += absDelta; }
+                unchecked {
+                    tree.nodes[idx] += absDelta;
+                }
                 if (idx == 1) break;
                 idx >>= 1;
             }
@@ -68,7 +70,9 @@ library SegmentTree {
             // parent nodes are always >= any child), so unchecked subtraction is safe.
             require(tree.nodes[idx] >= absDelta, "SegmentTree: underflow");
             while (idx >= 1) {
-                unchecked { tree.nodes[idx] -= absDelta; }
+                unchecked {
+                    tree.nodes[idx] -= absDelta;
+                }
                 if (idx == 1) break;
                 idx >>= 1;
             }
@@ -121,11 +125,7 @@ library SegmentTree {
     /// @param bidTree  Storage reference to the bid-side Tree.
     /// @param askTree  Storage reference to the ask-side Tree.
     /// @return clearingTick  The optimal clearing tick, or 0 if no cross.
-    function findClearingTick(Tree storage bidTree, Tree storage askTree)
-        internal
-        view
-        returns (uint256 clearingTick)
-    {
+    function findClearingTick(Tree storage bidTree, Tree storage askTree) internal view returns (uint256 clearingTick) {
         uint256 totalBids = bidTree.nodes[1]; // root = total bid volume
         if (totalBids == 0) return 0;
 
@@ -195,5 +195,51 @@ library SegmentTree {
     function volumeAt(Tree storage tree, uint256 tick) internal view returns (uint256) {
         require(tick >= 1 && tick <= MAX_TICK, "SegmentTree: tick out of range");
         return tree.nodes[_leafIndex(tick)];
+    }
+
+    /// @notice Lowest tick with non-zero volume, or 0 if the tree is empty.
+    function lowestTick(Tree storage tree) internal view returns (uint256 tick) {
+        if (tree.nodes[1] == 0) return 0;
+
+        uint256 idx = 1;
+        uint256 left = 1;
+        uint256 right = LEAVES;
+
+        while (idx < LEAVES) {
+            uint256 mid = (left + right) / 2;
+            uint256 leftChild = idx * 2;
+            if (tree.nodes[leftChild] > 0) {
+                idx = leftChild;
+                right = mid;
+            } else {
+                idx = leftChild + 1;
+                left = mid + 1;
+            }
+        }
+
+        tick = idx - LEAVES + 1;
+    }
+
+    /// @notice Highest tick with non-zero volume, or 0 if the tree is empty.
+    function highestTick(Tree storage tree) internal view returns (uint256 tick) {
+        if (tree.nodes[1] == 0) return 0;
+
+        uint256 idx = 1;
+        uint256 left = 1;
+        uint256 right = LEAVES;
+
+        while (idx < LEAVES) {
+            uint256 mid = (left + right) / 2;
+            uint256 rightChild = idx * 2 + 1;
+            if (tree.nodes[rightChild] > 0) {
+                idx = rightChild;
+                left = mid + 1;
+            } else {
+                idx = rightChild - 1;
+                right = mid;
+            }
+        }
+
+        tick = idx - LEAVES + 1;
     }
 }

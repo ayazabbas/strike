@@ -142,7 +142,7 @@ contract AuditFixesTest is Test {
 
         // user1's order got 0 fill (pro-rata rounds to 0 for 1 lot out of 10001)
         // Verify the order was cleaned up: lots should be 0
-        (, , , , uint64 lotsAfter, , , , , ) = book.orders(smallOrderId);
+        (,,,, uint64 lotsAfter,,,,,) = book.orders(smallOrderId);
         assertEq(lotsAfter, 0, "GTB zero-fill order should be cleaned up");
 
         // Verify collateral returned
@@ -182,7 +182,7 @@ contract AuditFixesTest is Test {
         auction.clearBatch(mId);
 
         // Verify order cleaned up
-        (, , , , uint64 lotsAfter, , , , , ) = book.orders(sellOrderId);
+        (,,,, uint64 lotsAfter,,,,,) = book.orders(sellOrderId);
         assertEq(lotsAfter, 0, "GTB sell zero-fill order should be cleaned up");
 
         // Verify tokens returned (user1 had 100, locked 1, should get 1 back = 100)
@@ -203,7 +203,7 @@ contract AuditFixesTest is Test {
         auction.clearBatch(mId);
 
         // Snapshot user1's YES position before placing sell order
-        (uint128 yesBefore, ) = vault.positions(user1, mId);
+        (uint128 yesBefore,) = vault.positions(user1, mId);
 
         // user1 places small SellYes GTB
         vm.prank(user1);
@@ -220,11 +220,11 @@ contract AuditFixesTest is Test {
         auction.clearBatch(mId);
 
         // Verify order cleaned up
-        (, , , , uint64 lotsAfter, , , , , ) = book.orders(sellOrderId);
+        (,,,, uint64 lotsAfter,,,,,) = book.orders(sellOrderId);
         assertEq(lotsAfter, 0, "GTB internal zero-fill order should be cleaned up");
 
         // Verify position unlocked (back to original)
-        (uint128 yesAfter, ) = vault.positions(user1, mId);
+        (uint128 yesAfter,) = vault.positions(user1, mId);
         assertEq(yesAfter, yesBefore, "Internal position should be unlocked back to original");
     }
 
@@ -285,8 +285,8 @@ contract AuditFixesTest is Test {
         uint256 expectedBuyHalf1 = feeModel.calculateOtherHalfFee(bidCollateral);
         uint256 expectedBuyHalf2 = feeModel.calculateOtherHalfFee(askCollateral);
 
-        uint256 totalCollected = (vault.balance(feeCollector) - collectorBefore) +
-            (usdt.balanceOf(feeCollector) - collectorUsdtBefore);
+        uint256 totalCollected =
+            (vault.balance(feeCollector) - collectorBefore) + (usdt.balanceOf(feeCollector) - collectorUsdtBefore);
         assertEq(totalCollected, expectedBuyHalf1 + expectedBuyHalf2, "total fee preserved for buy-buy match");
     }
 
@@ -549,8 +549,11 @@ contract AuditFixesTest is Test {
         assertTrue(balAfter > balBefore, "collateral should be returned on cancel");
 
         // Order lots should be 0
-        (, , , , uint64 lots, , , , , ) = book.orders(orderId);
+        (,,,, uint64 lots,,,,,) = book.orders(orderId);
         assertEq(lots, 0, "cancelled resting order should have 0 lots");
+        assertFalse(book.isResting(orderId), "cancelled resting order should be removed");
+        assertEq(book.restingIndexPlusOne(orderId), 0, "resting index should be cleared");
+        assertEq(book.getRestingOrderIds(mId).length, 0, "resting list should shrink immediately");
     }
 
     function test_Fix4a_GTC_RollToResting() public {
@@ -573,9 +576,8 @@ contract AuditFixesTest is Test {
         assertTrue(book.isResting(farBidId), "far GTC order should be moved to resting after clear");
     }
 
-    function test_Fix4a_LazySkipCancelled() public {
+    function test_Fix4a_CancelledRestingRemovedImmediately() public {
         uint256 mId = _setupMarketWithClearing();
-        // lastClearingTick = 50
 
         // Place two far bids → both go to resting
         vm.prank(user1);
@@ -586,34 +588,69 @@ contract AuditFixesTest is Test {
         assertTrue(book.isResting(id1), "id1 resting");
         assertTrue(book.isResting(id2), "id2 resting");
 
-        // Cancel id1 — sets lots to 0, lazy-skipped during scan
+        uint256[] memory restingBefore = book.getRestingOrderIds(mId);
+        assertEq(restingBefore.length, 2, "both orders tracked as resting");
+
         vm.prank(user1);
         book.cancelOrder(id1);
 
-        // Step 1: Trade near ref=50 to get a clear (moves ref to 35)
-        vm.prank(user1);
-        book.placeOrder(mId, Side.Bid, OrderType.GoodTilBatch, 35, 10);
-        vm.prank(user2);
-        book.placeOrder(mId, Side.Ask, OrderType.GoodTilBatch, 35, 10);
-        auction.clearBatch(mId);
-        // ref now 35. Tick 5 still far: 5 < 35-20=15 → far.
-
-        // Step 2: Trade at tick 20 (within 20 of 35) → ref moves to 20
-        vm.prank(user1);
-        book.placeOrder(mId, Side.Bid, OrderType.GoodTilBatch, 20, 10);
-        vm.prank(user2);
-        book.placeOrder(mId, Side.Ask, OrderType.GoodTilBatch, 20, 10);
-        auction.clearBatch(mId);
-        // ref now 20. Tick 5: 5 < 20-20=0 → NOT far (threshold check: 20>20 → false).
-        // pullRestingOrders during this clear used ref=35, tick 5 still far.
-
-        // Step 3: One more clear to trigger pull with ref=20
-        auction.clearBatch(mId);
-
-        // id1 should be lazy-skipped (already cancelled), id2 should be pulled in
-        assertFalse(book.isResting(id2), "id2 should be pulled in");
-        (, , , , uint64 lots1, , , , , ) = book.orders(id1);
+        uint256[] memory restingAfter = book.getRestingOrderIds(mId);
+        assertEq(restingAfter.length, 1, "cancel should remove the resting entry");
+        assertEq(restingAfter[0], id2, "remaining resting order should be preserved");
+        (,,,, uint64 lots1,,,,,) = book.orders(id1);
         assertEq(lots1, 0, "id1 stays cancelled");
+        assertFalse(book.isResting(id1), "cancelled order should no longer be resting");
+        assertEq(book.restingIndexPlusOne(id1), 0, "cancelled order index cleared");
+    }
+
+    function test_Fix4a_StaleRestingGtBAutoCancelledBeforePull() public {
+        uint256 mId = _setupMarketWithClearing();
+
+        vm.prank(user3);
+        uint256 staleId = book.placeOrder(mId, Side.Bid, OrderType.GoodTilBatch, 5, 2);
+        assertTrue(book.isResting(staleId), "GTB should start resting");
+
+        // Clear batch 2 while the resting GTB remains out of range.
+        vm.prank(user1);
+        book.placeOrder(mId, Side.Bid, OrderType.GoodTilBatch, 50, 10);
+        vm.prank(user2);
+        book.placeOrder(mId, Side.Ask, OrderType.GoodTilBatch, 50, 10);
+        auction.clearBatch(mId);
+
+        assertTrue(book.isResting(staleId), "GTB stays parked until the next batch starts");
+        uint256 walletBefore = usdt.balanceOf(user3);
+
+        // Batch 3 has a live book around 30-35, which would have re-pulled the stale GTB before this fix.
+        vm.prank(user1);
+        book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 30, 5);
+        vm.prank(user2);
+        book.placeOrder(mId, Side.Ask, OrderType.GoodTilBatch, 35, 5);
+        auction.clearBatch(mId);
+
+        (,,,, uint64 lotsAfter,,,,,) = book.orders(staleId);
+        assertEq(lotsAfter, 0, "stale resting GTB should be cancelled before re-pull");
+        assertFalse(book.isResting(staleId), "stale GTB should be removed from resting");
+        assertEq(book.restingIndexPlusOne(staleId), 0, "stale GTB index cleared");
+        assertGt(usdt.balanceOf(user3), walletBefore, "stale GTB collateral should be refunded");
+    }
+
+    function test_Fix4a_LiveReferenceOverridesStaleLastClearingTick() public {
+        uint256 mId = _setupMarketWithClearing();
+
+        // Keep the last trade anchored at 50 while the live active book shifts lower.
+        vm.prank(user1);
+        book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 30, 5);
+        vm.prank(user2);
+        book.placeOrder(mId, Side.Ask, OrderType.GoodTilCancel, 35, 5);
+
+        assertEq(book.lastClearingTick(mId), 50, "last clearing tick stays stale");
+        assertEq(book.currentReferenceTick(mId), 32, "live midpoint should drive the reference");
+
+        vm.prank(user3);
+        uint256 orderId = book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 25, 1);
+
+        assertFalse(book.isResting(orderId), "live book reference should keep nearby bids active");
+        assertEq(book.bidVolumeAt(mId, 25), 1, "new bid should be active in the tree");
     }
 
     function test_Fix4a_OrderRestingEventEmitted() public {
@@ -744,7 +781,7 @@ contract AuditFixesTest is Test {
         // Place batch of 3 orders: one near (tick 45), one far (tick 5), one near (tick 55 ask)
         OrderParam[] memory params = new OrderParam[](3);
         params[0] = OrderParam(Side.Bid, OrderType.GoodTilCancel, 45, 1);
-        params[1] = OrderParam(Side.Bid, OrderType.GoodTilCancel, 5, 1);  // far
+        params[1] = OrderParam(Side.Bid, OrderType.GoodTilCancel, 5, 1); // far
         params[2] = OrderParam(Side.Ask, OrderType.GoodTilCancel, 55, 1);
 
         vm.prank(user1);
@@ -932,7 +969,7 @@ contract AuditFixesTest is Test {
         auction.clearBatch(mId);
 
         // The GTC order should have been rolled with remaining 15 lots
-        (, , , , uint64 remainingLots, , , , , ) = book.orders(bidId);
+        (,,,, uint64 remainingLots,,,,,) = book.orders(bidId);
         assertEq(remainingLots, 15, "remaining lots should be 15 after partial fill");
 
         // Tree should have 15 lots at tick 50 (remaining volume after roll)
@@ -965,7 +1002,7 @@ contract AuditFixesTest is Test {
         auction.clearBatch(mId);
 
         // Remaining should be 10
-        (, , , , uint64 remainingLots, , , , , ) = book.orders(sellId);
+        (,,,, uint64 remainingLots,,,,,) = book.orders(sellId);
         assertEq(remainingLots, 10, "sell order remaining lots should be 10 after partial fill");
     }
 
@@ -1004,8 +1041,8 @@ contract AuditFixesTest is Test {
         // 2. clearBatch settles both orders -> lots become 0
         auction.clearBatch(mId);
 
-        (, , , , uint64 lotsA, , , , , ) = book.orders(orderA);
-        (, , , , uint64 lotsB, , , , , ) = book.orders(orderB);
+        (,,,, uint64 lotsA,,,,,) = book.orders(orderA);
+        (,,,, uint64 lotsB,,,,,) = book.orders(orderB);
         assertEq(lotsA, 0, "orderA should be fully filled");
         assertEq(lotsB, 0, "orderB should be fully filled");
 
@@ -1028,8 +1065,8 @@ contract AuditFixesTest is Test {
         assertEq(book.activeOrderCount(user1, mId), 2, "post-replace: should have exactly 2 active orders");
 
         // 5. New orders should have non-zero lots
-        (, , , , uint64 lotsC, , , , , ) = book.orders(newIds[0]);
-        (, , , , uint64 lotsD, , , , , ) = book.orders(newIds[1]);
+        (,,,, uint64 lotsC,,,,,) = book.orders(newIds[0]);
+        (,,,, uint64 lotsD,,,,,) = book.orders(newIds[1]);
         assertEq(lotsC, 3, "newC should have 3 lots");
         assertEq(lotsD, 3, "newD should have 3 lots");
 
