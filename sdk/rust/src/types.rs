@@ -1,4 +1,4 @@
-//! Core SDK types: Side, OrderType, OrderParam, and event types.
+//! Core SDK types: Side, OrderType, order params, and event types.
 
 use alloy::primitives::U256;
 use serde::{Deserialize, Serialize};
@@ -110,6 +110,37 @@ impl OrderParam {
             orderType: self.order_type as u8,
             tick: self.tick,
             lots: self.lots,
+        }
+    }
+}
+
+/// Parameters for amending a single live GTC buy-side order in place.
+#[derive(Debug, Clone, Copy)]
+pub struct AmendOrderParam {
+    /// Existing on-chain order ID to amend.
+    pub order_id: U256,
+    /// New price tick (1–99).
+    pub new_tick: u8,
+    /// New number of lots.
+    pub new_lots: u64,
+}
+
+impl AmendOrderParam {
+    /// Create a new amend parameter.
+    pub fn new(order_id: U256, new_tick: u8, new_lots: u64) -> Self {
+        Self {
+            order_id,
+            new_tick,
+            new_lots,
+        }
+    }
+
+    /// Convert to the on-chain `OrderBook::AmendOrderParam` struct.
+    pub(crate) fn to_contract_param(self) -> OrderBook::AmendOrderParam {
+        OrderBook::AmendOrderParam {
+            orderId: self.order_id,
+            newTick: self.new_tick,
+            newLots: self.new_lots,
         }
     }
 }

@@ -9,7 +9,7 @@ Binary outcome prediction market protocol (v1) on BNB Chain. Users trade YES/NO 
 - **4-sided orderbook:** `Side` enum: `Bid`=0, `Ask`=1, `SellYes`=2, `SellNo`=3. Bid/Ask lock USDT. SellYes/SellNo lock outcome tokens in OrderBook custody (`ERC1155Holder`).
 - **placeOrder signature:** `placeOrder(marketId, side, orderType, tick, lots)` — orderType is 3rd param.
 - **Batch order functions:** `placeOrders(OrderParam[])` for batch placement, `replaceOrders(cancelIds, OrderParam[])` for atomic cancel+place, `cancelOrders(orderIds)` for batch cancel.
-- **Pyth Core (standard pull oracle):** Resolution uses `IPyth.parsePriceFeedUpdates()` from `@pythnetwork/pyth-sdk-solidity`. Price feed IDs are `bytes32`. BSC testnet Pyth: `0xd7308b14BF4008e7C7196eC35610B1427C5702EA`.
+- **Pyth Core (standard pull oracle):** Resolution uses `IPyth.parsePriceFeedUpdates()` from `@pythnetwork/pyth-sdk-solidity`. Price feed IDs are `bytes32`. BSC testnet stable Pyth: `0x5744Cbf430D99456a0A8771208b674F27f8EF0Fb`.
 - **Order types:** GoodTilCancel (GTC) persists across batches; GoodTilBatch (GTB) expires after one batch.
 - **LOT_SIZE = 1e16 ($0.01/lot):** Defined in `ITypes.sol`. All collateral math uses this constant.
 - **Segment tree clearing:** 99-tick range (1-99), each tick = 1% probability. Binary search + tick+1 correction for maximum matched volume.
@@ -35,18 +35,19 @@ Binary outcome prediction market protocol (v1) on BNB Chain. Users trade YES/NO 
 - `src/MarketFactory.sol` — Market creation. ADMIN_ROLE for PythResolver.
 - `src/PythResolver.sol` — Oracle integration. Admin = deployer (not AccessControl).
 
-## BSC Testnet Addresses (v1)
+## BSC Testnet Addresses (current)
 
 - MockUSDT: `0xb242dc031998b06772C63596Bfce091c80D4c3fA`
-- FeeModel: `0xf5b6889a56f9d95c059be028e682f802aee6c074`
-- OutcomeToken: `0xc398678d4eb9b5a67dd3b2ff9cd6c517140fcf65`
-- Vault: `0x04606a6f4909d0e9d9d763083d7649a2229eb679`
-- OrderBook: `0x9675bab261a6f168dd76fedb6d8706021e338c16`
-- BatchAuction: `0x62224a55d05175eaeb22fc6263355c820c77e849`
-- MarketFactory: `0xf3ad14f117348de4886c29764fdcaf9c62794535`
-- PythResolver: `0x5e7b8bb9d18bc620a19cea78caaf51e1ab8afa92`
-- Redemption: `0xd181cc898bbbf4d2ddaebf6f245f043dd8f93704`
-- Pyth Core: `0xd7308b14BF4008e7C7196eC35610B1427C5702EA`
+- FeeModel: `0x5b8fCB458485e5d63c243A1FA4CA45e4e984B1eE`
+- OutcomeToken: `0x92dFA493eE92e492Df7EB2A43F87FBcb517313a9`
+- Vault: `0xEd56fF9A42F60235625Fa7DDA294AB70698DF25D`
+- OrderBook: `0x9CF4544389d235C64F1B42061f3126fF11a28734`
+- BatchAuction: `0x8e4885Cb6e0D228d9E4179C8Bd32A94f28A602df`
+- MarketFactory: `0xa1EA91E7D404C14439C84b4A95cF51127cE0338B`
+- PythResolver: `0x9ddadD15f27f4c7523268CFFeb1A1b04FEEA32b9`
+- AIResolver: `0xe2aAec0A169D39FB12b43edacB942190b152439b`
+- Redemption: `0x98723a449537AF17Fd7ddE29bd7De8f5a7A1B9B2`
+- Pyth Core: `0x5744Cbf430D99456a0A8771208b674F27f8EF0Fb`
 
 ## How to Run
 
@@ -65,3 +66,4 @@ forge test -vv       # 292 tests
 - **Batch interval enforcement:** `clearBatch` enforces minimum time between clears. Tests must `vm.warp()` between consecutive clears.
 - **Stack-too-deep:** `claimFills` uses `SettleAmounts` struct to avoid stack overflow. Add structs for multi-variable functions.
 - **PythResolver admin:** Set to `msg.sender` in constructor (simple ownership, not AccessControl).
+- **Stale testnet oracle gotcha:** `0xd7308b14BF4008e7C7196eC35610B1427C5702EA` is stale for current Hermes stable updates and caused `InvalidWormholeVaa()` failures during the 2026-04-22 recovery pass.

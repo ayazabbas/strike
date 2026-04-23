@@ -62,28 +62,28 @@ impl StrikeConfig {
                 usdt: "0xb242dc031998b06772C63596Bfce091c80D4c3fA"
                     .parse()
                     .unwrap(),
-                fee_model: "0xE7A18fAc36E4DF4F10C7d69a23AB45c01ea86781"
+                fee_model: "0x5b8fCB458485e5d63c243A1FA4CA45e4e984B1eE"
                     .parse()
                     .unwrap(),
-                outcome_token: "0x88147c22E98B201493600e1Bbf9775Eea8B0E229"
+                outcome_token: "0x92dFA493eE92e492Df7EB2A43F87FBcb517313a9"
                     .parse()
                     .unwrap(),
-                vault: "0xaa8b16F64e2dC9958F0dBe97D5f274571a80497a"
+                vault: "0xEd56fF9A42F60235625Fa7DDA294AB70698DF25D"
                     .parse()
                     .unwrap(),
-                order_book: "0x48C5ccBb3034E8bB76D96974c66a900B1CdAEcE7"
+                order_book: "0x9CF4544389d235C64F1B42061f3126fF11a28734"
                     .parse()
                     .unwrap(),
-                batch_auction: "0xEf0F96D0854C15265e40Dc5e7aD44a8D7405e51d"
+                batch_auction: "0x8e4885Cb6e0D228d9E4179C8Bd32A94f28A602df"
                     .parse()
                     .unwrap(),
-                market_factory: "0xED39F523B9cD6D915ab76B17029A20A4132Cb952"
+                market_factory: "0xa1EA91E7D404C14439C84b4A95cF51127cE0338B"
                     .parse()
                     .unwrap(),
-                pyth_resolver: "0xc72B3Da051FB25125396c83fa89856fbBE1e5f42"
+                pyth_resolver: "0x9ddadD15f27f4c7523268CFFeb1A1b04FEEA32b9"
                     .parse()
                     .unwrap(),
-                redemption: "0xd3CcF8f19574F1Baf1117314Fd5131bC8B7059D1"
+                redemption: "0x98723a449537AF17Fd7ddE29bd7De8f5a7A1B9B2"
                     .parse()
                     .unwrap(),
             },

@@ -19,20 +19,21 @@ Deployed at block 88279332.
 
 ## BSC Testnet (Chain ID: 97)
 
-Deployed at block 97257672.
+Deployed at block 103312703.
 
 | Contract | Address |
 |----------|---------|
 | **MockUSDT** | [`0xb242dc031998b06772C63596Bfce091c80D4c3fA`](https://testnet.bscscan.com/address/0xb242dc031998b06772C63596Bfce091c80D4c3fA) |
-| **FeeModel** | [`0x46C198Fa5e0E1CCEc3652bAB9A975B9F68B7F39E`](https://testnet.bscscan.com/address/0x46C198Fa5e0E1CCEc3652bAB9A975B9F68B7F39E) |
-| **OutcomeToken** | [`0x1c6622bE0D8cefD48009A337CD393cAe4530fc9a`](https://testnet.bscscan.com/address/0x1c6622bE0D8cefD48009A337CD393cAe4530fc9a) |
-| **Vault** | [`0x10909d11446e48551DA0366f59b9Ac9Cb9079314`](https://testnet.bscscan.com/address/0x10909d11446e48551DA0366f59b9Ac9Cb9079314) |
-| **OrderBook** | [`0x343d3f42562A8E5C794DFf8637664D2d03246FB9`](https://testnet.bscscan.com/address/0x343d3f42562A8E5C794DFf8637664D2d03246FB9) |
-| **BatchAuction** | [`0xF6233287fb878706B191b868a5e38E1DfdfAdDf7`](https://testnet.bscscan.com/address/0xF6233287fb878706B191b868a5e38E1DfdfAdDf7) |
-| **MarketFactory** | [`0xd2783195A8d4Ee2f99616c3b9048B43187951E67`](https://testnet.bscscan.com/address/0xd2783195A8d4Ee2f99616c3b9048B43187951E67) |
-| **PythResolver** | [`0xF83aE0cfd2D1546Bb4b15ecEB010C1B045d7Ddc9`](https://testnet.bscscan.com/address/0xF83aE0cfd2D1546Bb4b15ecEB010C1B045d7Ddc9) |
-| **Redemption** | [`0x03961AcDb718D84079De1B0236a77A7a1A3df177`](https://testnet.bscscan.com/address/0x03961AcDb718D84079De1B0236a77A7a1A3df177) |
-| **Pyth (testnet)** | [`0xd7308b14BF4008e7C7196eC35610B1427C5702EA`](https://testnet.bscscan.com/address/0xd7308b14BF4008e7C7196eC35610B1427C5702EA) |
+| **FeeModel** | [`0x5b8fCB458485e5d63c243A1FA4CA45e4e984B1eE`](https://testnet.bscscan.com/address/0x5b8fCB458485e5d63c243A1FA4CA45e4e984B1eE) |
+| **OutcomeToken** | [`0x92dFA493eE92e492Df7EB2A43F87FBcb517313a9`](https://testnet.bscscan.com/address/0x92dFA493eE92e492Df7EB2A43F87FBcb517313a9) |
+| **Vault** | [`0xEd56fF9A42F60235625Fa7DDA294AB70698DF25D`](https://testnet.bscscan.com/address/0xEd56fF9A42F60235625Fa7DDA294AB70698DF25D) |
+| **OrderBook** | [`0x9CF4544389d235C64F1B42061f3126fF11a28734`](https://testnet.bscscan.com/address/0x9CF4544389d235C64F1B42061f3126fF11a28734) |
+| **BatchAuction** | [`0x8e4885Cb6e0D228d9E4179C8Bd32A94f28A602df`](https://testnet.bscscan.com/address/0x8e4885Cb6e0D228d9E4179C8Bd32A94f28A602df) |
+| **MarketFactory** | [`0xa1EA91E7D404C14439C84b4A95cF51127cE0338B`](https://testnet.bscscan.com/address/0xa1EA91E7D404C14439C84b4A95cF51127cE0338B) |
+| **PythResolver** | [`0x9ddadD15f27f4c7523268CFFeb1A1b04FEEA32b9`](https://testnet.bscscan.com/address/0x9ddadD15f27f4c7523268CFFeb1A1b04FEEA32b9) |
+| **AIResolver** | [`0xe2aAec0A169D39FB12b43edacB942190b152439b`](https://testnet.bscscan.com/address/0xe2aAec0A169D39FB12b43edacB942190b152439b) |
+| **Redemption** | [`0x98723a449537AF17Fd7ddE29bd7De8f5a7A1B9B2`](https://testnet.bscscan.com/address/0x98723a449537AF17Fd7ddE29bd7De8f5a7A1B9B2) |
+| **Pyth (BNB testnet stable)** | [`0x5744Cbf430D99456a0A8771208b674F27f8EF0Fb`](https://testnet.bscscan.com/address/0x5744Cbf430D99456a0A8771208b674F27f8EF0Fb) |
 
 ## API Endpoints
 

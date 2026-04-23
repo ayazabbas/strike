@@ -15,7 +15,7 @@ import {AIResolver} from "../src/AIResolver.sol";
 /// @notice Deploy Strike protocol to BSC testnet or mainnet using real Pyth Core.
 contract DeployTestnetScript is Script {
     // Real Pyth Core addresses
-    address constant PYTH_BSC_TESTNET = 0xd7308b14BF4008e7C7196eC35610B1427C5702EA;
+    address constant PYTH_BSC_TESTNET = 0x5744Cbf430D99456a0A8771208b674F27f8EF0Fb;
     address constant PYTH_BSC_MAINNET = 0x4D7E825f80bDf85e913E0DD2A2D54927e9dE1594;
 
     // BTC/USD Pyth price feed ID
@@ -40,6 +40,7 @@ contract DeployTestnetScript is Script {
         address deployer = vm.addr(pk);
         address usdtAddr = vm.envAddress("USDT_ADDRESS");
         address keeper = vm.envOr("KEEPER_ADDRESS", deployer);
+        address resolutionKeeper = vm.envOr("RESOLUTION_KEEPER_ADDRESS", keeper);
 
         address pythAddr = block.chainid == 97
             ? PYTH_BSC_TESTNET
@@ -87,14 +88,19 @@ contract DeployTestnetScript is Script {
         d.redemption = address(redemption);
 
         // Wire roles — use d.* addresses to avoid stack-too-deep
-        _wireRoles(d, deployer, keeper);
+        _wireRoles(d, deployer, keeper, resolutionKeeper);
 
         vm.stopBroadcast();
 
         _printJson(d);
     }
 
-    function _wireRoles(Deployed memory d, address deployer, address keeper) internal {
+    function _wireRoles(
+        Deployed memory d,
+        address deployer,
+        address keeper,
+        address resolutionKeeper
+    ) internal {
         OrderBook orderBook = OrderBook(d.orderBook);
         Vault vault = Vault(d.vault);
         OutcomeToken outcomeToken = OutcomeToken(d.outcomeToken);
@@ -112,10 +118,12 @@ contract DeployTestnetScript is Script {
         factory.grantRole(factory.ADMIN_ROLE(), d.pythResolver);
         factory.grantRole(factory.ADMIN_ROLE(), d.aiResolver);
         factory.grantRole(factory.ADMIN_ROLE(), keeper);
+        factory.grantRole(factory.ADMIN_ROLE(), resolutionKeeper);
         factory.grantRole(factory.MARKET_CREATOR_ROLE(), deployer);
         factory.grantRole(factory.MARKET_CREATOR_ROLE(), keeper);
         factory.setAIResolver(d.aiResolver);
         aiResolver.grantRole(aiResolver.KEEPER_ROLE(), keeper);
+        aiResolver.grantRole(aiResolver.KEEPER_ROLE(), resolutionKeeper);
     }
 
     function _printJson(Deployed memory d) internal view {

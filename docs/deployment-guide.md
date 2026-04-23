@@ -20,7 +20,7 @@ export ETHERSCAN_API_KEY=...           # BscScan API key for verification
 
 | Network | Chain ID | Pyth Core Address |
 |---------|----------|-------------------|
-| BSC Testnet | 97 | `0xd7308b14BF4008e7C7196eC35610B1427C5702EA` |
+| BSC Testnet | 97 | `0x5744Cbf430D99456a0A8771208b674F27f8EF0Fb` |
 | BSC Mainnet | 56 | `0x4D7E825f80bDf85e913E0DD2A2D54927e9dE1594` |
 
 ## Deployment Order

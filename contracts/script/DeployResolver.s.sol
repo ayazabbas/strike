@@ -7,11 +7,11 @@ import "../src/MarketFactory.sol";
 
 contract DeployResolver is Script {
     function run() external {
-        address factoryAddr = 0xf3ad14f117348dE4886c29764FDcAf9c62794535; // MarketFactory (BSC testnet v1)
+        address factoryAddr = 0xa1EA91E7D404C14439C84b4A95cF51127cE0338B; // MarketFactory (current canonical Strike testnet)
 
         vm.startBroadcast();
         PythResolver resolver = new PythResolver(
-            0xd7308b14BF4008e7C7196eC35610B1427C5702EA,  // Pyth Core (BSC testnet)
+            0x5744Cbf430D99456a0A8771208b674F27f8EF0Fb,  // Pyth Stable (BNB testnet)
             factoryAddr
         );
         console.log("PythResolver deployed:", address(resolver));

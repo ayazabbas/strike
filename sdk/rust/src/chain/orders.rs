@@ -14,7 +14,7 @@ use crate::contracts::OrderBook;
 use crate::error::{Result, StrikeError};
 use crate::indexer::types::Market as IndexerMarket;
 use crate::nonce::NonceSender;
-use crate::types::{OrderParam, PlacedOrder, Side};
+use crate::types::{AmendOrderParam, OrderParam, PlacedOrder, Side};
 
 /// Client for order operations on the OrderBook contract.
 pub struct OrdersClient<'a> {
@@ -194,6 +194,79 @@ impl<'a> OrdersClient<'a> {
             .await
     }
 
+    /// Amend one or more live GTC buy-side orders in place via `amendOrders`.
+    ///
+    /// Order IDs are preserved on success. Contract-side restrictions still apply:
+    /// only live GTC bid/ask orders can be amended, and active orders cannot be
+    /// amended into resting orders.
+    pub async fn amend(&self, orderbook_market_id: u64, params: &[AmendOrderParam]) -> Result<()> {
+        self.require_wallet()?;
+
+        if params.is_empty() {
+            return Ok(());
+        }
+
+        let contract_params: Vec<OrderBook::AmendOrderParam> =
+            params.iter().map(|p| p.to_contract_param()).collect();
+
+        let calldata = OrderBook::amendOrdersCall {
+            marketId: U256::from(orderbook_market_id),
+            params: contract_params,
+        }
+        .abi_encode();
+
+        let gas_limit = gas_limit_amend_orders(params.len());
+        let mut tx = TransactionRequest::default()
+            .to(self.config.addresses.order_book)
+            .input(Bytes::from(calldata).into());
+        tx.gas = Some(gas_limit);
+
+        let pending = send_tx(self.provider, &self.nonce_sender, tx).await?;
+
+        let tx_hash = *pending.tx_hash();
+        info!(
+            orderbook_market_id,
+            amendments = params.len(),
+            gas_limit,
+            tx = %tx_hash,
+            "amendOrders tx sent"
+        );
+
+        let receipt = pending
+            .get_receipt()
+            .await
+            .map_err(|e| StrikeError::Contract(e.to_string()))?;
+
+        if !receipt.status() {
+            return Err(StrikeError::Contract(format!(
+                "amendOrders reverted (orderbook_market_id={orderbook_market_id}, tx={tx_hash}, gas_used={})",
+                receipt.gas_used
+            )));
+        }
+
+        let amended = parse_amended_order_ids(&receipt, orderbook_market_id);
+        info!(
+            orderbook_market_id,
+            tx = %tx_hash,
+            gas_limit,
+            gas_used = receipt.gas_used,
+            gas_utilization_pct = %format_gas_utilization_pct(receipt.gas_used, gas_limit),
+            amended = amended.len(),
+            "amendOrders confirmed"
+        );
+
+        Ok(())
+    }
+
+    /// Amend one or more live orders using an indexer market object.
+    pub async fn amend_market(
+        &self,
+        market: &IndexerMarket,
+        params: &[AmendOrderParam],
+    ) -> Result<()> {
+        self.amend(market.tradable_market_id()?, params).await
+    }
+
     /// Cancel one or more orders in a single transaction via `cancelOrders`.
     ///
     /// Skips already-cancelled orders on-chain (no revert).
@@ -272,6 +345,10 @@ fn gas_limit_place_orders(order_count: usize) -> u64 {
     550_000 + 175_000 * (order_count.saturating_sub(1) as u64)
 }
 
+fn gas_limit_amend_orders(order_count: usize) -> u64 {
+    300_000 + 140_000 * order_count as u64
+}
+
 fn gas_limit_replace_orders(cancel_count: usize, place_count: usize) -> u64 {
     300_000 + 120_000 * cancel_count as u64 + 180_000 * place_count as u64
 }
@@ -322,11 +399,27 @@ fn parse_placed_orders(
     placed
 }
 
+/// Parse `OrderAmended` events from a transaction receipt.
+fn parse_amended_order_ids(
+    receipt: &alloy::rpc::types::TransactionReceipt,
+    orderbook_market_id: u64,
+) -> Vec<U256> {
+    let mut amended = Vec::new();
+    for log in receipt.inner.logs() {
+        if let Ok(event) = OrderBook::OrderAmended::decode_log(&log.inner) {
+            if event.marketId == U256::from(orderbook_market_id) {
+                amended.push(event.orderId);
+            }
+        }
+    }
+    amended
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        gas_limit_cancel_order, gas_limit_cancel_orders, gas_limit_place_orders,
-        gas_limit_replace_orders,
+        gas_limit_amend_orders, gas_limit_cancel_order, gas_limit_cancel_orders,
+        gas_limit_place_orders, gas_limit_replace_orders,
     };
 
     #[test]
@@ -343,6 +436,14 @@ mod tests {
         assert_eq!(gas_limit_replace_orders(1, 0), 420_000);
         assert_eq!(gas_limit_replace_orders(0, 1), 480_000);
         assert_eq!(gas_limit_replace_orders(2, 3), 1_080_000);
+    }
+
+    #[test]
+    fn gas_limit_amend_orders_formula() {
+        assert_eq!(gas_limit_amend_orders(0), 300_000);
+        assert_eq!(gas_limit_amend_orders(1), 440_000);
+        assert_eq!(gas_limit_amend_orders(2), 580_000);
+        assert_eq!(gas_limit_amend_orders(4), 860_000);
     }
 
     #[test]
