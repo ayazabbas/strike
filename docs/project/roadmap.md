@@ -71,5 +71,6 @@ Preserved on the `poc` branch.
 - Variable market durations (1min, 5min, 15min, 1hr)
 
 ### Recently Completed
-- [x] BSC mainnet deployment (block 88279332)
+- [x] BSC mainnet redeployment and production cutover (block 94290419, previous live deployment archived before reset)
+- [x] Canonical BSC testnet stack with `amendOrders` live (block 103312703)
 - [x] Leaderboard (PNL + Volume tabs, 24H/7D/30D/All, username system)

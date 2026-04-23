@@ -25,6 +25,9 @@ export ETHERSCAN_API_KEY=...           # BscScan API key for verification
 
 ## Deployment Order
 
+The canonical BSC deploy entrypoint is `script/DeployTestnet.s.sol:DeployTestnetScript`.
+Despite the name, it is chain-aware and is the script currently used for both BSC testnet (`chainid=97`) and BSC mainnet (`chainid=56`). It also deploys and wires `AIResolver`.
+
 Contracts must be deployed in this exact order because of immutable constructor references:
 
 ```
@@ -42,13 +45,14 @@ Contracts must be deployed in this exact order because of immutable constructor 
 
 | Contract | Constructor Args |
 |----------|-----------------|
-| `Vault(admin)` | deployer address |
+| `Vault(admin, collateralToken)` | deployer address, USDT address |
 | `OutcomeToken(admin)` | deployer address |
 | `FeeModel(admin, feeBps, protocolFeeCollector)` | deployer, 20, deployer |
-| `OrderBook(admin, vault)` | deployer, Vault address |
-| `BatchAuction(admin, orderBook, vault, feeModel, outcomeToken)` | deployer, OrderBook, Vault, FeeModel, OutcomeToken |
-| `MarketFactory(admin, orderBook, outcomeToken, feeCollector)` | deployer, OrderBook, OutcomeToken, deployer |
+| `OrderBook(admin, vault, feeModel, outcomeToken)` | deployer, Vault address, FeeModel address, OutcomeToken address |
+| `BatchAuction(admin, orderBook, vault, outcomeToken)` | deployer, OrderBook, Vault, OutcomeToken |
+| `MarketFactory(admin, orderBook, outcomeToken)` | deployer, OrderBook, OutcomeToken |
 | `PythResolver(pyth, factory)` | PYTH_ADDRESS, MarketFactory |
+| `AIResolver(factory, treasury)` | MarketFactory, deployer or configured treasury |
 | `Redemption(factory, outcomeToken, vault)` | MarketFactory, OutcomeToken, Vault |
 
 ## Role Wiring
@@ -62,7 +66,7 @@ orderBook.grantRole(OPERATOR_ROLE, address(batchAuction));
 orderBook.grantRole(OPERATOR_ROLE, address(marketFactory));
 ```
 
-BatchAuction needs OPERATOR_ROLE to call `reduceOrderLots`, `updateTreeVolume`, and `advanceBatch`. MarketFactory needs it to call `registerMarket` and `deactivateMarket`.
+BatchAuction needs OPERATOR_ROLE to call `reduceOrderLots`, `updateTreeVolume`, and `advanceBatch`. MarketFactory needs it to call `registerMarket` and `deactivateMarket`. In production, the keeper is also granted `OPERATOR_ROLE` so it can drive batch clearing.
 
 ### Vault.PROTOCOL_ROLE
 
@@ -87,9 +91,22 @@ BatchAuction calls `mintSingle` during inline settlement. Redemption calls `rede
 
 ```solidity
 factory.grantRole(ADMIN_ROLE, address(pythResolver));
+factory.grantRole(ADMIN_ROLE, address(aiResolver));
+factory.grantRole(ADMIN_ROLE, keeper);
+factory.grantRole(ADMIN_ROLE, resolutionKeeper);
+factory.grantRole(MARKET_CREATOR_ROLE, deployer);
+factory.grantRole(MARKET_CREATOR_ROLE, keeper);
+factory.setAIResolver(address(aiResolver));
 ```
 
-PythResolver calls `setResolving`, `setResolved`, and `payResolverBounty` on MarketFactory.
+PythResolver and AIResolver call resolution functions on MarketFactory. Production deployments also grant keeper and resolution-keeper admin access on the factory, plus market-creation rights for the deployer and keeper.
+
+### AIResolver Keeper Wiring
+
+```solidity
+aiResolver.grantRole(KEEPER_ROLE, keeper);
+aiResolver.grantRole(KEEPER_ROLE, resolutionKeeper);
+```
 
 ### PythResolver Admin
 
@@ -114,19 +131,21 @@ forge script script/Deploy.s.sol \
   --broadcast
 ```
 
-The `Deploy.s.sol` script deploys a `MockPyth` instance, wires all roles, and creates a test market automatically.
+The local-only `Deploy.s.sol` script deploys a `MockPyth` instance, wires all roles, and creates a test market automatically.
 
-### BSC
+### BSC Testnet / Mainnet
 
 ```bash
-forge script script/Deploy.s.sol \
+forge script script/DeployTestnet.s.sol:DeployTestnetScript \
   --rpc-url $RPC_URL \
   --broadcast \
   --verify \
   --etherscan-api-key $ETHERSCAN_API_KEY
 ```
 
-The deploy script auto-detects chain ID and uses the correct Pyth address.
+`DeployTestnetScript` auto-detects `block.chainid`, chooses the correct real Pyth address for BSC testnet or mainnet, deploys `AIResolver`, and wires the production role set.
+
+Note: `script/DeployMainnet.s.sol` still exists in the repo, but the canonical production path is the chain-aware `DeployTestnet.s.sol:DeployTestnetScript` flow above.
 
 ## Contract Verification
 
@@ -171,3 +190,5 @@ For contracts with complex constructor args, use `cast abi-encode` to produce th
 6. **Keepers configured** -- batch-keeper, market-keeper, and resolution-keeper (in strike-infra) pointing at correct contract addresses.
 
 7. **Indexer configured** -- indexer (in strike-infra) pointing at correct RPC and contract addresses, listening for all relevant events.
+
+8. **SDK / docs updated** -- update SDK defaults and published deployment docs/README so integrators pick up the new mainnet and testnet addresses.

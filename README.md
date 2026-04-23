@@ -111,19 +111,39 @@ forge test -vvv
 forge test --match-test testClearBatch -vvv
 ```
 
-## Contract Addresses (BSC Testnet)
+## Contract Addresses
+
+### BSC Mainnet (deployed block `94290419`)
 
 | Contract | Address |
 |----------|---------|
-| MarketFactory | `0x6415619262033090EA0C2De913a3a6d9FC1d9DE9` |
-| OrderBook | `0xB59e3d709Bd8Df10418D47E7d2CF045B02D06E32` |
-| BatchAuction | `0x414D9da55d61835fD7Bb127978a2c49B8F09BdD5` |
-| Vault | `0xc9aA051e0BB2E0Fbb8Bfe4e4BB9ffa5Bf690023b` |
-| OutcomeToken | `0x427CFce18cC5278f2546F88ab02c6a0749228A45` |
-| Redemption | `0x4b55f917Ab45028d4C75f3dA400B50D81209593b` |
-| FeeModel | `0xa044FF6E4385c3d671E47aa9E31cb91a50a3F276` |
-| PythResolver | `0xDcb807de5Ba5F3af04286a9dC1F6f3eb33066b92` |
+| MarketFactory | `0xcbBC04B2a3EfE858c7C3d159c56f194AF2a7eBac` |
+| OrderBook | `0x1E7C9b93D2C939a433D87b281918508Eec7c9171` |
+| BatchAuction | `0xCdd122520E9efbdb5bd1Cc246aE497c37c70bdBE` |
+| Vault | `0x2a6EA3F574264E6fA9c6F3c691dA01BE6DaC066f` |
+| OutcomeToken | `0xdcA3d1Be0a181494F2bf46a5a885b2c2009574f3` |
+| Redemption | `0x9a46D6c017eDdA49832cC9eE315246d0B55E5804` |
+| FeeModel | `0x10d479354013c20eC777569618186D79eE818D8a` |
+| PythResolver | `0x101383ef333d5Cb7Cb154EAbcA68961e3ac5B1a4` |
+| AIResolver | `0xb0606b7984a2AA36774e8865E76689f98D39eE6e` |
+| USDT | `0x55d398326f99059fF775485246999027B3197955` |
+
+### BSC Testnet (deployed block `103312703`)
+
+| Contract | Address |
+|----------|---------|
+| MarketFactory | `0xa1EA91E7D404C14439C84b4A95cF51127cE0338B` |
+| OrderBook | `0x9CF4544389d235C64F1B42061f3126fF11a28734` |
+| BatchAuction | `0x8e4885Cb6e0D228d9E4179C8Bd32A94f28A602df` |
+| Vault | `0xEd56fF9A42F60235625Fa7DDA294AB70698DF25D` |
+| OutcomeToken | `0x92dFA493eE92e492Df7EB2A43F87FBcb517313a9` |
+| Redemption | `0x98723a449537AF17Fd7ddE29bd7De8f5a7A1B9B2` |
+| FeeModel | `0x5b8fCB458485e5d63c243A1FA4CA45e4e984B1eE` |
+| PythResolver | `0x9ddadD15f27f4c7523268CFFeb1A1b04FEEA32b9` |
+| AIResolver | `0xe2aAec0A169D39FB12b43edacB942190b152439b` |
 | MockUSDT | `0xb242dc031998b06772C63596Bfce091c80D4c3fA` |
+
+For the full canonical registry, including oracle and provider addresses, see [`docs/contracts/deployments.md`](docs/contracts/deployments.md).
 
 ## History
 

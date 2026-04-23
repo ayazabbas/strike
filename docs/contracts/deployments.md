@@ -2,20 +2,24 @@
 
 ## BSC Mainnet (Chain ID: 56)
 
-Deployed at block 88279332.
+Deployed at block `94290419` on 2026-04-23.
 
 | Contract | Address |
 |----------|---------|
 | **USDT** | [`0x55d398326f99059fF775485246999027B3197955`](https://bscscan.com/address/0x55d398326f99059fF775485246999027B3197955) |
-| **FeeModel** | [`0xBB628007734963352b1cF9094847B902b0fca9aB`](https://bscscan.com/address/0xBB628007734963352b1cF9094847B902b0fca9aB) |
-| **OutcomeToken** | [`0xBd65B054a08fe0e8d26325e69B6EB6aD6dfF1516`](https://bscscan.com/address/0xBd65B054a08fe0e8d26325e69B6EB6aD6dfF1516) |
-| **Vault** | [`0x2556E5DE92281EdA3300F044dfB9158416407eed`](https://bscscan.com/address/0x2556E5DE92281EdA3300F044dfB9158416407eed) |
-| **OrderBook** | [`0x074Ca415B501Bcca0020e9c312cf1F80796Ae3b1`](https://bscscan.com/address/0x074Ca415B501Bcca0020e9c312cf1F80796Ae3b1) |
-| **BatchAuction** | [`0xa8e9a6B62B93A4360969972Dc7300C6Be7B5f9D8`](https://bscscan.com/address/0xa8e9a6B62B93A4360969972Dc7300C6Be7B5f9D8) |
-| **MarketFactory** | [`0x9c045dc57c1132e5D13b234F8e166cAaD8CE2c3D`](https://bscscan.com/address/0x9c045dc57c1132e5D13b234F8e166cAaD8CE2c3D) |
-| **PythResolver** | [`0x1B3335A22D410713A4Cd32eF8ffBEe672aD4e65d`](https://bscscan.com/address/0x1B3335A22D410713A4Cd32eF8ffBEe672aD4e65d) |
-| **Redemption** | [`0x03961AcDb718D84079De1B0236a77A7a1A3df177`](https://bscscan.com/address/0x03961AcDb718D84079De1B0236a77A7a1A3df177) |
+| **FeeModel** | [`0x10d479354013c20eC777569618186D79eE818D8a`](https://bscscan.com/address/0x10d479354013c20eC777569618186D79eE818D8a) |
+| **OutcomeToken** | [`0xdcA3d1Be0a181494F2bf46a5a885b2c2009574f3`](https://bscscan.com/address/0xdcA3d1Be0a181494F2bf46a5a885b2c2009574f3) |
+| **Vault** | [`0x2a6EA3F574264E6fA9c6F3c691dA01BE6DaC066f`](https://bscscan.com/address/0x2a6EA3F574264E6fA9c6F3c691dA01BE6DaC066f) |
+| **OrderBook** | [`0x1E7C9b93D2C939a433D87b281918508Eec7c9171`](https://bscscan.com/address/0x1E7C9b93D2C939a433D87b281918508Eec7c9171) |
+| **BatchAuction** | [`0xCdd122520E9efbdb5bd1Cc246aE497c37c70bdBE`](https://bscscan.com/address/0xCdd122520E9efbdb5bd1Cc246aE497c37c70bdBE) |
+| **MarketFactory** | [`0xcbBC04B2a3EfE858c7C3d159c56f194AF2a7eBac`](https://bscscan.com/address/0xcbBC04B2a3EfE858c7C3d159c56f194AF2a7eBac) |
+| **PythResolver** | [`0x101383ef333d5Cb7Cb154EAbcA68961e3ac5B1a4`](https://bscscan.com/address/0x101383ef333d5Cb7Cb154EAbcA68961e3ac5B1a4) |
+| **AIResolver** | [`0xb0606b7984a2AA36774e8865E76689f98D39eE6e`](https://bscscan.com/address/0xb0606b7984a2AA36774e8865E76689f98D39eE6e) |
+| **FlapAIProvider** | [`0xaEe3a7Ca6fe6b53f6c32a3e8407eC5A9dF8B7E39`](https://bscscan.com/address/0xaEe3a7Ca6fe6b53f6c32a3e8407eC5A9dF8B7E39) |
+| **Redemption** | [`0x9a46D6c017eDdA49832cC9eE315246d0B55E5804`](https://bscscan.com/address/0x9a46D6c017eDdA49832cC9eE315246d0B55E5804) |
 | **Pyth Core** | [`0x4D7E825f80bDf85e913E0DD2A2D54927e9dE1594`](https://bscscan.com/address/0x4D7E825f80bDf85e913E0DD2A2D54927e9dE1594) |
+
+The prior mainnet deployment at block `88279332` is now legacy. Production history before this cutover was archived before the 2026-04-23 redeploy.
 
 ## BSC Testnet (Chain ID: 97)
 

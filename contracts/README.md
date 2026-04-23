@@ -29,7 +29,25 @@ Fully on-chain prediction market protocol on BNB Chain. Binary outcome tokens (Y
 - **Pyth Core oracle:** Resolution via `parsePriceFeedUpdates`. Price IDs stored as `bytes32` in `MarketFactory.marketMeta`.
 - **99-tick range:** Ticks 1-99, each = 1% probability. Segment tree binary search for clearing price.
 
-## BSC Testnet Addresses (current)
+## Live Deployments
+
+### BSC Mainnet (deployed block `94290419`)
+
+| Contract | Address |
+|----------|---------|
+| USDT | `0x55d398326f99059fF775485246999027B3197955` |
+| FeeModel | `0x10d479354013c20eC777569618186D79eE818D8a` |
+| OutcomeToken | `0xdcA3d1Be0a181494F2bf46a5a885b2c2009574f3` |
+| Vault | `0x2a6EA3F574264E6fA9c6F3c691dA01BE6DaC066f` |
+| OrderBook | `0x1E7C9b93D2C939a433D87b281918508Eec7c9171` |
+| BatchAuction | `0xCdd122520E9efbdb5bd1Cc246aE497c37c70bdBE` |
+| MarketFactory | `0xcbBC04B2a3EfE858c7C3d159c56f194AF2a7eBac` |
+| PythResolver | `0x101383ef333d5Cb7Cb154EAbcA68961e3ac5B1a4` |
+| AIResolver | `0xb0606b7984a2AA36774e8865E76689f98D39eE6e` |
+| Redemption | `0x9a46D6c017eDdA49832cC9eE315246d0B55E5804` |
+| Pyth Core | `0x4D7E825f80bDf85e913E0DD2A2D54927e9dE1594` |
+
+### BSC Testnet (deployed block `103312703`)
 
 | Contract | Address |
 |----------|---------|
