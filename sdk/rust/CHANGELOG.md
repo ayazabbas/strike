@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.12 (2026-04-23)
+
+### Fixed
+- Updated built-in `StrikeConfig::bsc_mainnet()` contract addresses to the canonical 2026-04-23 mainnet deployment.
+- Confirmed built-in `StrikeConfig::bsc_testnet()` contract addresses against the canonical 2026-04-23 testnet deployment.
+
 ## v0.2.11 (2026-04-11)
 
 ### Added

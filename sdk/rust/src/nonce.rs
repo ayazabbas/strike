@@ -58,7 +58,11 @@ pub struct NonceSender {
 
 impl NonceSender {
     /// Create a new NonceSender, fetching the current nonce from chain.
-    pub async fn new(provider: DynProvider, signer_addr: Address, tx_config: TxConfig) -> Result<Self> {
+    pub async fn new(
+        provider: DynProvider,
+        signer_addr: Address,
+        tx_config: TxConfig,
+    ) -> Result<Self> {
         let nonce = provider
             .get_transaction_count(signer_addr)
             .await

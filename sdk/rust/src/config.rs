@@ -103,28 +103,28 @@ impl StrikeConfig {
                 usdt: "0x55d398326f99059fF775485246999027B3197955"
                     .parse()
                     .unwrap(),
-                fee_model: "0x115a7dda16926eddc048281e1fb80c15bc724a6a"
+                fee_model: "0x10d479354013c20eC777569618186D79eE818D8a"
                     .parse()
                     .unwrap(),
-                outcome_token: "0x161f2222684842cf1b5fb03e016365a91626690a"
+                outcome_token: "0xdcA3d1Be0a181494F2bf46a5a885b2c2009574f3"
                     .parse()
                     .unwrap(),
-                vault: "0x223a1c6eb44cc6d7e74d11b3235941da2b02f164"
+                vault: "0x2a6EA3F574264E6fA9c6F3c691dA01BE6DaC066f"
                     .parse()
                     .unwrap(),
-                order_book: "0xa5ec8b3ac82853438bbb1788e0bd9d906b7c8d4e"
+                order_book: "0x1E7C9b93D2C939a433D87b281918508Eec7c9171"
                     .parse()
                     .unwrap(),
-                batch_auction: "0xddc0eb9fd6ce697294b8935d09acaebb494a491b"
+                batch_auction: "0xCdd122520E9efbdb5bd1Cc246aE497c37c70bdBE"
                     .parse()
                     .unwrap(),
-                market_factory: "0xb7f4b97b95b85d7c285ac0f6319785657dc0f1da"
+                market_factory: "0xcbBC04B2a3EfE858c7C3d159c56f194AF2a7eBac"
                     .parse()
                     .unwrap(),
-                pyth_resolver: "0x09c0574bfb7465ebc115258137e321e42ef813f8"
+                pyth_resolver: "0x101383ef333d5Cb7Cb154EAbcA68961e3ac5B1a4"
                     .parse()
                     .unwrap(),
-                redemption: "0xb61c6880db469fb40e49757aa25b49baac26b451"
+                redemption: "0x9a46D6c017eDdA49832cC9eE315246d0B55E5804"
                     .parse()
                     .unwrap(),
             },
