@@ -240,6 +240,29 @@ contract OrderBookTest is Test {
         assertEq(vault.available(user1), 0);
     }
 
+    function test_PlaceOrder_UsesAvailableVaultBalanceBeforeWallet() public {
+        uint256 mId = _setupMarket();
+        uint256 collateral = (10 * LOT * 50) / 100;
+        uint256 fee = feeModel.calculateFee(collateral);
+        uint256 required = collateral + fee;
+        bytes32 protocolRole = vault.PROTOCOL_ROLE();
+
+        vm.prank(admin);
+        vault.grantRole(protocolRole, admin);
+        vm.prank(admin);
+        vault.depositFor(user1, 1 ether);
+
+        uint256 walletBefore = usdt.balanceOf(user1);
+
+        vm.prank(user1);
+        book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 50, 10);
+
+        assertEq(usdt.balanceOf(user1), walletBefore);
+        assertEq(vault.balance(user1), 1 ether);
+        assertEq(vault.locked(user1), required);
+        assertEq(vault.available(user1), 1 ether - required);
+    }
+
     function test_PlaceOrder_LocksCollateralPlusFee_Ask() public {
         uint256 mId = _setupMarket();
         uint256 collateral = (10 * LOT * 40) / 100;
@@ -277,6 +300,33 @@ contract OrderBookTest is Test {
         assertEq(ids.length, 2);
         assertEq(ids[0], 1);
         assertEq(ids[1], 2);
+    }
+
+    function test_PlaceOrders_UsesAvailableVaultBalanceBeforeWallet() public {
+        uint256 mId = _setupMarket();
+        uint256 collateral1 = _calcCollateral(Side.Bid, 50, 10);
+        uint256 collateral2 = _calcCollateral(Side.Ask, 60, 10);
+        uint256 required = collateral1 + feeModel.calculateFee(collateral1) + collateral2 + feeModel.calculateFee(collateral2);
+        bytes32 protocolRole = vault.PROTOCOL_ROLE();
+
+        vm.prank(admin);
+        vault.grantRole(protocolRole, admin);
+        vm.prank(admin);
+        vault.depositFor(user1, 1 ether);
+
+        OrderParam[] memory params = new OrderParam[](2);
+        params[0] = OrderParam({side: Side.Bid, orderType: OrderType.GoodTilCancel, tick: 50, lots: 10});
+        params[1] = OrderParam({side: Side.Ask, orderType: OrderType.GoodTilCancel, tick: 60, lots: 10});
+
+        uint256 walletBefore = usdt.balanceOf(user1);
+
+        vm.prank(user1);
+        book.placeOrders(mId, params);
+
+        assertEq(usdt.balanceOf(user1), walletBefore);
+        assertEq(vault.balance(user1), 1 ether);
+        assertEq(vault.locked(user1), required);
+        assertEq(vault.available(user1), 1 ether - required);
     }
 
     // =========================================================================

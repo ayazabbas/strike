@@ -140,6 +140,46 @@ contract VaultTest is Test {
         vault.withdrawTo(user1, 1 ether);
     }
 
+    function test_Withdraw_Basic() public {
+        vm.prank(protocol);
+        vault.depositFor(user1, 5 ether);
+
+        uint256 before = usdt.balanceOf(user1);
+        vm.prank(user1);
+        vault.withdraw(2 ether);
+
+        assertEq(vault.balance(user1), 3 ether);
+        assertEq(vault.available(user1), 3 ether);
+        assertEq(usdt.balanceOf(user1) - before, 2 ether);
+    }
+
+    function test_Withdraw_RevertIfInsufficientAvailable() public {
+        vm.prank(protocol);
+        vault.depositFor(user1, 1 ether);
+        vm.prank(protocol);
+        vault.lock(user1, 1 ether);
+
+        vm.expectRevert("Vault: insufficient available balance");
+        vm.prank(user1);
+        vault.withdraw(1 wei);
+    }
+
+    function test_Withdraw_RevertOnZeroAmount() public {
+        vm.expectRevert("Vault: zero amount");
+        vm.prank(user1);
+        vault.withdraw(0);
+    }
+
+    function test_Withdraw_EmitsEvent() public {
+        vm.prank(protocol);
+        vault.depositFor(user1, 2 ether);
+
+        vm.expectEmit(true, false, false, true);
+        emit Vault.Withdrawn(user1, 1 ether);
+        vm.prank(user1);
+        vault.withdraw(1 ether);
+    }
+
     function test_Lock_Basic() public {
         vm.prank(protocol);
         vault.depositFor(user1, 5 ether);

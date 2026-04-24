@@ -228,9 +228,18 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
                     askTrees[marketId].update(tick, int256(lots));
                 }
             }
-            vault.depositFor(msg.sender, totalDeposit);
-            vault.lock(msg.sender, totalDeposit);
+            _lockCollateralFromVaultFirst(msg.sender, totalDeposit);
         }
+    }
+
+    function _lockCollateralFromVaultFirst(address user, uint256 amount) internal {
+        if (amount == 0) return;
+
+        uint256 availableBalance = vault.available(user);
+        if (availableBalance < amount) {
+            vault.depositFor(user, amount - availableBalance);
+        }
+        vault.lock(user, amount);
     }
 
     function _requiredCollateral(Side side, uint256 tick, uint256 lots) internal pure returns (uint256) {
@@ -497,19 +506,14 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
         }
 
         if (totalDeposit > 0) {
-            vault.depositFor(msg.sender, totalDeposit);
-            vault.lock(msg.sender, totalDeposit);
+            _lockCollateralFromVaultFirst(msg.sender, totalDeposit);
         }
     }
 
     function _applyAmendVaultDelta(address user, uint256 oldRequired, uint256 newRequired) internal {
         if (newRequired > oldRequired) {
             uint256 netIncrease = newRequired - oldRequired;
-            uint256 available = vault.available(user);
-            if (available < netIncrease) {
-                vault.depositFor(user, netIncrease - available);
-            }
-            vault.lock(user, netIncrease);
+            _lockCollateralFromVaultFirst(user, netIncrease);
         } else if (oldRequired > newRequired) {
             vault.unlock(user, oldRequired - newRequired);
         }
@@ -738,8 +742,7 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
         // Net settlement
         if (totalDeposit > totalRefund) {
             uint256 netDeposit = totalDeposit - totalRefund;
-            vault.depositFor(msg.sender, netDeposit);
-            vault.lock(msg.sender, netDeposit);
+            _lockCollateralFromVaultFirst(msg.sender, netDeposit);
         } else if (totalRefund > totalDeposit) {
             uint256 netRefund = totalRefund - totalDeposit;
             vault.unlock(msg.sender, netRefund);

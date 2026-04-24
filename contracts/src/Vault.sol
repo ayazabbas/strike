@@ -81,6 +81,15 @@ contract Vault is ReentrancyGuard, AccessControl {
         emit Withdrawn(user, amount);
     }
 
+    function withdraw(uint256 amount) external nonReentrant {
+        require(amount > 0, "Vault: zero amount");
+        uint256 avail = available(msg.sender);
+        require(avail >= amount, "Vault: insufficient available balance");
+        balance[msg.sender] -= amount;
+        collateralToken.safeTransfer(msg.sender, amount);
+        emit Withdrawn(msg.sender, amount);
+    }
+
     // -------------------------------------------------------------------------
     // Lock / Unlock (protocol only)
     // -------------------------------------------------------------------------
