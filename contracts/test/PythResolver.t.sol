@@ -379,8 +379,10 @@ contract PythResolverTest is Test {
         (, , uint256 newTimestamp, , ) = resolver.pendingResolutions(marketId);
         assertEq(newTimestamp, originalTimestamp);
 
-        // Can finalize after remaining 45s
-        vm.warp(block.timestamp + 45);
+        // Can finalize after remaining 45s from the original resolution timestamp.
+        // Use the stored timestamp directly so this remains robust under optimizer/via-ir
+        // timestamp evaluation quirks in tests.
+        vm.warp(originalTimestamp + resolver.FINALITY_PERIOD());
         resolver.finalizeResolution(marketId);
 
         (, , , , , bool outcomeYes, , , , ) = factory.marketMeta(marketId);
