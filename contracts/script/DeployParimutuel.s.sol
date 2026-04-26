@@ -2,8 +2,10 @@
 pragma solidity ^0.8.25;
 
 import {Script, console} from "forge-std/Script.sol";
+import {ParimutuelAIResolver} from "../src/ParimutuelAIResolver.sol";
 import {ParimutuelFactory} from "../src/ParimutuelFactory.sol";
 import {ParimutuelPoolManager} from "../src/ParimutuelPoolManager.sol";
+import {ParimutuelPythResolver} from "../src/ParimutuelPythResolver.sol";
 import {ParimutuelRedemption} from "../src/ParimutuelRedemption.sol";
 import {ParimutuelVault} from "../src/ParimutuelVault.sol";
 
@@ -11,10 +13,12 @@ import {ParimutuelVault} from "../src/ParimutuelVault.sol";
 /// @dev Required env:
 ///      PRIVATE_KEY or DEPLOYER_PRIVATE_KEY
 ///      USDT_ADDRESS
+///      PYTH_ADDRESS
 ///      Optional env:
 ///      PARIMUTUEL_FINAL_ADMIN defaults to deployer
 ///      PARIMUTUEL_FEE_RECIPIENT defaults to final admin
 ///      PARIMUTUEL_MARKET_CREATOR defaults to final admin
+///      PARIMUTUEL_KEEPER defaults to final admin
 contract DeployParimutuelScript is Script {
     uint256 internal constant INDEPENDENT_LOG_LIQUIDITY_RECOMMENDED = 40_000e18;
     uint256 internal constant INDEPENDENT_LOG_LIQUIDITY_CONSERVATIVE = 100_000e18;
@@ -24,10 +28,13 @@ contract DeployParimutuelScript is Script {
         address manager;
         address vault;
         address redemption;
+        address aiResolver;
+        address pythResolver;
         address collateralToken;
         address admin;
         address feeRecipient;
         address marketCreator;
+        address keeper;
     }
 
     function run() external {
@@ -35,21 +42,27 @@ contract DeployParimutuelScript is Script {
         address deployer = vm.addr(pk);
         address finalAdmin = vm.envOr("PARIMUTUEL_FINAL_ADMIN", deployer);
         address collateralToken = vm.envAddress("USDT_ADDRESS");
+        address pythAddress = vm.envAddress("PYTH_ADDRESS");
         address feeRecipient = vm.envOr("PARIMUTUEL_FEE_RECIPIENT", finalAdmin);
         address marketCreator = vm.envOr("PARIMUTUEL_MARKET_CREATOR", finalAdmin);
+        address keeper = vm.envOr("PARIMUTUEL_KEEPER", finalAdmin);
 
         require(finalAdmin != address(0), "DeployParimutuel: zero final admin");
         require(collateralToken != address(0), "DeployParimutuel: zero collateral");
+        require(pythAddress != address(0), "DeployParimutuel: zero pyth");
         require(feeRecipient != address(0), "DeployParimutuel: zero fee recipient");
         require(marketCreator != address(0), "DeployParimutuel: zero creator");
+        require(keeper != address(0), "DeployParimutuel: zero keeper");
 
         console.log("Deploying Strike parimutuel protocol...");
         console.log("  Chain ID:", block.chainid);
         console.log("  Deployer:", deployer);
         console.log("  Final admin:", finalAdmin);
         console.log("  Collateral:", collateralToken);
+        console.log("  Pyth:", pythAddress);
         console.log("  Fee recipient:", feeRecipient);
         console.log("  Market creator:", marketCreator);
+        console.log("  Keeper:", keeper);
 
         vm.startBroadcast(pk);
 
@@ -58,8 +71,12 @@ contract DeployParimutuelScript is Script {
         ParimutuelPoolManager manager =
             new ParimutuelPoolManager(deployer, address(factory), address(vault), feeRecipient);
         ParimutuelRedemption redemption = new ParimutuelRedemption(deployer, address(manager), address(vault));
+        ParimutuelAIResolver aiResolver = new ParimutuelAIResolver(address(factory), feeRecipient);
+        ParimutuelPythResolver pythResolver = new ParimutuelPythResolver(pythAddress, address(factory));
 
-        _wireRoles(factory, manager, vault, redemption, deployer, finalAdmin, marketCreator);
+        _wireRoles(
+            factory, manager, vault, redemption, aiResolver, pythResolver, deployer, finalAdmin, marketCreator, keeper
+        );
 
         vm.stopBroadcast();
 
@@ -68,10 +85,13 @@ contract DeployParimutuelScript is Script {
             manager: address(manager),
             vault: address(vault),
             redemption: address(redemption),
+            aiResolver: address(aiResolver),
+            pythResolver: address(pythResolver),
             collateralToken: collateralToken,
             admin: finalAdmin,
             feeRecipient: feeRecipient,
-            marketCreator: marketCreator
+            marketCreator: marketCreator,
+            keeper: keeper
         });
 
         _printJson(d);
@@ -82,23 +102,29 @@ contract DeployParimutuelScript is Script {
         ParimutuelPoolManager manager,
         ParimutuelVault vault,
         ParimutuelRedemption redemption,
+        ParimutuelAIResolver aiResolver,
+        ParimutuelPythResolver pythResolver,
         address bootstrapAdmin,
         address finalAdmin,
-        address marketCreator
+        address marketCreator,
+        address keeper
     ) internal {
         factory.setPoolManager(address(manager));
         factory.grantRole(factory.MARKET_CREATOR_ROLE(), marketCreator);
+        factory.grantRole(factory.RESOLVER_ROLE(), address(aiResolver));
+        factory.grantRole(factory.RESOLVER_ROLE(), address(pythResolver));
 
         vault.grantRole(vault.PROTOCOL_ROLE(), address(manager));
         vault.grantRole(vault.PROTOCOL_ROLE(), address(redemption));
 
         manager.grantRole(manager.REDEMPTION_ROLE(), address(redemption));
+        aiResolver.grantRole(aiResolver.KEEPER_ROLE(), keeper);
 
         if (marketCreator != finalAdmin) {
             factory.grantRole(factory.MARKET_CREATOR_ROLE(), finalAdmin);
         }
 
-        _handoffAdmin(factory, manager, vault, redemption, bootstrapAdmin, finalAdmin);
+        _handoffAdmin(factory, manager, vault, redemption, aiResolver, pythResolver, bootstrapAdmin, finalAdmin);
     }
 
     function _handoffAdmin(
@@ -106,6 +132,8 @@ contract DeployParimutuelScript is Script {
         ParimutuelPoolManager manager,
         ParimutuelVault vault,
         ParimutuelRedemption redemption,
+        ParimutuelAIResolver aiResolver,
+        ParimutuelPythResolver pythResolver,
         address bootstrapAdmin,
         address finalAdmin
     ) internal {
@@ -120,6 +148,8 @@ contract DeployParimutuelScript is Script {
         vault.grantRole(vault.DEFAULT_ADMIN_ROLE(), finalAdmin);
         redemption.grantRole(redemption.DEFAULT_ADMIN_ROLE(), finalAdmin);
         redemption.grantRole(redemption.ADMIN_ROLE(), finalAdmin);
+        aiResolver.setAdmin(finalAdmin);
+        pythResolver.setPendingAdmin(finalAdmin);
 
         factory.revokeRole(factory.ADMIN_ROLE(), bootstrapAdmin);
         factory.revokeRole(factory.DEFAULT_ADMIN_ROLE(), bootstrapAdmin);
@@ -147,6 +177,10 @@ contract DeployParimutuelScript is Script {
             vm.toString(d.vault),
             '","parimutuelRedemption":"',
             vm.toString(d.redemption),
+            '","parimutuelAIResolver":"',
+            vm.toString(d.aiResolver),
+            '","parimutuelPythResolver":"',
+            vm.toString(d.pythResolver),
             '","collateralToken":"',
             vm.toString(d.collateralToken)
         );
@@ -158,6 +192,8 @@ contract DeployParimutuelScript is Script {
             vm.toString(d.feeRecipient),
             '","marketCreator":"',
             vm.toString(d.marketCreator),
+            '","keeper":"',
+            vm.toString(d.keeper),
             '","independentLogLiquidityRecommended":"',
             vm.toString(INDEPENDENT_LOG_LIQUIDITY_RECOMMENDED),
             '","independentLogLiquidityConservative":"',

@@ -168,6 +168,9 @@ contract ParimutuelFactoryTest is Test {
         factory.closeMarket(marketId);
 
         vm.prank(admin);
+        factory.fallbackToAdmin(marketId);
+
+        vm.prank(admin);
         factory.resolveToWinner(marketId, 7);
 
         assertEq(factory.getMarket(marketId).winningOutcomeId, 7);
@@ -257,6 +260,9 @@ contract ParimutuelFactoryTest is Test {
         factory.closeMarket(marketId);
 
         vm.prank(admin);
+        factory.fallbackToAdmin(marketId);
+
+        vm.prank(admin);
         factory.resolveToWinner(marketId, 2);
 
         ParimutuelMarket memory market = factory.getMarket(marketId);
@@ -273,6 +279,9 @@ contract ParimutuelFactoryTest is Test {
 
         vm.warp(config.closeTime);
         factory.closeMarket(marketId);
+
+        vm.prank(admin);
+        factory.fallbackToAdmin(marketId);
 
         vm.expectRevert("ParimutuelFactory: invalid winningOutcomeId");
         vm.prank(admin);

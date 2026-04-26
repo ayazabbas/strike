@@ -16,6 +16,7 @@ interface IParimutuelPoolManagerView {
 contract ParimutuelFactory is AccessControl, ReentrancyGuard {
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
     bytes32 public constant MARKET_CREATOR_ROLE = keccak256("MARKET_CREATOR_ROLE");
+    bytes32 public constant RESOLVER_ROLE = keccak256("RESOLVER_ROLE");
 
     uint128 public constant INDEPENDENT_LOG_LIQUIDITY_MIN = 1_000e18;
     uint128 public constant INDEPENDENT_LOG_LIQUIDITY_RECOMMENDED = 40_000e18;
@@ -43,6 +44,9 @@ contract ParimutuelFactory is AccessControl, ReentrancyGuard {
     event ParimutuelResolutionRequested(uint256 indexed marketId, ParimutuelResolverType resolverType);
     event ParimutuelFallbackToAdmin(uint256 indexed marketId, ParimutuelResolverType previousResolverType);
     event ParimutuelResolved(uint256 indexed marketId, uint8 indexed winningOutcomeId);
+    event ParimutuelResolvedByResolver(
+        uint256 indexed marketId, address indexed resolver, uint8 indexed winningOutcomeId
+    );
     event ParimutuelInvalidated(uint256 indexed marketId);
     event ParimutuelCancelled(uint256 indexed marketId);
     event ParimutuelFactoryPaused(bool paused);
@@ -114,7 +118,8 @@ contract ParimutuelFactory is AccessControl, ReentrancyGuard {
         emit ParimutuelMarketClosed(marketId);
     }
 
-    function requestResolution(uint256 marketId) external onlyRole(ADMIN_ROLE) {
+    function requestResolution(uint256 marketId) external {
+        _requireAdminOrResolver();
         ParimutuelMarket storage market = _requireMarket(marketId);
         require(market.state == ParimutuelMarketState.Closed, "ParimutuelFactory: not closed");
 
@@ -144,6 +149,7 @@ contract ParimutuelFactory is AccessControl, ReentrancyGuard {
             market.state == ParimutuelMarketState.Closed || market.state == ParimutuelMarketState.Resolving,
             "ParimutuelFactory: not resolvable"
         );
+        require(currentResolverType(marketId) == ParimutuelResolverType.Admin, "ParimutuelFactory: not admin resolver");
         require(winningOutcomeId < market.outcomeCount, "ParimutuelFactory: invalid winningOutcomeId");
         _requireResolvableWinningOutcome(marketId, winningOutcomeId);
 
@@ -152,6 +158,21 @@ contract ParimutuelFactory is AccessControl, ReentrancyGuard {
         market.hasWinner = true;
 
         emit ParimutuelResolved(marketId, winningOutcomeId);
+    }
+
+    function resolveFromResolver(uint256 marketId, uint8 winningOutcomeId) external onlyRole(RESOLVER_ROLE) {
+        ParimutuelMarket storage market = _requireMarket(marketId);
+        require(market.state == ParimutuelMarketState.Resolving, "ParimutuelFactory: not resolving");
+        require(currentResolverType(marketId) != ParimutuelResolverType.Admin, "ParimutuelFactory: admin resolver");
+        require(winningOutcomeId < market.outcomeCount, "ParimutuelFactory: invalid winningOutcomeId");
+        _requireResolvableWinningOutcome(marketId, winningOutcomeId);
+
+        market.state = ParimutuelMarketState.Resolved;
+        market.winningOutcomeId = winningOutcomeId;
+        market.hasWinner = true;
+
+        emit ParimutuelResolved(marketId, winningOutcomeId);
+        emit ParimutuelResolvedByResolver(marketId, msg.sender, winningOutcomeId);
     }
 
     function resolveInvalid(uint256 marketId) external onlyRole(ADMIN_ROLE) {
@@ -235,6 +256,13 @@ contract ParimutuelFactory is AccessControl, ReentrancyGuard {
         }
 
         revert("ParimutuelFactory: invalid curve");
+    }
+
+    function _requireAdminOrResolver() internal view {
+        require(
+            hasRole(ADMIN_ROLE, msg.sender) || hasRole(RESOLVER_ROLE, msg.sender),
+            "ParimutuelFactory: not admin or resolver"
+        );
     }
 
     function _requireMarket(uint256 marketId) internal view returns (ParimutuelMarket storage market) {
