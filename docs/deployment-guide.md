@@ -147,6 +147,50 @@ forge script script/DeployTestnet.s.sol:DeployTestnetScript \
 
 Note: `script/DeployMainnet.s.sol` still exists in the repo, but the canonical production path is the chain-aware `DeployTestnet.s.sol:DeployTestnetScript` flow above.
 
+## Parimutuel Contract Deployment
+
+The parimutuel stack is intentionally isolated from the binary CLOB contracts and is deployed with `script/DeployParimutuel.s.sol:DeployParimutuelScript`.
+
+It deploys and wires:
+
+1. `ParimutuelFactory`
+2. `ParimutuelVault`
+3. `ParimutuelPoolManager`
+4. `ParimutuelRedemption`
+5. `ParimutuelAIResolver`
+6. `ParimutuelPythResolver`
+
+Required env:
+
+```bash
+export PRIVATE_KEY=0x...          # or DEPLOYER_PRIVATE_KEY
+export USDT_ADDRESS=0x...         # BSC mainnet USDT or testnet mock USDT
+export PYTH_ADDRESS=0x...         # Pyth Core for the target chain
+```
+
+Recommended mainnet role env:
+
+```bash
+export PARIMUTUEL_FINAL_ADMIN=0xDA680a19C8E5a43a5B6280d2a1e1A5E2E8ACD874
+export PARIMUTUEL_FEE_RECIPIENT=$PARIMUTUEL_FINAL_ADMIN
+export PARIMUTUEL_MARKET_CREATOR=0x73f173D43Fa5284e85d8c4F20453E9bA2629Dd9A
+export PARIMUTUEL_KEEPER=0x439d5804Bf14e97f1DA3449304f4167621ff9Cfe
+```
+
+`PARIMUTUEL_MARKET_CREATOR` should be the keeper/admin-server signer so production admin tooling can create markets. `PARIMUTUEL_KEEPER` should be the resolution keeper because the infra lifecycle task drives AI/Pyth parimutuel resolution with the resolution sender.
+
+Deploy:
+
+```bash
+forge script script/DeployParimutuel.s.sol:DeployParimutuelScript \
+  --rpc-url $RPC_URL \
+  --broadcast \
+  --verify \
+  --etherscan-api-key $ETHERSCAN_API_KEY
+```
+
+After deployment, update the address registry, `strike-infra` Ansible group vars, and `strike-frontend/src/lib/contracts.ts` before enabling mainnet UI/keeper flows.
+
 ## Contract Verification
 
 Deploy scripts pass `--verify` to auto-verify on BscScan. To verify a contract manually:

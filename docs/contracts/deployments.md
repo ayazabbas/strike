@@ -19,6 +19,19 @@ Deployed at block `94290419` on 2026-04-23.
 | **Redemption** | [`0x9a46D6c017eDdA49832cC9eE315246d0B55E5804`](https://bscscan.com/address/0x9a46D6c017eDdA49832cC9eE315246d0B55E5804) |
 | **Pyth Core** | [`0x4D7E825f80bDf85e913E0DD2A2D54927e9dE1594`](https://bscscan.com/address/0x4D7E825f80bDf85e913E0DD2A2D54927e9dE1594) |
 
+### Mainnet Parimutuel Contracts
+
+Parimutuel contracts are not yet deployed on mainnet. After deployment, record:
+
+| Contract | Address |
+|----------|---------|
+| **ParimutuelFactory** | `TBD` |
+| **ParimutuelPoolManager** | `TBD` |
+| **ParimutuelVault** | `TBD` |
+| **ParimutuelRedemption** | `TBD` |
+| **ParimutuelAIResolver** | `TBD` |
+| **ParimutuelPythResolver** | `TBD` |
+
 The prior mainnet deployment at block `88279332` is now legacy. Production history before this cutover was archived before the 2026-04-23 redeploy.
 
 ## BSC Testnet (Chain ID: 97)
@@ -38,6 +51,19 @@ Deployed at block 103312703.
 | **AIResolver** | [`0xe2aAec0A169D39FB12b43edacB942190b152439b`](https://testnet.bscscan.com/address/0xe2aAec0A169D39FB12b43edacB942190b152439b) |
 | **Redemption** | [`0x98723a449537AF17Fd7ddE29bd7De8f5a7A1B9B2`](https://testnet.bscscan.com/address/0x98723a449537AF17Fd7ddE29bd7De8f5a7A1B9B2) |
 | **Pyth (BNB testnet stable)** | [`0x5744Cbf430D99456a0A8771208b674F27f8EF0Fb`](https://testnet.bscscan.com/address/0x5744Cbf430D99456a0A8771208b674F27f8EF0Fb) |
+
+### Testnet Parimutuel Contracts
+
+Deployed at block `104003136` on 2026-04-26.
+
+| Contract | Address |
+|----------|---------|
+| **ParimutuelFactory** | [`0xBB80a386D6f88B2Ed42238B34524116f4d141fc2`](https://testnet.bscscan.com/address/0xBB80a386D6f88B2Ed42238B34524116f4d141fc2) |
+| **ParimutuelPoolManager** | [`0x5175e3267A6c25E4B2D08Ea7942189C329d2196A`](https://testnet.bscscan.com/address/0x5175e3267A6c25E4B2D08Ea7942189C329d2196A) |
+| **ParimutuelVault** | [`0xF8830b4CcE8ecbD401363bfbEcF2bCF1f1439c2E`](https://testnet.bscscan.com/address/0xF8830b4CcE8ecbD401363bfbEcF2bCF1f1439c2E) |
+| **ParimutuelRedemption** | [`0xf211A2F5c7E8AEBBE00aD7859e0C015CBC4D52CF`](https://testnet.bscscan.com/address/0xf211A2F5c7E8AEBBE00aD7859e0C015CBC4D52CF) |
+| **ParimutuelAIResolver** | [`0x2aD577892D418c743BA384D8e6eC6f3E1e804F2E`](https://testnet.bscscan.com/address/0x2aD577892D418c743BA384D8e6eC6f3E1e804F2E) |
+| **ParimutuelPythResolver** | [`0xD8Eb69314b5Ed90D38D5a09669eB96a720C0690a`](https://testnet.bscscan.com/address/0xD8Eb69314b5Ed90D38D5a09669eB96a720C0690a) |
 
 ## API Endpoints
 
