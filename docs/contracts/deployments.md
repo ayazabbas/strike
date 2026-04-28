@@ -2,21 +2,21 @@
 
 ## BSC Mainnet (Chain ID: 56)
 
-Deployed at block `94290419` on 2026-04-23.
+Deployed at block `95210316` on 2026-04-23.
 
 | Contract | Address |
 |----------|---------|
 | **USDT** | [`0x55d398326f99059fF775485246999027B3197955`](https://bscscan.com/address/0x55d398326f99059fF775485246999027B3197955) |
-| **FeeModel** | [`0x10d479354013c20eC777569618186D79eE818D8a`](https://bscscan.com/address/0x10d479354013c20eC777569618186D79eE818D8a) |
-| **OutcomeToken** | [`0xdcA3d1Be0a181494F2bf46a5a885b2c2009574f3`](https://bscscan.com/address/0xdcA3d1Be0a181494F2bf46a5a885b2c2009574f3) |
-| **Vault** | [`0x2a6EA3F574264E6fA9c6F3c691dA01BE6DaC066f`](https://bscscan.com/address/0x2a6EA3F574264E6fA9c6F3c691dA01BE6DaC066f) |
-| **OrderBook** | [`0x1E7C9b93D2C939a433D87b281918508Eec7c9171`](https://bscscan.com/address/0x1E7C9b93D2C939a433D87b281918508Eec7c9171) |
-| **BatchAuction** | [`0xCdd122520E9efbdb5bd1Cc246aE497c37c70bdBE`](https://bscscan.com/address/0xCdd122520E9efbdb5bd1Cc246aE497c37c70bdBE) |
-| **MarketFactory** | [`0xcbBC04B2a3EfE858c7C3d159c56f194AF2a7eBac`](https://bscscan.com/address/0xcbBC04B2a3EfE858c7C3d159c56f194AF2a7eBac) |
-| **PythResolver** | [`0x101383ef333d5Cb7Cb154EAbcA68961e3ac5B1a4`](https://bscscan.com/address/0x101383ef333d5Cb7Cb154EAbcA68961e3ac5B1a4) |
-| **AIResolver** | [`0xb0606b7984a2AA36774e8865E76689f98D39eE6e`](https://bscscan.com/address/0xb0606b7984a2AA36774e8865E76689f98D39eE6e) |
+| **FeeModel** | [`0xFd7538Ad9EFEe4fCE07924F65a30688044e0800C`](https://bscscan.com/address/0xFd7538Ad9EFEe4fCE07924F65a30688044e0800C) |
+| **OutcomeToken** | [`0xdAA6810Ca9614e2246d2849Be2a9c818707e404B`](https://bscscan.com/address/0xdAA6810Ca9614e2246d2849Be2a9c818707e404B) |
+| **Vault** | [`0x43D5caC88a87560Db8040Bef16F0ce8871B4F7ee`](https://bscscan.com/address/0x43D5caC88a87560Db8040Bef16F0ce8871B4F7ee) |
+| **OrderBook** | [`0x71F7Bc523FFF296A049a45D08cBD39D39d3C047B`](https://bscscan.com/address/0x71F7Bc523FFF296A049a45D08cBD39D39d3C047B) |
+| **BatchAuction** | [`0x9d66fa0Aad92bb4428947443c1135C06a0cbFFBb`](https://bscscan.com/address/0x9d66fa0Aad92bb4428947443c1135C06a0cbFFBb) |
+| **MarketFactory** | [`0x34E0BCC1619dBc6A00A23b70BbaD9F36b0483d82`](https://bscscan.com/address/0x34E0BCC1619dBc6A00A23b70BbaD9F36b0483d82) |
+| **PythResolver** | [`0x3E0864BbC19ca92777BB4c2e02490fC0C7A44C5a`](https://bscscan.com/address/0x3E0864BbC19ca92777BB4c2e02490fC0C7A44C5a) |
+| **AIResolver** | [`0x3e0D91480147802D9C41068d91b7878E7943a632`](https://bscscan.com/address/0x3e0D91480147802D9C41068d91b7878E7943a632) |
 | **FlapAIProvider** | [`0xaEe3a7Ca6fe6b53f6c32a3e8407eC5A9dF8B7E39`](https://bscscan.com/address/0xaEe3a7Ca6fe6b53f6c32a3e8407eC5A9dF8B7E39) |
-| **Redemption** | [`0x9a46D6c017eDdA49832cC9eE315246d0B55E5804`](https://bscscan.com/address/0x9a46D6c017eDdA49832cC9eE315246d0B55E5804) |
+| **Redemption** | [`0xcC1687A27133f06dB96aF4e00E5bA91411f9c999`](https://bscscan.com/address/0xcC1687A27133f06dB96aF4e00E5bA91411f9c999) |
 | **Pyth Core** | [`0x4D7E825f80bDf85e913E0DD2A2D54927e9dE1594`](https://bscscan.com/address/0x4D7E825f80bDf85e913E0DD2A2D54927e9dE1594) |
 
 ### Mainnet Parimutuel Contracts
