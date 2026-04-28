@@ -342,7 +342,7 @@ impl<'a> OrdersClient<'a> {
 }
 
 fn gas_limit_place_orders(order_count: usize) -> u64 {
-    550_000 + 175_000 * (order_count.saturating_sub(1) as u64)
+    800_000 + 250_000 * (order_count.saturating_sub(1) as u64)
 }
 
 fn gas_limit_amend_orders(order_count: usize) -> u64 {
@@ -424,10 +424,11 @@ mod tests {
 
     #[test]
     fn gas_limit_place_orders_formula() {
-        assert_eq!(gas_limit_place_orders(0), 550_000);
-        assert_eq!(gas_limit_place_orders(1), 550_000);
-        assert_eq!(gas_limit_place_orders(2), 725_000);
-        assert_eq!(gas_limit_place_orders(3), 900_000);
+        assert_eq!(gas_limit_place_orders(0), 800_000);
+        assert_eq!(gas_limit_place_orders(1), 800_000);
+        assert_eq!(gas_limit_place_orders(2), 1_050_000);
+        assert_eq!(gas_limit_place_orders(3), 1_300_000);
+        assert_eq!(gas_limit_place_orders(4), 1_550_000);
     }
 
     #[test]
