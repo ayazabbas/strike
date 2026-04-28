@@ -73,3 +73,16 @@
     - commit version/address changes.
     - push a new SDK release tag after deployment is confirmed.
     - note tag in `memory/2026-04-28.md`.
+
+## Execution status
+- Completed 2026-04-28.
+- Deployed mainnet contracts from block `95210316`.
+- Archive label: `mainnet-pre-active-resting-amend-20260428`.
+- DB dump: `/home/ubuntu/strike-mainnet-pre-active-resting-amend-20260428.dump` on mainnet host.
+- Archived counts matched live counts: markets 1214, orders 27757, batches 12665, fills 34800, events 206852, positions 181.
+- Repos pushed:
+  - `strike`: `a66dd9d` address/SDK update, then `cf8c889` SDK gas-limit release fix.
+  - `strike-infra`: `8642991` address update, then `b6b8648` optional empty address config fix.
+  - `strike-frontend`: `0556442` address update.
+- SDK tags pushed: `sdk-v0.2.13` (address update), then `sdk-v0.2.14` (superseding gas-limit fix for initial `placeOrders`).
+- Smoke: services active; API returned fresh live market `2`; MM placed initial 4 orders with `gas_limit=1550000` and confirmed `amendOrders` after deployment.
