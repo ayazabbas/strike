@@ -7,7 +7,7 @@ import "../src/MarketFactory.sol";
 
 contract DeployResolver is Script {
     function run() external {
-        address factoryAddr = 0xa1EA91E7D404C14439C84b4A95cF51127cE0338B; // MarketFactory (current canonical Strike testnet)
+        address factoryAddr = 0xB4a9D6Dc1cAE195e276638ef9Cc20e797Cb3f839; // MarketFactory (current canonical Strike testnet)
 
         vm.startBroadcast();
         PythResolver resolver = new PythResolver(

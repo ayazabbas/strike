@@ -77,6 +77,9 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
     /// @notice marketId => batchId => array of order IDs placed in that batch
     mapping(uint256 => mapping(uint256 => uint256[])) internal batchOrderIds;
 
+    /// @notice orderId => batchId => true if the order ID has already been queued in that batch
+    mapping(uint256 => mapping(uint256 => bool)) internal orderQueuedInBatch;
+
     /// @notice user => marketId => number of active orders (both active and resting)
     mapping(address => mapping(uint256 => uint16)) public activeOrderCount;
 
@@ -299,6 +302,13 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
         removed = true;
     }
 
+    function _queueBatchOrder(uint256 marketId, uint256 batchId, uint256 orderId) internal returns (bool queued) {
+        if (orderQueuedInBatch[orderId][batchId]) return false;
+        orderQueuedInBatch[orderId][batchId] = true;
+        batchOrderIds[marketId][batchId].push(orderId);
+        queued = true;
+    }
+
     function placeOrder(uint256 marketId, Side side, OrderType orderType, uint256 tick, uint256 lots)
         external
         nonReentrant
@@ -348,7 +358,7 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
             _addRestingOrder(marketId, orderId);
             emit OrderResting(orderId, marketId, msg.sender);
         } else {
-            batchOrderIds[marketId][batchId].push(orderId);
+            _queueBatchOrder(marketId, batchId, orderId);
             emit OrderPlaced(orderId, marketId, msg.sender, side, tick, lots, batchId);
         }
     }
@@ -453,7 +463,7 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
             _addRestingOrder(marketId, oid);
             emit OrderResting(oid, marketId, caller);
         } else {
-            batchOrderIds[marketId][batchId].push(oid);
+            _queueBatchOrder(marketId, batchId, oid);
             emit OrderPlaced(oid, marketId, caller, p.side, p.tick, p.lots, batchId);
         }
     }
@@ -550,7 +560,6 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
 
             wasResting[i] = isResting[p.orderId];
             willRest[i] = isTickFar(marketId, p.newTick, o.side);
-            require(wasResting[i] || !willRest[i], "OrderBook: amend would rest");
             if (wasResting[i] && !willRest[i]) {
                 activatingCount++;
             }
@@ -610,9 +619,12 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
             if (!willRestOrder) {
                 _removeRestingOrder(marketId, p.orderId);
                 _applyTreeDelta(marketId, o.side, p.newTick, int256(uint256(p.newLots)));
-                batchOrderIds[marketId][amendBatchId].push(p.orderId);
+                _queueBatchOrder(marketId, amendBatchId, p.orderId);
                 o.batchId = amendBatchId;
             }
+        } else if (willRestOrder) {
+            _applyTreeDelta(marketId, o.side, o.tick, -int256(uint256(o.lots)));
+            _addRestingOrder(marketId, p.orderId);
         } else if (o.tick == p.newTick) {
             if (p.newLots > o.lots) {
                 _applyTreeDelta(marketId, o.side, p.newTick, int256(uint256(p.newLots - o.lots)));
@@ -873,8 +885,7 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
         onlyRole(OPERATOR_ROLE)
         returns (bool)
     {
-        batchOrderIds[marketId][batchId].push(orderId);
-        return true;
+        return _queueBatchOrder(marketId, batchId, orderId);
     }
 
     // -------------------------------------------------------------------------
@@ -1039,7 +1050,7 @@ contract OrderBook is AccessControl, ReentrancyGuard, ERC1155Holder {
         internal
     {
         _applyTreeDelta(marketId, side, tick, int256(lots));
-        batchOrderIds[marketId][batchId].push(oid);
+        _queueBatchOrder(marketId, batchId, oid);
     }
 
     /// @notice Push an order to the resting list (for GTC orders moving away from price).

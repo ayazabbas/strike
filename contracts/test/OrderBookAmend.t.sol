@@ -112,7 +112,7 @@ contract OrderBookAmendTest is Test {
     }
 
     function _currentBatchId(uint256 marketId) internal view returns (uint32 batchId) {
-        (, , , batchId, , , , ) = book.markets(marketId);
+        (,,, batchId,,,,) = book.markets(marketId);
     }
 
     function _fillCurrentBatchTo(uint256 marketId, uint256 targetLength) internal {
@@ -182,7 +182,7 @@ contract OrderBookAmendTest is Test {
 
         vm.prank(user1);
         uint256 orderId = book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 45, 10);
-        (, , , uint8 oldTick, uint64 oldLots, , , uint32 oldBatchId, , uint16 oldFeeBps) = book.orders(orderId);
+        (,,, uint8 oldTick, uint64 oldLots,,, uint32 oldBatchId,, uint16 oldFeeBps) = book.orders(orderId);
 
         vm.prank(admin);
         feeModel.setFeeBps(35);
@@ -255,7 +255,7 @@ contract OrderBookAmendTest is Test {
 
         vm.prank(user1);
         uint256 orderId = book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 5, 1);
-        (, , , uint8 oldTick, uint64 oldLots, , , uint32 oldBatchId, , uint16 oldFeeBps) = book.orders(orderId);
+        (,,, uint8 oldTick, uint64 oldLots,,, uint32 oldBatchId,, uint16 oldFeeBps) = book.orders(orderId);
 
         AmendOrderParam[] memory params = new AmendOrderParam[](1);
         params[0] = AmendOrderParam(orderId, 30, 2);
@@ -291,7 +291,7 @@ contract OrderBookAmendTest is Test {
 
         _amend(mId, currentBatchOrder, 30, 2, user1);
 
-        (, , , , , , , uint32 firstBatchId, , ) = book.orders(currentBatchOrder);
+        (,,,,,,, uint32 firstBatchId,,) = book.orders(currentBatchOrder);
         uint256[] memory currentBatchIds = book.getBatchOrderIds(mId, currentBatchId);
         assertEq(firstBatchId, currentBatchId, "near-full current batch should still accept one amend");
         assertEq(currentBatchIds.length, book.MAX_ORDERS_PER_BATCH(), "current batch should become full");
@@ -312,18 +312,123 @@ contract OrderBookAmendTest is Test {
         assertEq(book.bidVolumeAt(mId, 31), 3, "overflow amend should enter active tree volume");
     }
 
-    function test_AmendOrders_RejectsActiveToResting() public {
+    function test_AmendOrders_AllowsActiveToRestingAndClearSkipsStaleBatchEntry() public {
         uint256 mId = _setupMarketWithClearing();
+        uint32 currentBatchId = _currentBatchId(mId);
 
         vm.prank(user1);
         uint256 orderId = book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 45, 1);
 
-        AmendOrderParam[] memory params = new AmendOrderParam[](1);
-        params[0] = AmendOrderParam(orderId, 5, 1);
+        _amend(mId, orderId, 5, 2, user1);
 
-        vm.expectRevert("OrderBook: amend would rest");
+        (,,, uint8 tick, uint64 lots,,, uint32 batchId,,) = book.orders(orderId);
+        uint256[] memory restingIds = book.getRestingOrderIds(mId);
+        assertEq(batchId, currentBatchId, "batch id should remain the original queued batch");
+        assertEq(tick, 5, "tick should update");
+        assertEq(lots, 2, "lots should update");
+        assertTrue(book.isResting(orderId), "active order should be parked as resting");
+        assertEq(restingIds.length, 1, "resting list should track the parked order");
+        assertEq(restingIds[0], orderId, "resting id should be preserved");
+        assertEq(book.bidVolumeAt(mId, 45), 0, "old active tree volume should be removed");
+        assertEq(book.bidVolumeAt(mId, 5), 0, "resting order should not enter the active tree");
+
+        // The stale current-batch entry must be ignored during settlement while the
+        // order is resting. Without the skip, this path can try to roll/cancel the
+        // already-removed tree volume and revert.
+        vm.prank(user2);
+        book.placeOrder(mId, Side.Ask, OrderType.GoodTilCancel, 50, 1);
+        auction.clearBatch(mId);
+
+        (,,,, uint64 lotsAfter,,,,,) = book.orders(orderId);
+        assertEq(lotsAfter, 2, "resting order should not settle from its stale batch entry");
+        assertTrue(book.isResting(orderId), "order should remain resting after stale entry is skipped");
+    }
+
+    function test_AmendOrders_ActiveToRestingToActiveSameBatchDoesNotDuplicateBatchEntry() public {
+        uint256 mId = _setupMarketWithClearing();
+        uint32 currentBatchId = _currentBatchId(mId);
+
         vm.prank(user1);
-        book.amendOrders(mId, params);
+        uint256 orderId = book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 45, 1);
+
+        _amend(mId, orderId, 5, 1, user1);
+        _amend(mId, orderId, 45, 1, user1);
+
+        uint256[] memory batchIds = book.getBatchOrderIds(mId, currentBatchId);
+        uint256 occurrences;
+        for (uint256 i = 0; i < batchIds.length; i++) {
+            if (batchIds[i] == orderId) occurrences++;
+        }
+
+        assertEq(occurrences, 1, "same-batch active re-entry should not duplicate the order id");
+        assertFalse(book.isResting(orderId), "order should be active again");
+        assertEq(book.bidVolumeAt(mId, 45), 1, "order should be back in active tree volume");
+    }
+
+    function test_AmendOrders_ActiveToRestingToActiveAcrossBatchesQueuesNewBatchOnce() public {
+        uint256 mId = _setupMarketWithClearing();
+        uint32 oldBatchId = _currentBatchId(mId);
+
+        vm.prank(user1);
+        uint256 orderId = book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 45, 1);
+
+        _amend(mId, orderId, 5, 1, user1);
+
+        vm.prank(user2);
+        book.placeOrder(mId, Side.Ask, OrderType.GoodTilCancel, 50, 1);
+        auction.clearBatch(mId);
+        uint32 newBatchId = _currentBatchId(mId);
+        assertGt(newBatchId, oldBatchId, "clear should advance the batch");
+
+        _amend(mId, orderId, 45, 1, user1);
+
+        uint256[] memory oldBatchIds = book.getBatchOrderIds(mId, oldBatchId);
+        uint256[] memory newBatchIds = book.getBatchOrderIds(mId, newBatchId);
+        uint256 oldOccurrences;
+        uint256 newOccurrences;
+        for (uint256 i = 0; i < oldBatchIds.length; i++) {
+            if (oldBatchIds[i] == orderId) oldOccurrences++;
+        }
+        for (uint256 i = 0; i < newBatchIds.length; i++) {
+            if (newBatchIds[i] == orderId) newOccurrences++;
+        }
+
+        (,,,,,,, uint32 orderBatchId,,) = book.orders(orderId);
+        assertEq(oldOccurrences, 1, "old stale batch entry should remain singular");
+        assertEq(newOccurrences, 1, "new active batch should receive exactly one entry");
+        assertEq(orderBatchId, newBatchId, "order batch id should move to the active batch");
+        assertFalse(book.isResting(orderId), "order should be active again");
+        assertEq(book.bidVolumeAt(mId, 45), 1, "order should be active in the tree");
+    }
+
+    function test_PullRestingOrders_DoesNotDuplicateSameBatchEntry() public {
+        uint256 mId = _setupMarketWithClearing();
+        uint32 currentBatchId = _currentBatchId(mId);
+
+        vm.prank(user1);
+        uint256 orderId = book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 45, 1);
+
+        _amend(mId, orderId, 24, 1, user1);
+        assertTrue(book.isResting(orderId), "order should be resting after far amend");
+
+        // Move the live reference lower without advancing the batch. The resting order
+        // is now close enough to be pulled back into the same batch it was originally
+        // queued in, so the batch array must not receive a duplicate id.
+        vm.prank(user2);
+        book.placeOrder(mId, Side.Bid, OrderType.GoodTilCancel, 30, 1);
+        vm.prank(operator);
+        uint256 pulled = book.pullRestingOrders(mId);
+
+        uint256[] memory batchIds = book.getBatchOrderIds(mId, currentBatchId);
+        uint256 occurrences;
+        for (uint256 i = 0; i < batchIds.length; i++) {
+            if (batchIds[i] == orderId) occurrences++;
+        }
+
+        assertEq(pulled, 1, "resting order should be pulled");
+        assertEq(occurrences, 1, "pull should not duplicate an existing same-batch entry");
+        assertFalse(book.isResting(orderId), "pulled order should be active");
+        assertEq(book.bidVolumeAt(mId, 24), 1, "pulled order should re-enter active tree volume");
     }
 
     function test_AmendOrders_UsesVaultBalanceForRequotes() public {

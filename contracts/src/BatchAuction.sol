@@ -306,6 +306,7 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
         uint8[] memory pType = new uint8[](idsLen);
 
         for (uint256 i = 0; i < idsLen; ) {
+            if (orderBook.isResting(ids[i])) { unchecked { ++i; } continue; }
             infos[i] = _readOrder(ids[i]);
             if (infos[i].lots == 0) { unchecked { ++i; } continue; }
             if (!_orderParticipates(infos[i].side, infos[i].tick, result.clearingTick)) { unchecked { ++i; } continue; }
@@ -391,6 +392,11 @@ contract BatchAuction is AccessControl, ReentrancyGuard {
             o = _readOrder(orderId);
         }
         require(o.marketId == result.marketId, "BatchAuction: wrong market");
+
+        // Skip orders that were queued in this batch before being parked as resting liquidity.
+        // Resting orders are intentionally outside the active matching tree and should not
+        // settle until they are pulled back into a later/current active batch.
+        if (orderBook.isResting(orderId)) return;
 
         // Skip already-filled/cancelled orders
         if (o.lots == 0) return;
