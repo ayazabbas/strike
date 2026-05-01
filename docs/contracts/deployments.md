@@ -21,16 +21,16 @@ Deployed at block `95210316` on 2026-04-23.
 
 ### Mainnet Parimutuel Contracts
 
-Parimutuel contracts are not yet deployed on mainnet. After deployment, record:
+Deployed at block `95755802` on 2026-05-01.
 
 | Contract | Address |
 |----------|---------|
-| **ParimutuelFactory** | `TBD` |
-| **ParimutuelPoolManager** | `TBD` |
-| **ParimutuelVault** | `TBD` |
-| **ParimutuelRedemption** | `TBD` |
-| **ParimutuelAIResolver** | `TBD` |
-| **ParimutuelPythResolver** | `TBD` |
+| **ParimutuelFactory** | [`0x47A80AEB143C34C36aa339Faf264582d3b6be6DA`](https://bscscan.com/address/0x47A80AEB143C34C36aa339Faf264582d3b6be6DA) |
+| **ParimutuelPoolManager** | [`0x9af7c45D12C05C0a94e3BB9B7A133e592159C77b`](https://bscscan.com/address/0x9af7c45D12C05C0a94e3BB9B7A133e592159C77b) |
+| **ParimutuelVault** | [`0x7Ec13800A6E9A1B067c1Bb48A65af85ee9EFF502`](https://bscscan.com/address/0x7Ec13800A6E9A1B067c1Bb48A65af85ee9EFF502) |
+| **ParimutuelRedemption** | [`0x82f920eA22362137Af75384e52a2DCFf34d1196d`](https://bscscan.com/address/0x82f920eA22362137Af75384e52a2DCFf34d1196d) |
+| **ParimutuelAIResolver** | [`0xd839088fbA4aA3e26E39b2680766576587FC7E52`](https://bscscan.com/address/0xd839088fbA4aA3e26E39b2680766576587FC7E52) |
+| **ParimutuelPythResolver** | [`0x7C85638d065c6DF63eC5b3A2931b031b5A86d91C`](https://bscscan.com/address/0x7C85638d065c6DF63eC5b3A2931b031b5A86d91C) |
 
 The prior mainnet deployment at block `88279332` is now legacy. Production history before this cutover was archived before the 2026-04-23 redeploy.
 
