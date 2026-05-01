@@ -36,7 +36,8 @@ contract ParimutuelFactory is AccessControl, ReentrancyGuard {
         ParimutuelResolverType resolverType,
         ParimutuelResolverType fallbackResolverType,
         ParimutuelCurveType curveType,
-        uint64 closeTime,
+        uint64 tradingCloseTime,
+        uint64 resolutionTime,
         bytes32 metadataHash,
         string metadataURI
     );
@@ -66,7 +67,8 @@ contract ParimutuelFactory is AccessControl, ReentrancyGuard {
         returns (uint256 marketId)
     {
         require(!paused, "ParimutuelFactory: paused");
-        require(config.closeTime > block.timestamp, "ParimutuelFactory: closeTime in past");
+        require(config.tradingCloseTime > block.timestamp, "ParimutuelFactory: trading close in past");
+        require(config.resolutionTime >= config.tradingCloseTime, "ParimutuelFactory: resolution before trading close");
         require(config.outcomeCount >= 2 && config.outcomeCount <= 8, "ParimutuelFactory: invalid outcomeCount");
         require(config.metadataHash != bytes32(0), "ParimutuelFactory: zero metadataHash");
         require(config.feeBps <= 10_000, "ParimutuelFactory: invalid fee");
@@ -80,7 +82,8 @@ contract ParimutuelFactory is AccessControl, ReentrancyGuard {
         _markets[marketId] = ParimutuelMarket({
             marketId: marketId,
             creator: msg.sender,
-            closeTime: config.closeTime,
+            tradingCloseTime: config.tradingCloseTime,
+            resolutionTime: config.resolutionTime,
             outcomeCount: config.outcomeCount,
             state: ParimutuelMarketState.Open,
             resolverType: config.resolverType,
@@ -103,7 +106,8 @@ contract ParimutuelFactory is AccessControl, ReentrancyGuard {
             config.resolverType,
             config.fallbackResolverType,
             config.curveType,
-            config.closeTime,
+            config.tradingCloseTime,
+            config.resolutionTime,
             config.metadataHash,
             config.metadataURI
         );
@@ -112,7 +116,7 @@ contract ParimutuelFactory is AccessControl, ReentrancyGuard {
     function closeMarket(uint256 marketId) external {
         ParimutuelMarket storage market = _requireMarket(marketId);
         require(market.state == ParimutuelMarketState.Open, "ParimutuelFactory: not open");
-        require(block.timestamp >= market.closeTime, "ParimutuelFactory: not expired");
+        require(block.timestamp >= market.tradingCloseTime, "ParimutuelFactory: trading still open");
 
         market.state = ParimutuelMarketState.Closed;
         emit ParimutuelMarketClosed(marketId);
@@ -122,6 +126,7 @@ contract ParimutuelFactory is AccessControl, ReentrancyGuard {
         _requireAdminOrResolver();
         ParimutuelMarket storage market = _requireMarket(marketId);
         require(market.state == ParimutuelMarketState.Closed, "ParimutuelFactory: not closed");
+        require(block.timestamp >= market.resolutionTime, "ParimutuelFactory: resolution too early");
 
         market.state = ParimutuelMarketState.Resolving;
         emit ParimutuelResolutionRequested(marketId, currentResolverType(marketId));
@@ -135,6 +140,7 @@ contract ParimutuelFactory is AccessControl, ReentrancyGuard {
             market.state == ParimutuelMarketState.Closed || market.state == ParimutuelMarketState.Resolving,
             "ParimutuelFactory: not fallbackable"
         );
+        require(block.timestamp >= market.resolutionTime, "ParimutuelFactory: resolution too early");
 
         ParimutuelResolverType previousResolverType = market.resolverType;
         market.adminFallbackActivated = true;
@@ -150,6 +156,7 @@ contract ParimutuelFactory is AccessControl, ReentrancyGuard {
             "ParimutuelFactory: not resolvable"
         );
         require(currentResolverType(marketId) == ParimutuelResolverType.Admin, "ParimutuelFactory: not admin resolver");
+        require(block.timestamp >= market.resolutionTime, "ParimutuelFactory: resolution too early");
         require(winningOutcomeId < market.outcomeCount, "ParimutuelFactory: invalid winningOutcomeId");
         _requireResolvableWinningOutcome(marketId, winningOutcomeId);
 
@@ -164,6 +171,7 @@ contract ParimutuelFactory is AccessControl, ReentrancyGuard {
         ParimutuelMarket storage market = _requireMarket(marketId);
         require(market.state == ParimutuelMarketState.Resolving, "ParimutuelFactory: not resolving");
         require(currentResolverType(marketId) != ParimutuelResolverType.Admin, "ParimutuelFactory: admin resolver");
+        require(block.timestamp >= market.resolutionTime, "ParimutuelFactory: resolution too early");
         require(winningOutcomeId < market.outcomeCount, "ParimutuelFactory: invalid winningOutcomeId");
         _requireResolvableWinningOutcome(marketId, winningOutcomeId);
 
@@ -181,6 +189,7 @@ contract ParimutuelFactory is AccessControl, ReentrancyGuard {
             market.state == ParimutuelMarketState.Closed || market.state == ParimutuelMarketState.Resolving,
             "ParimutuelFactory: not invalidatable"
         );
+        require(block.timestamp >= market.resolutionTime, "ParimutuelFactory: resolution too early");
 
         market.state = ParimutuelMarketState.Invalid;
         emit ParimutuelInvalidated(marketId);

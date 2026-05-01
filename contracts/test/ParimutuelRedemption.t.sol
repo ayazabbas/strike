@@ -48,7 +48,8 @@ contract ParimutuelRedemptionTest is Test {
 
     function _flatConfig(uint16 feeBps) internal view returns (ParimutuelMarketConfig memory config) {
         config = ParimutuelMarketConfig({
-            closeTime: uint64(block.timestamp + 1 hours),
+            tradingCloseTime: uint64(block.timestamp + 1 hours),
+            resolutionTime: uint64(block.timestamp + 1 hours),
             outcomeCount: 3,
             resolverType: ParimutuelResolverType.Admin,
             fallbackResolverType: ParimutuelResolverType.Admin,

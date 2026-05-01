@@ -27,7 +27,8 @@ enum ParimutuelCurveType {
 
 /// @notice Market creation parameters for parimutuel markets.
 struct ParimutuelMarketConfig {
-    uint64 closeTime;
+    uint64 tradingCloseTime;
+    uint64 resolutionTime;
     uint8 outcomeCount;
     ParimutuelResolverType resolverType;
     ParimutuelResolverType fallbackResolverType;
@@ -43,7 +44,8 @@ struct ParimutuelMarketConfig {
 struct ParimutuelMarket {
     uint256 marketId;
     address creator;
-    uint64 closeTime;
+    uint64 tradingCloseTime;
+    uint64 resolutionTime;
     uint8 outcomeCount;
     ParimutuelMarketState state;
     ParimutuelResolverType resolverType;

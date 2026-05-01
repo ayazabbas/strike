@@ -160,7 +160,7 @@ contract ParimutuelAIResolver is FlapAIConsumerBase {
         ParimutuelMarket memory market = factory.getMarket(marketId);
         if (factory.currentResolverType(marketId) != ParimutuelResolverType.AI) revert WrongResolverType();
 
-        if (market.state == ParimutuelMarketState.Open && block.timestamp >= market.closeTime) {
+        if (market.state == ParimutuelMarketState.Open && block.timestamp >= market.tradingCloseTime) {
             factory.closeMarket(marketId);
             market.state = ParimutuelMarketState.Closed;
         }

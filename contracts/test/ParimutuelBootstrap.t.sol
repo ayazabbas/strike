@@ -103,7 +103,8 @@ contract ParimutuelBootstrapTest is Test {
         usdt.approve(address(manager), type(uint256).max);
 
         ParimutuelMarketConfig memory config = ParimutuelMarketConfig({
-            closeTime: uint64(block.timestamp + 1 hours),
+            tradingCloseTime: uint64(block.timestamp + 1 hours),
+            resolutionTime: uint64(block.timestamp + 1 hours),
             outcomeCount: 3,
             resolverType: ParimutuelResolverType.Admin,
             fallbackResolverType: ParimutuelResolverType.Admin,
@@ -121,7 +122,7 @@ contract ParimutuelBootstrapTest is Test {
         vm.prank(alice);
         manager.buy(marketId, 1, 100e18, 1);
 
-        vm.warp(config.closeTime);
+        vm.warp(config.tradingCloseTime);
         factory.closeMarket(marketId);
 
         vm.prank(admin);

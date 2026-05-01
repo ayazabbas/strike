@@ -295,7 +295,7 @@ contract ParimutuelPoolManager is AccessControl, ReentrancyGuard {
         require(factory.poolManager() == address(this), "ParimutuelPoolManager: manager not registered");
         market = factory.getMarket(marketId);
         require(market.state == ParimutuelMarketState.Open, "ParimutuelPoolManager: market not open");
-        require(block.timestamp < market.closeTime, "ParimutuelPoolManager: market expired");
+        require(block.timestamp < market.tradingCloseTime, "ParimutuelPoolManager: trading closed");
     }
 
     function _loadProjectedPrincipalByOutcome(uint256 marketId, uint8 outcomeCount)

@@ -22,7 +22,8 @@ contract ParimutuelFactoryTest is Test {
 
     function _defaultConfig() internal view returns (ParimutuelMarketConfig memory config) {
         config = ParimutuelMarketConfig({
-            closeTime: uint64(block.timestamp + 1 hours),
+            tradingCloseTime: uint64(block.timestamp + 1 hours),
+            resolutionTime: uint64(block.timestamp + 1 hours),
             outcomeCount: 3,
             resolverType: ParimutuelResolverType.AI,
             fallbackResolverType: ParimutuelResolverType.Admin,
@@ -46,7 +47,8 @@ contract ParimutuelFactoryTest is Test {
         ParimutuelMarket memory market = factory.getMarket(marketId);
         assertEq(market.marketId, 1);
         assertEq(market.creator, creator);
-        assertEq(market.closeTime, config.closeTime);
+        assertEq(market.tradingCloseTime, config.tradingCloseTime);
+        assertEq(market.resolutionTime, config.resolutionTime);
         assertEq(market.outcomeCount, config.outcomeCount);
         assertEq(uint8(market.state), uint8(ParimutuelMarketState.Open));
         assertEq(uint8(market.resolverType), uint8(ParimutuelResolverType.AI));
@@ -57,6 +59,37 @@ contract ParimutuelFactoryTest is Test {
         assertEq(market.metadataHash, config.metadataHash);
         assertEq(market.metadataURI, config.metadataURI);
         assertEq(factory.nextMarketId(), 2);
+    }
+
+    function test_CreateMarket_AllowsSeparateTradingCloseAndResolutionTime() public {
+        ParimutuelMarketConfig memory config = _defaultConfig();
+        config.resolutionTime = config.tradingCloseTime + 12 hours;
+
+        vm.prank(creator);
+        uint256 marketId = factory.createMarket(config);
+
+        ParimutuelMarket memory market = factory.getMarket(marketId);
+        assertEq(market.tradingCloseTime, config.tradingCloseTime);
+        assertEq(market.resolutionTime, config.resolutionTime);
+    }
+
+    function test_CreateMarket_RevertOnTradingCloseInPast() public {
+        ParimutuelMarketConfig memory config = _defaultConfig();
+        config.tradingCloseTime = uint64(block.timestamp);
+        config.resolutionTime = uint64(block.timestamp + 1 hours);
+
+        vm.expectRevert("ParimutuelFactory: trading close in past");
+        vm.prank(creator);
+        factory.createMarket(config);
+    }
+
+    function test_CreateMarket_RevertOnResolutionBeforeTradingClose() public {
+        ParimutuelMarketConfig memory config = _defaultConfig();
+        config.resolutionTime = config.tradingCloseTime - 1;
+
+        vm.expectRevert("ParimutuelFactory: resolution before trading close");
+        vm.prank(creator);
+        factory.createMarket(config);
     }
 
     function test_CreateMarket_RevertOnInvalidOutcomeCount() public {
@@ -164,7 +197,7 @@ contract ParimutuelFactoryTest is Test {
         ParimutuelMarket memory market = factory.getMarket(marketId);
         assertEq(market.outcomeCount, 8);
 
-        vm.warp(config.closeTime);
+        vm.warp(config.tradingCloseTime);
         factory.closeMarket(marketId);
 
         vm.prank(admin);
@@ -184,7 +217,7 @@ contract ParimutuelFactoryTest is Test {
         vm.prank(creator);
         uint256 marketId = factory.createMarket(config);
 
-        vm.warp(config.closeTime);
+        vm.warp(config.tradingCloseTime);
         factory.closeMarket(marketId);
 
         vm.prank(admin);
@@ -206,10 +239,53 @@ contract ParimutuelFactoryTest is Test {
         vm.prank(creator);
         uint256 marketId = factory.createMarket(config);
 
-        vm.warp(config.closeTime);
+        vm.warp(config.tradingCloseTime);
         factory.closeMarket(marketId);
 
         assertEq(uint8(factory.getMarketState(marketId)), uint8(ParimutuelMarketState.Closed));
+    }
+
+    function test_RequestResolution_WaitsForResolutionTime() public {
+        ParimutuelMarketConfig memory config = _defaultConfig();
+        config.resolutionTime = config.tradingCloseTime + 12 hours;
+
+        vm.prank(creator);
+        uint256 marketId = factory.createMarket(config);
+
+        vm.warp(config.tradingCloseTime);
+        factory.closeMarket(marketId);
+
+        vm.expectRevert("ParimutuelFactory: resolution too early");
+        vm.prank(admin);
+        factory.requestResolution(marketId);
+
+        vm.warp(config.resolutionTime);
+        vm.prank(admin);
+        factory.requestResolution(marketId);
+
+        assertEq(uint8(factory.getMarketState(marketId)), uint8(ParimutuelMarketState.Resolving));
+    }
+
+    function test_ResolveToWinner_WaitsForResolutionTime() public {
+        ParimutuelMarketConfig memory config = _defaultConfig();
+        config.resolverType = ParimutuelResolverType.Admin;
+        config.resolutionTime = config.tradingCloseTime + 12 hours;
+
+        vm.prank(creator);
+        uint256 marketId = factory.createMarket(config);
+
+        vm.warp(config.tradingCloseTime);
+        factory.closeMarket(marketId);
+
+        vm.expectRevert("ParimutuelFactory: resolution too early");
+        vm.prank(admin);
+        factory.resolveToWinner(marketId, 1);
+
+        vm.warp(config.resolutionTime);
+        vm.prank(admin);
+        factory.resolveToWinner(marketId, 1);
+
+        assertEq(uint8(factory.getMarketState(marketId)), uint8(ParimutuelMarketState.Resolved));
     }
 
     function test_RequestResolution_AdminOnly() public {
@@ -218,7 +294,7 @@ contract ParimutuelFactoryTest is Test {
         vm.prank(creator);
         uint256 marketId = factory.createMarket(config);
 
-        vm.warp(config.closeTime);
+        vm.warp(config.tradingCloseTime);
         factory.closeMarket(marketId);
 
         vm.expectRevert();
@@ -238,7 +314,7 @@ contract ParimutuelFactoryTest is Test {
         vm.prank(creator);
         uint256 marketId = factory.createMarket(config);
 
-        vm.warp(config.closeTime);
+        vm.warp(config.tradingCloseTime);
         factory.closeMarket(marketId);
 
         vm.prank(admin);
@@ -256,7 +332,7 @@ contract ParimutuelFactoryTest is Test {
         vm.prank(creator);
         uint256 marketId = factory.createMarket(config);
 
-        vm.warp(config.closeTime);
+        vm.warp(config.tradingCloseTime);
         factory.closeMarket(marketId);
 
         vm.prank(admin);
@@ -277,7 +353,7 @@ contract ParimutuelFactoryTest is Test {
         vm.prank(creator);
         uint256 marketId = factory.createMarket(config);
 
-        vm.warp(config.closeTime);
+        vm.warp(config.tradingCloseTime);
         factory.closeMarket(marketId);
 
         vm.prank(admin);
@@ -294,7 +370,7 @@ contract ParimutuelFactoryTest is Test {
         vm.prank(creator);
         uint256 marketId = factory.createMarket(config);
 
-        vm.warp(config.closeTime);
+        vm.warp(config.tradingCloseTime);
         factory.closeMarket(marketId);
 
         vm.prank(admin);

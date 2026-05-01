@@ -93,8 +93,8 @@ contract ParimutuelPythResolver is ReentrancyGuard {
         PythStructs.PriceFeed[] memory feeds = pyth.parsePriceFeedUpdates{value: fee}(
             priceUpdateData,
             ids,
-            uint64(market.closeTime),
-            uint64(uint256(market.closeTime) + MAX_FALLBACK_WINDOWS * FALLBACK_WINDOW)
+            uint64(market.resolutionTime),
+            uint64(uint256(market.resolutionTime) + MAX_FALLBACK_WINDOWS * FALLBACK_WINDOW)
         );
 
         if (msg.value > fee) {
@@ -133,7 +133,7 @@ contract ParimutuelPythResolver is ReentrancyGuard {
             "ParimutuelPythResolver: wrong resolver"
         );
 
-        if (market.state == ParimutuelMarketState.Open && block.timestamp >= market.closeTime) {
+        if (market.state == ParimutuelMarketState.Open && block.timestamp >= market.tradingCloseTime) {
             factory.closeMarket(marketId);
             market.state = ParimutuelMarketState.Closed;
         }
