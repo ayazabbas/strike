@@ -1,8 +1,17 @@
 # Trading Guide
 
-Everything you need to know about trading on Strike.
+Everything you need to know about trading on Strike's orderbook markets and parimutuel pool markets.
 
-## Understanding Prices
+## Market Formats
+
+Strike has two trading experiences:
+
+- **Orderbook markets** — active binary markets with limit orders, FBA matching, and sell-before-expiry support.
+- **Parimutuel pool markets** — simple 2–8 outcome markets where you buy into an outcome pool and claim after resolution.
+
+The sections below cover orderbook trading first, then pool markets.
+
+## Understanding Orderbook Prices
 
 Every market on Strike has two outcomes: **UP** and **DOWN**. Tokens for each outcome trade between **$0.01** and **$0.99**.
 
@@ -101,3 +110,45 @@ If you held the winning token, you receive **$1.00 per token**. Your profit is $
 ## Fees
 
 Strike charges a flat **0.20% fee** (20 basis points) on every trade. The fee is split evenly -- 0.10% from the buyer and 0.10% from the seller. That's it. No hidden costs, no variable rates.
+
+
+## Trading Parimutuel Pool Markets
+
+Parimutuel markets are simpler than orderbook markets:
+
+1. Open a pool market.
+2. Pick the outcome you think will win.
+3. Enter the USDT amount you want to buy.
+4. Review the projected payout and implied probability.
+5. Submit the buy.
+
+There are no limit prices, resting orders, GTB/GTC choices, or sell orders. You hold the pool position until the market resolves.
+
+## Reading Pool Markets
+
+Each outcome shows:
+
+- **Pool size** — total USDT currently backing that outcome.
+- **Implied probability** — the market's current estimate based on pool balances and curve settings.
+- **Projected payout** — an estimate of what your buy would receive if that outcome wins.
+
+Projected payouts change as other users buy into any outcome.
+
+## Pool Market Timing
+
+Parimutuel markets show both:
+
+- **Trading closes** — last moment to buy into a pool.
+- **Resolution time** — when the outcome is evaluated.
+
+These can be different. For example, trading can close before a match starts, while resolution happens after the match ends.
+
+## Claiming Pool Winnings
+
+When a pool market resolves:
+
+1. Go to the market or Portfolio.
+2. If your outcome won, click **Claim** to receive your payout.
+3. If the market was marked invalid, click **Refund** to recover principal.
+
+Losing outcomes do not receive a payout.

@@ -1,6 +1,15 @@
 # How It Works
 
-## The Trading Loop
+## Two Ways to Trade
+
+Strike has two first-class market formats:
+
+- **FBA orderbook markets** — binary markets with limit orders, batch-auction matching, active trading, and the ability to sell positions before expiry.
+- **Parimutuel pool markets** — 2–8 outcome pool markets where users buy into an outcome directly and winners split the losing pools after resolution.
+
+Use orderbook markets when you want price discovery and active trading. Use parimutuel markets when the question has several possible outcomes or when you want a simpler buy-and-hold pool experience.
+
+## The Orderbook Trading Loop
 
 Strike runs continuous short-duration prediction markets (default: 5 minutes). Each market asks a simple question:
 
@@ -8,7 +17,7 @@ Strike runs continuous short-duration prediction markets (default: 5 minutes). E
 
 Where `$X` is the strike price (captured from Pyth at market creation) and `T` is the expiry timestamp.
 
-Markets can also be resolved by **AI oracle** instead of price feeds. AI markets ask open-ended questions — "Will the Fed cut rates in May?" or "Will GTA VI release before June 2026?" — and are resolved by the [Flap AI Oracle](../protocol/ai-markets.md). Trading mechanics are identical for both market types.
+Markets can also be resolved by **AI oracle** instead of price feeds. AI markets ask open-ended questions — "Will the Fed cut rates in May?" or "Will GTA VI release before June 2026?" — and are resolved by the [Flap AI Oracle](../protocol/ai-markets.md). Orderbook trading mechanics are identical for price and AI binary markets.
 
 Traders express their view by placing orders on the orderbook:
 - **Buy UP** if you think the price will be above the strike at expiry
@@ -40,3 +49,17 @@ In a continuous orderbook, the first order to arrive gets priority — this crea
 - Makers have time to cancel stale quotes before the next batch
 
 This is the same mechanism used by traditional stock exchanges for opening/closing auctions, adapted for on-chain prediction markets.
+
+
+## The Parimutuel Pool Loop
+
+Parimutuel markets do not use an orderbook. Each market has 2–8 named outcomes and a pool for each outcome.
+
+1. **Market opens** — outcomes, resolver mode, trading close time, resolution time, fee, and curve are configured.
+2. **Choose an outcome** — traders select the outcome they think will win and buy into that pool with USDT.
+3. **Pool odds update** — displayed probabilities and projected payouts update as liquidity moves between outcome pools.
+4. **Trading closes** — buys stop at `tradingCloseTime`. This can be earlier than the event's final `resolutionTime`.
+5. **Market resolves** — admin, AI, or Pyth resolution selects the winning outcome, or the market is marked invalid.
+6. **Claim or refund** — winners claim principal plus their pro-rata share of losing pools. Invalid markets refund principal.
+
+Read the full [Parimutuel Pool Markets](../protocol/parimutuel-markets.md) guide for timing, payout, and resolver details.

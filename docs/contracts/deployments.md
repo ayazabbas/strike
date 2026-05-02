@@ -21,18 +21,18 @@ Deployed at block `95210316` on 2026-04-23.
 
 ### Mainnet Parimutuel Contracts
 
-Deployed at block `95755802` on 2026-05-01.
+V2 deployed at block `95800733` on 2026-05-01.
 
 | Contract | Address |
 |----------|---------|
-| **ParimutuelFactory** | [`0x47A80AEB143C34C36aa339Faf264582d3b6be6DA`](https://bscscan.com/address/0x47A80AEB143C34C36aa339Faf264582d3b6be6DA) |
-| **ParimutuelPoolManager** | [`0x9af7c45D12C05C0a94e3BB9B7A133e592159C77b`](https://bscscan.com/address/0x9af7c45D12C05C0a94e3BB9B7A133e592159C77b) |
-| **ParimutuelVault** | [`0x7Ec13800A6E9A1B067c1Bb48A65af85ee9EFF502`](https://bscscan.com/address/0x7Ec13800A6E9A1B067c1Bb48A65af85ee9EFF502) |
-| **ParimutuelRedemption** | [`0x82f920eA22362137Af75384e52a2DCFf34d1196d`](https://bscscan.com/address/0x82f920eA22362137Af75384e52a2DCFf34d1196d) |
-| **ParimutuelAIResolver** | [`0xd839088fbA4aA3e26E39b2680766576587FC7E52`](https://bscscan.com/address/0xd839088fbA4aA3e26E39b2680766576587FC7E52) |
-| **ParimutuelPythResolver** | [`0x7C85638d065c6DF63eC5b3A2931b031b5A86d91C`](https://bscscan.com/address/0x7C85638d065c6DF63eC5b3A2931b031b5A86d91C) |
+| **ParimutuelFactory** | [`0x7F271e99FD6FAa2d2B7E7b033a74256f631b922b`](https://bscscan.com/address/0x7F271e99FD6FAa2d2B7E7b033a74256f631b922b) |
+| **ParimutuelPoolManager** | [`0x27202F114397377eCD1C0461B0e354bc03B9c246`](https://bscscan.com/address/0x27202F114397377eCD1C0461B0e354bc03B9c246) |
+| **ParimutuelVault** | [`0x449e7bee604CeD1257ceD39Fb718A2569b8957A7`](https://bscscan.com/address/0x449e7bee604CeD1257ceD39Fb718A2569b8957A7) |
+| **ParimutuelRedemption** | [`0xEfe363f9d669e659fD21437CBBf416B62178D300`](https://bscscan.com/address/0xEfe363f9d669e659fD21437CBBf416B62178D300) |
+| **ParimutuelAIResolver** | [`0xc12108B92e674ad4B93646c28D953320590CA23B`](https://bscscan.com/address/0xc12108B92e674ad4B93646c28D953320590CA23B) |
+| **ParimutuelPythResolver** | [`0xF0769D3ED722129F544D09194acCC929d5731fC7`](https://bscscan.com/address/0xF0769D3ED722129F544D09194acCC929d5731fC7) |
 
-The prior mainnet deployment at block `88279332` is now legacy. Production history before this cutover was archived before the 2026-04-23 redeploy.
+The prior mainnet parimutuel deployment at block `95755802` is now legacy. V1 parimutuel rows were archived before the V2 cutover.
 
 ## BSC Testnet (Chain ID: 97)
 
@@ -54,16 +54,16 @@ Deployed at block 104337216.
 
 ### Testnet Parimutuel Contracts
 
-Deployed at block `104003136` on 2026-04-26.
+V2 deployed at block `104930598` on 2026-05-01.
 
 | Contract | Address |
 |----------|---------|
-| **ParimutuelFactory** | [`0xBB80a386D6f88B2Ed42238B34524116f4d141fc2`](https://testnet.bscscan.com/address/0xBB80a386D6f88B2Ed42238B34524116f4d141fc2) |
-| **ParimutuelPoolManager** | [`0x5175e3267A6c25E4B2D08Ea7942189C329d2196A`](https://testnet.bscscan.com/address/0x5175e3267A6c25E4B2D08Ea7942189C329d2196A) |
-| **ParimutuelVault** | [`0xF8830b4CcE8ecbD401363bfbEcF2bCF1f1439c2E`](https://testnet.bscscan.com/address/0xF8830b4CcE8ecbD401363bfbEcF2bCF1f1439c2E) |
-| **ParimutuelRedemption** | [`0xf211A2F5c7E8AEBBE00aD7859e0C015CBC4D52CF`](https://testnet.bscscan.com/address/0xf211A2F5c7E8AEBBE00aD7859e0C015CBC4D52CF) |
-| **ParimutuelAIResolver** | [`0x2aD577892D418c743BA384D8e6eC6f3E1e804F2E`](https://testnet.bscscan.com/address/0x2aD577892D418c743BA384D8e6eC6f3E1e804F2E) |
-| **ParimutuelPythResolver** | [`0xD8Eb69314b5Ed90D38D5a09669eB96a720C0690a`](https://testnet.bscscan.com/address/0xD8Eb69314b5Ed90D38D5a09669eB96a720C0690a) |
+| **ParimutuelFactory** | [`0xBB356E1BdE4E60AaFDB90499465b59AA8b3cB413`](https://testnet.bscscan.com/address/0xBB356E1BdE4E60AaFDB90499465b59AA8b3cB413) |
+| **ParimutuelPoolManager** | [`0x81d83c78e5028eD8104aB096217ce5934696a007`](https://testnet.bscscan.com/address/0x81d83c78e5028eD8104aB096217ce5934696a007) |
+| **ParimutuelVault** | [`0x4148B2f9186A812E052F91f2d614900cb299A603`](https://testnet.bscscan.com/address/0x4148B2f9186A812E052F91f2d614900cb299A603) |
+| **ParimutuelRedemption** | [`0xA56b1d7a98C6F5aA3d2369A8fce4D8eC61b92AE2`](https://testnet.bscscan.com/address/0xA56b1d7a98C6F5aA3d2369A8fce4D8eC61b92AE2) |
+| **ParimutuelAIResolver** | [`0x249AFCe9d58e59a7a2C37D5c1c2d932fAc3D8c76`](https://testnet.bscscan.com/address/0x249AFCe9d58e59a7a2C37D5c1c2d932fAc3D8c76) |
+| **ParimutuelPythResolver** | [`0x6ac8B00A859FA8cEcd738869786858907DD8D8f8`](https://testnet.bscscan.com/address/0x6ac8B00A859FA8cEcd738869786858907DD8D8f8) |
 
 ## API Endpoints
 

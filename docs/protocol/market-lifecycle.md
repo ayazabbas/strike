@@ -1,6 +1,6 @@
 # Market Lifecycle
 
-Every Strike market transitions through these states:
+Strike has two lifecycle models: FBA orderbook markets and parimutuel pool markets. Orderbook markets transition through these states:
 
 ```
 Open → Closed → Resolving → Resolved
@@ -53,3 +53,36 @@ The admin can call `setResolved()` as a fallback to skip the 2-step resolve/fina
 ~6:30   finalizeResolution() → market Resolved
 6:30+   Winning positions settled automatically
 ```
+
+
+## Parimutuel Pool Lifecycle
+
+Parimutuel markets use a separate pool lifecycle:
+
+```
+Open → Closed → Resolving → Resolved
+                    ↘ Invalid/Cancelled
+```
+
+### Open
+- Users can buy into any outcome pool.
+- Buying is allowed until `tradingCloseTime`.
+- Pool probabilities and projected payouts update as users buy.
+
+### Closed
+- No new buys are accepted.
+- The market waits until `resolutionTime` before resolver paths can finalize the outcome.
+- This split lets betting close before the event itself is over.
+
+### Resolving
+- Admin, AI, or Pyth resolution determines the winning outcome.
+- AI markets can go through request/proposal/challenge/finality before confirmation.
+- Pyth markets evaluate the configured feed/thresholds at `resolutionTime`.
+
+### Resolved
+- The winning outcome is final.
+- Winners claim principal plus their pro-rata share of losing pools.
+
+### Invalid / Cancelled
+- Used when the market cannot be fairly resolved or is explicitly invalidated.
+- Users refund principal.

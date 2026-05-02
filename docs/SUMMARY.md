@@ -6,6 +6,7 @@
 
 * [Start Trading](getting-started/quick-start.md)
 * [Trading Guide](getting-started/trading-guide.md)
+* [Parimutuel Pool Markets](protocol/parimutuel-markets.md)
 * [Leaderboard](getting-started/leaderboard.md)
 * [Key Concepts](getting-started/key-concepts.md)
 
@@ -17,6 +18,7 @@
 * [Positions & Settlement](protocol/outcome-tokens.md)
 * [Oracle Resolution](protocol/oracle-resolution.md)
 * [AI Markets](protocol/ai-markets.md)
+* [Parimutuel Pool Markets](protocol/parimutuel-markets.md)
 * [Fees & Incentives](protocol/fees-and-incentives.md)
 
 ## Smart Contracts
