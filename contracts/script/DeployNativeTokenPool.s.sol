@@ -2,6 +2,7 @@
 pragma solidity ^0.8.25;
 
 import {Script, console} from "forge-std/Script.sol";
+import {NativeTokenPoolAIResolver} from "../src/NativeTokenPoolAIResolver.sol";
 import {NativeTokenParimutuelFactory} from "../src/NativeTokenParimutuelFactory.sol";
 import {NativeTokenPoolManager} from "../src/NativeTokenPoolManager.sol";
 import {NativeTokenPoolRedemption} from "../src/NativeTokenPoolRedemption.sol";
@@ -14,7 +15,8 @@ import {NativeTokenPoolVault} from "../src/NativeTokenPoolVault.sol";
 ///      Optional env:
 ///      NATIVE_TOKEN_POOL_FINAL_ADMIN defaults to deployer
 ///      NATIVE_TOKEN_POOL_FEE_RECIPIENT defaults to final admin
-///      NATIVE_TOKEN_POOL_RESOLVER defaults to final admin
+///      NATIVE_TOKEN_POOL_KEEPER defaults to final admin
+///      NATIVE_TOKEN_POOL_DEFAULT_MODEL_ID defaults to 0
 ///      NATIVE_TOKEN_POOL_CREATOR_BOND_WEI defaults to 0.05 BNB
 ///      NATIVE_TOKEN_POOL_CHALLENGER_BOND_WEI defaults to 0.01 BNB
 ///      NATIVE_TOKEN_POOL_PLATFORM_FEE_BPS defaults to 200
@@ -32,6 +34,8 @@ contract DeployNativeTokenPoolScript is Script {
         address treasury;
         address feeRecipient;
         address resolver;
+        address keeper;
+        uint256 defaultModelId;
         uint256 creatorBondWei;
         uint256 challengerBondWei;
         uint16 platformFeeBps;
@@ -43,7 +47,8 @@ contract DeployNativeTokenPoolScript is Script {
         address finalAdmin = vm.envOr("NATIVE_TOKEN_POOL_FINAL_ADMIN", deployer);
         address treasury = vm.envAddress("NATIVE_TOKEN_POOL_TREASURY");
         address feeRecipient = vm.envOr("NATIVE_TOKEN_POOL_FEE_RECIPIENT", finalAdmin);
-        address resolver = vm.envOr("NATIVE_TOKEN_POOL_RESOLVER", finalAdmin);
+        address keeper = vm.envOr("NATIVE_TOKEN_POOL_KEEPER", finalAdmin);
+        uint256 defaultModelId = vm.envOr("NATIVE_TOKEN_POOL_DEFAULT_MODEL_ID", uint256(0));
         uint256 creatorBondWei = vm.envOr("NATIVE_TOKEN_POOL_CREATOR_BOND_WEI", DEFAULT_CREATOR_BOND_WEI);
         uint256 challengerBondWei = vm.envOr("NATIVE_TOKEN_POOL_CHALLENGER_BOND_WEI", DEFAULT_CHALLENGER_BOND_WEI);
         uint256 platformFeeBpsRaw = vm.envOr("NATIVE_TOKEN_POOL_PLATFORM_FEE_BPS", uint256(DEFAULT_PLATFORM_FEE_BPS));
@@ -51,7 +56,7 @@ contract DeployNativeTokenPoolScript is Script {
         require(finalAdmin != address(0), "DeployNativeTokenPool: zero final admin");
         require(treasury != address(0), "DeployNativeTokenPool: zero treasury");
         require(feeRecipient != address(0), "DeployNativeTokenPool: zero fee recipient");
-        require(resolver != address(0), "DeployNativeTokenPool: zero resolver");
+        require(keeper != address(0), "DeployNativeTokenPool: zero keeper");
         require(creatorBondWei > 0, "DeployNativeTokenPool: zero creator bond");
         require(challengerBondWei > 0, "DeployNativeTokenPool: zero challenger bond");
         require(platformFeeBpsRaw < 10_000, "DeployNativeTokenPool: invalid fee bps");
@@ -63,7 +68,8 @@ contract DeployNativeTokenPoolScript is Script {
         console.log("  Final admin:", finalAdmin);
         console.log("  Treasury:", treasury);
         console.log("  Fee recipient:", feeRecipient);
-        console.log("  Resolver:", resolver);
+        console.log("  Keeper:", keeper);
+        console.log("  Default model ID:", defaultModelId);
         console.log("  Creator bond wei:", creatorBondWei);
         console.log("  Challenger bond wei:", challengerBondWei);
         console.log("  Platform fee bps:", platformFeeBps);
@@ -75,9 +81,11 @@ contract DeployNativeTokenPoolScript is Script {
         NativeTokenPoolManager manager =
             new NativeTokenPoolManager(deployer, address(factory), address(vault), feeRecipient);
         NativeTokenPoolRedemption redemption = new NativeTokenPoolRedemption(deployer, address(manager), address(vault));
+        NativeTokenPoolAIResolver resolver = new NativeTokenPoolAIResolver(address(factory), defaultModelId);
 
-        _wireRoles(factory, manager, vault, redemption, deployer, finalAdmin, resolver);
+        _wireProtocolRoles(factory, manager, vault, redemption, resolver, keeper);
         _applyParams(factory, creatorBondWei, challengerBondWei, platformFeeBps);
+        _handoffAdmin(factory, manager, vault, redemption, resolver, deployer, finalAdmin);
 
         vm.stopBroadcast();
 
@@ -89,7 +97,9 @@ contract DeployNativeTokenPoolScript is Script {
             admin: finalAdmin,
             treasury: treasury,
             feeRecipient: feeRecipient,
-            resolver: resolver,
+            resolver: address(resolver),
+            keeper: keeper,
+            defaultModelId: defaultModelId,
             creatorBondWei: creatorBondWei,
             challengerBondWei: challengerBondWei,
             platformFeeBps: platformFeeBps
@@ -98,24 +108,22 @@ contract DeployNativeTokenPoolScript is Script {
         _printJson(d);
     }
 
-    function _wireRoles(
+    function _wireProtocolRoles(
         NativeTokenParimutuelFactory factory,
         NativeTokenPoolManager manager,
         NativeTokenPoolVault vault,
         NativeTokenPoolRedemption redemption,
-        address bootstrapAdmin,
-        address finalAdmin,
-        address resolver
+        NativeTokenPoolAIResolver resolver,
+        address keeper
     ) internal {
         factory.setPoolManager(address(manager));
-        factory.grantRole(factory.RESOLVER_ROLE(), resolver);
+        factory.grantRole(factory.RESOLVER_ROLE(), address(resolver));
 
         vault.grantRole(vault.PROTOCOL_ROLE(), address(manager));
         vault.grantRole(vault.PROTOCOL_ROLE(), address(redemption));
 
         manager.grantRole(manager.REDEMPTION_ROLE(), address(redemption));
-
-        _handoffAdmin(factory, manager, vault, redemption, bootstrapAdmin, finalAdmin);
+        resolver.grantRole(resolver.KEEPER_ROLE(), keeper);
     }
 
     function _handoffAdmin(
@@ -123,6 +131,7 @@ contract DeployNativeTokenPoolScript is Script {
         NativeTokenPoolManager manager,
         NativeTokenPoolVault vault,
         NativeTokenPoolRedemption redemption,
+        NativeTokenPoolAIResolver resolver,
         address bootstrapAdmin,
         address finalAdmin
     ) internal {
@@ -137,6 +146,7 @@ contract DeployNativeTokenPoolScript is Script {
         vault.grantRole(vault.DEFAULT_ADMIN_ROLE(), finalAdmin);
         redemption.grantRole(redemption.DEFAULT_ADMIN_ROLE(), finalAdmin);
         redemption.grantRole(redemption.ADMIN_ROLE(), finalAdmin);
+        resolver.setAdmin(finalAdmin);
 
         factory.revokeRole(factory.ADMIN_ROLE(), bootstrapAdmin);
         factory.revokeRole(factory.DEFAULT_ADMIN_ROLE(), bootstrapAdmin);
@@ -189,6 +199,12 @@ contract DeployNativeTokenPoolScript is Script {
             vm.toString(d.feeRecipient),
             '","resolver":"',
             vm.toString(d.resolver),
+            '","nativeTokenPoolAIResolver":"',
+            vm.toString(d.resolver),
+            '","keeper":"',
+            vm.toString(d.keeper),
+            '","defaultModelId":"',
+            vm.toString(d.defaultModelId),
             '","creatorBondWei":"',
             vm.toString(d.creatorBondWei),
             '","challengerBondWei":"',

@@ -2,6 +2,8 @@
 pragma solidity ^0.8.25;
 
 import "forge-std/Test.sol";
+import "../src/MockFlapAIProvider.sol";
+import "../src/NativeTokenPoolAIResolver.sol";
 import "../src/NativeTokenParimutuelFactory.sol";
 import "../src/NativeTokenPoolManager.sol";
 import "../src/NativeTokenPoolRedemption.sol";
@@ -83,9 +85,12 @@ contract NativeTokenPoolTest is Test {
     NativeTokenPoolManager public manager;
     NativeTokenPoolRedemption public redemption;
     NativeTokenPoolVault public vault;
+    NativeTokenPoolAIResolver public aiResolver;
+    MockFlapAIProvider public mockProvider;
     MockUSDT public token;
 
     address public admin = address(0x1);
+    address public keeper = address(0x10);
     address public creator = address(0x2);
     address public alice = address(0x3);
     address public bob = address(0x4);
@@ -99,13 +104,18 @@ contract NativeTokenPoolTest is Test {
         vault = new NativeTokenPoolVault(admin);
         manager = new NativeTokenPoolManager(admin, address(factory), address(vault), feeRecipient);
         redemption = new NativeTokenPoolRedemption(admin, address(manager), address(vault));
+        aiResolver = new NativeTokenPoolAIResolver(address(factory), 1);
+        mockProvider = new MockFlapAIProvider();
 
         vm.startPrank(admin);
         factory.setPoolManager(address(manager));
+        factory.grantRole(factory.RESOLVER_ROLE(), address(aiResolver));
         manager.grantRole(manager.REDEMPTION_ROLE(), address(redemption));
         vault.grantRole(vault.PROTOCOL_ROLE(), address(manager));
         vault.grantRole(vault.PROTOCOL_ROLE(), address(redemption));
         vm.stopPrank();
+        aiResolver.grantRole(aiResolver.KEEPER_ROLE(), keeper);
+        aiResolver.setProviderOverride(address(mockProvider));
 
         token.mint(creator, 1_000_000e18);
         token.mint(alice, 1_000_000e18);
@@ -122,6 +132,7 @@ contract NativeTokenPoolTest is Test {
         vm.deal(challenger, 10 ether);
         vm.deal(alice, 10 ether);
         vm.deal(bob, 10 ether);
+        vm.deal(address(aiResolver), 10 ether);
     }
 
     function _config(address collateralToken, uint8 outcomeCount)
@@ -535,10 +546,88 @@ contract NativeTokenPoolTest is Test {
         assertEq(position.rewardShares, 9.8e18);
     }
 
+    function test_NativePoolAIRequestUsesMarketPromptAndOutcomeCount() public {
+        NativeTokenPoolMarketConfig memory config = _config(address(token), 5);
+        config.prompt = "Resolve the native token pool from official final standings.";
+        uint256 bond = factory.creatorBondAmount();
+
+        vm.prank(creator);
+        uint256 marketId = factory.createNativePoolMarket{value: bond}(config);
+
+        vm.warp(block.timestamp + 1 hours);
+        vm.prank(keeper);
+        aiResolver.resolveMarket(marketId);
+
+        assertEq(mockProvider.lastModelId(), 1);
+        assertEq(mockProvider.lastPrompt(), config.prompt);
+        assertEq(mockProvider.lastNumChoices(), 5);
+        assertEq(aiResolver.requestToMarket(aiResolver.lastRequestId()), marketId);
+    }
+
+    function test_NativePoolAIInvalidChoiceDoesNotFinalise() public {
+        uint256 marketId = _requestNativePoolAIResolution(3);
+        uint256 requestId = aiResolver.lastRequestId();
+
+        mockProvider.fulfill(address(aiResolver), requestId, 3);
+
+        vm.warp(block.timestamp + aiResolver.LIVENESS_PERIOD() + 1);
+        vm.expectRevert(NativeTokenPoolAIResolver.NoProposal.selector);
+        aiResolver.finalise(marketId);
+        assertEq(uint8(factory.getMarketState(marketId)), uint8(ParimutuelMarketState.Closed));
+    }
+
+    function test_NativePoolAIUnknownFulfillReverts() public {
+        vm.expectRevert(NativeTokenPoolAIResolver.UnknownRequest.selector);
+        mockProvider.fulfill(address(aiResolver), 999, 0);
+    }
+
+    function test_NativePoolAIUnknownRefundReverts() public {
+        vm.expectRevert(NativeTokenPoolAIResolver.UnknownRequest.selector);
+        mockProvider.refund(address(aiResolver), 999);
+    }
+
+    function test_NativePoolAIDuplicateCallbackRevertsAfterInvalidChoice() public {
+        _requestNativePoolAIResolution(2);
+        uint256 requestId = aiResolver.lastRequestId();
+        mockProvider.fulfill(address(aiResolver), requestId, 9);
+
+        vm.expectRevert(NativeTokenPoolAIResolver.RequestNotPending.selector);
+        mockProvider.fulfill(address(aiResolver), requestId, 1);
+    }
+
+    function test_NativePoolAIFinaliseAfterLivenessResolvesThroughFactory() public {
+        uint256 marketId = _requestNativePoolAIResolution(4);
+        mockProvider.fulfill(address(aiResolver), aiResolver.lastRequestId(), 2);
+
+        vm.warp(block.timestamp + aiResolver.LIVENESS_PERIOD());
+        vm.prank(keeper);
+        aiResolver.finalise(marketId);
+
+        NativeTokenPoolMarket memory market = factory.getMarket(marketId);
+        assertEq(uint8(market.state), uint8(ParimutuelMarketState.Resolved));
+        assertEq(market.winningOutcomeId, 2);
+        assertTrue(market.hasWinner);
+    }
+
+    function test_NativePoolAICannotFinaliseBeforeLiveness() public {
+        uint256 marketId = _requestNativePoolAIResolution(2);
+        mockProvider.fulfill(address(aiResolver), aiResolver.lastRequestId(), 1);
+
+        vm.expectRevert(NativeTokenPoolAIResolver.LivenessNotExpired.selector);
+        aiResolver.finalise(marketId);
+    }
+
     function _closeResolveFinalizeWindowOnly(uint256 marketId) internal {
         vm.warp(block.timestamp + 1 hours);
         factory.closeMarket(marketId);
         vm.prank(admin);
         factory.resolveToWinner(marketId, 0);
+    }
+
+    function _requestNativePoolAIResolution(uint8 outcomeCount) internal returns (uint256 marketId) {
+        marketId = _createMarket(outcomeCount);
+        vm.warp(block.timestamp + 1 hours);
+        vm.prank(keeper);
+        aiResolver.resolveMarket(marketId);
     }
 }

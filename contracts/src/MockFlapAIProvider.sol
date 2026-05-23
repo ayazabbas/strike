@@ -7,6 +7,9 @@ import "./flap/IFlapAIProvider.sol";
 contract MockFlapAIProvider {
     mapping(uint256 => uint256) public modelPrices;
     uint256 public nextRequestId = 1;
+    uint256 public lastModelId;
+    string public lastPrompt;
+    uint8 public lastNumChoices;
 
     constructor() {
         modelPrices[0] = 0.01 ether;
@@ -18,7 +21,10 @@ contract MockFlapAIProvider {
         return IFlapAIProvider.Model("mock", modelPrices[modelId], true);
     }
 
-    function reason(uint256, string calldata, uint8) external payable returns (uint256) {
+    function reason(uint256 modelId, string calldata prompt, uint8 numChoices) external payable returns (uint256) {
+        lastModelId = modelId;
+        lastPrompt = prompt;
+        lastNumChoices = numChoices;
         uint256 id = nextRequestId++;
         return id;
     }
