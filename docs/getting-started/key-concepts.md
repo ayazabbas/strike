@@ -63,6 +63,6 @@ This lets Strike support markets where betting should stop before the outcome is
 
 ## Flap Token Pools
 
-Flap Token Pools are creator-launched parimutuel markets backed by a selected BEP20 token. Creators define outcomes, timing, and a resolution prompt; the public beta uses Strike's fixed FLAP AI resolver and official hash-checked metadata before the pool is shown in the app.
+Flap Token Pools are creator-launched parimutuel markets backed by a selected BEP20 token. Creators define outcomes, timing, and a resolution prompt; Strike uses a fixed FLAP AI resolver and official hash-checked metadata before the pool is shown in the app.
 
 The current public flow is optimized for token-data prompts resolvable from Ave-supported data, such as price, liquidity, volume, FDV, or market cap.

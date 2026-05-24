@@ -61,6 +61,6 @@ Parimutuel V2 市场有两个独立时间戳：
 
 ## Flap 代币池
 
-FLAP 代币池是由创建者发起、以所选 BEP20 代币抵押的 parimutuel 市场。创建者定义结果、timing 和结算 prompt；公开 beta 使用 STRIKE 固定的 FLAP AI resolver，并通过 official 经过哈希校验的元数据决定 pool 是否显示在应用中。
+FLAP 代币池是由创建者发起、以所选 BEP20 代币抵押的 parimutuel 市场。创建者定义结果、timing 和结算 prompt；Strike 使用固定的 FLAP AI resolver，并通过官方哈希校验元数据决定 pool 是否显示在应用中。
 
 当前公开流程针对可通过 Ave-supported data 解析的代币数据 prompts 优化，例如 price、liquidity、volume、FDV 或 market cap。

@@ -140,7 +140,7 @@ Burns `tokenAmount` winning outcome tokens and pays out `tokenAmount * LOT_SIZE`
 
 AI-resolved markets are now exposed through multiple market families. The public creator flow is **Flap Token Pools**, where creators choose a BEP20 collateral token, define 2–8 outcomes, and store an on-chain prompt. Strike's hosted flow uploads hash-checked metadata before the on-chain create transaction so the pool can be listed in the app.
 
-For the public Flap Token Pool beta:
+For the public Flap Token Pool flow:
 
 - creators do **not** choose the AI model,
 - Strike covers the AI fee,

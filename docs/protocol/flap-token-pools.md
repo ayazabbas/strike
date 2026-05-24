@@ -2,7 +2,7 @@
 
 Flap Token Pools are Strike's public, creator-facing pool format for AI-resolved token markets. They use the native-token pool contracts: creators can launch multi-outcome parimutuel pools backed by a chosen BEP20 token, while traders buy into outcomes and claim or refund after resolution.
 
-Flap Token Pools are live in beta at [app.strike.pm/flap](https://app.strike.pm/flap).
+Flap Token Pools are live at [app.strike.pm/flap](https://app.strike.pm/flap).
 
 ## What They Are
 
@@ -11,11 +11,11 @@ A Flap Token Pool has:
 - **2–8 outcomes** — mutually exclusive choices selected by the creator.
 - **BEP20 collateral** — the pool can use an external token instead of only USDT or STRIKE.
 - **Creator prompt** — the resolution prompt is stored on-chain with the market.
-- **FLAP AI resolution** — the resolver uses the fixed Strike-selected FLAP AI model for beta.
+- **FLAP AI resolution** — the resolver uses the fixed Strike-selected FLAP AI model.
 - **30 minute challenge window** — after AI proposes an outcome, users can challenge before finalization.
-- **Creator bond** — official beta creation posts a `0.05 BNB` creator bond.
+- **Creator bond** — official creation posts a `0.05 BNB` creator bond.
 
-During beta, Strike covers the AI fee. Creators do **not** choose a model or pay a model-specific oracle fee in the public Flap Token Pool flow.
+Strike covers the AI fee. Creators do **not** choose a model or pay a model-specific oracle fee in the public Flap Token Pool flow.
 
 ## Official Hosted Flow vs Permissionless Contracts
 
@@ -32,7 +32,7 @@ Direct on-chain pools remain valid contract-level markets, but they are not auto
 
 ## Prompt Requirements
 
-The current public Flap Token Pool beta is optimized for token-data markets. Prompts should be resolvable from Ave-supported token information such as:
+The current public Flap Token Pool flow is optimized for token-data markets. Prompts should be resolvable from Ave-supported token information such as:
 
 - price,
 - liquidity,
@@ -66,10 +66,10 @@ Example:
 
 ## Economics
 
-| Item | Beta behavior |
+| Item | Behavior |
 |---|---|
 | Creator bond | `0.05 BNB` on create |
-| AI fee | Covered by Strike during beta |
+| AI fee | Covered by Strike |
 | Model choice | Fixed by Strike |
 | Pool fee | 2% default in the public flow |
 | Challenge window | 30 minutes |

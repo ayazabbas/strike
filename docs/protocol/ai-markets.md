@@ -7,7 +7,7 @@ AI markets are prediction markets resolved by the **Flap AI Oracle** instead of 
 | Surface | Creation | Collateral | Prompt | Model / fee |
 |---|---|---|---|---|
 | Standard pool AI markets | Admin / protocol-created | USDT or STRIKE, depending on market | Configured by Strike/admin | Configured by protocol |
-| Flap Token Pools | Public creator flow | Creator-selected BEP20 token | Supplied by creator and stored on-chain | Fixed by Strike during beta; AI fee covered by Strike |
+| Flap Token Pools | Public creator flow | Creator-selected BEP20 token | Supplied by creator and stored on-chain | Fixed by Strike; AI fee covered by Strike |
 
 For public Flap Token Pools, creators do **not** choose the AI model and do **not** pay a model-specific oracle fee. They provide the market prompt and post the `0.05 BNB` creator bond.
 
@@ -23,7 +23,7 @@ For public Flap Token Pools, creators do **not** choose the AI model and do **no
 
 ## Public Flap Token Pool Prompt Scope
 
-The current public beta is optimized for **token-data questions** resolvable from Ave-supported information, such as:
+The current public Flap Token Pool flow is optimized for **token-data questions** resolvable from Ave-supported information, such as:
 
 - price,
 - liquidity,

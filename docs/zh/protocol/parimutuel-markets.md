@@ -88,4 +88,4 @@ STRIKE 使用 bounded curve presets 将 pool balances 转换为界面显示的�
 
 ## Flap 代币池
 
-FLAP 代币池使用独立 native-token pool stack，服务于由创建者发起、以任意 BEP20 资产抵押的市场。它们沿用同样的 parimutuel 思路：买入一个结果，获胜方瓜分失败方资金池；同时增加 hosted official metadata、链上创建者 prompt、FLAP AI 结算，以及 beta 阶段的 `0.05 BNB` 创建者 bond。参见 [FLAP 代币池](flap-token-pools.md)。
+FLAP 代币池使用独立 native-token pool stack，服务于由创建者发起、以任意 BEP20 资产抵押的市场。它们沿用同样的 parimutuel 思路：买入一个结果，获胜方瓜分失败方资金池；同时增加 hosted official metadata、链上创建者 prompt、FLAP AI 结算，以及 `0.05 BNB` 创建者 bond。参见 [FLAP 代币池](flap-token-pools.md)。

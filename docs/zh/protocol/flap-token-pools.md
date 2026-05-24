@@ -2,7 +2,7 @@
 
 FLAP 代币池属于 STRIKE 中面向公开创建者的 pool 形式，用于由 AI 结算的代币市场。它们使用 native-token pool 合约：创建者可以发起以所选 BEP20 代币抵押的多结果 parimutuel pools，交易者买入结果，并在结算后领取收益或退款。
 
-FLAP 代币池目前在 [app.strike.pm/flap](https://app.strike.pm/flap) 以 beta 形式上线。
+FLAP 代币池已在 [app.strike.pm/flap](https://app.strike.pm/flap) 上线。
 
 ## 它们是什么
 
@@ -11,11 +11,11 @@ FLAP 代币池目前在 [app.strike.pm/flap](https://app.strike.pm/flap) 以 bet
 - **2–8 个结果** — 由创建者选择的互斥选项。
 - **BEP20 抵押资产** — pool 可以使用外部代币，而不只限于 USDT 或 STRIKE。
 - **Creator prompt** — 结算 prompt 随市场一起存储在链上。
-- **FLAP AI 结算** — beta 阶段 resolver 使用 STRIKE 选定的固定 FLAP AI model。
+- **FLAP AI 结算** — resolver 使用 STRIKE 选定的固定 FLAP AI model。
 - **30 minute 挑战 window** — AI 提出结果后，用户可以在最终确认前发起挑战。
-- **Creator bond** — 官方 beta 创建流程会提交 `0.05 BNB` 创建者 bond。
+- **Creator bond** — 官方创建流程会提交 `0.05 BNB` 创建者 bond。
 
-beta 期间，STRIKE 承担 AI 费用。创建者在公开 FLAP Token Pool 流程中**不能**选择 model，也不需要支付特定 model 的预言机费用。
+STRIKE 承担 AI 费用。创建者在公开 FLAP Token Pool 流程中**不能**选择 model，也不需要支付特定 model 的预言机费用。
 
 ## Official Hosted 流程 vs Permissionless 合约
 
@@ -32,7 +32,7 @@ STRIKE 应用只展示通过 official hosted 流程创建的 pools：
 
 ## Prompt 要求
 
-当前公开 FLAP Token Pool beta 针对代币数据市场优化。Prompts 应可通过 Ave 支持的代币信息解析，例如：
+当前公开 FLAP Token Pool 流程针对代币数据市场优化。Prompts 应可通过 Ave 支持的代币信息解析，例如：
 
 - price；
 - liquidity；
@@ -66,10 +66,10 @@ STRIKE 应用只展示通过 official hosted 流程创建的 pools：
 
 ## Economics
 
-| Item | Beta behavior |
+| Item | Behavior |
 |---|---|
 | Creator bond | `0.05 BNB` 于 create |
-| AI 费用 | beta 期间由 STRIKE 承担 |
+| AI 费用 | 由 STRIKE 承担 |
 | Model choice | 由 STRIKE 固定 |
 | Pool 费用 | 公开流程默认 2% |
 | 挑战 window | 30 minutes |

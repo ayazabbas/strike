@@ -142,7 +142,7 @@ redemption.redeem(factoryMarketId, tokenAmount);
 
 AI-resolved markets 现在通过多个市场系列提供。公开创建者流程是 **Flap Token Pools**：创建者选择一个 BEP20 抵押 token，定义 2-8 个 outcomes，并存储链上 prompt。Strike 托管流程会在链上创建交易前上传经过 hash 校验的 metadata，以便 pool 可以在应用中展示。
 
-对于公开 Flap Token Pool beta：
+对于公开 Flap Token Pool 流程：
 
 - 创建者**不能**选择 AI model；
 - Strike 覆盖 AI fee；

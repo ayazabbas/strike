@@ -68,7 +68,7 @@ Preserved on the `poc` branch.
 
 - **[AI Markets](../protocol/ai-markets.md)** — Flap AI Oracle resolution is live for supported market types.
 - **[Parimutuel Pool Markets](../protocol/parimutuel-markets.md)** — USDT/STRIKE multi-outcome pool markets are live.
-- **[Flap Token Pools](../protocol/flap-token-pools.md)** — public beta creator flow is live for BEP20-collateral, AI-resolved token pools.
+- **[Flap Token Pools](../protocol/flap-token-pools.md)** — public creator flow is live for BEP20-collateral, AI-resolved token pools.
 
 ## 🔮 Future
 
@@ -81,4 +81,4 @@ Preserved on the `poc` branch.
 - [x] Canonical BSC testnet stack with `amendOrders` live (block 103312703)
 - [x] Leaderboard (PNL + Volume tabs, 24H/7D/30D/All, username system)
 
-- [x] Native / Flap Token Pools mainnet stack deployed and public beta frontend enabled.
+- [x] Native / Flap Token Pools mainnet stack deployed and public frontend enabled.

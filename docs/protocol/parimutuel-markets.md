@@ -89,4 +89,4 @@ See [Deployments](../contracts/deployments.md) for live addresses.
 
 ## Flap Token Pools
 
-Flap Token Pools use a separate native-token pool stack for creator-launched markets backed by arbitrary BEP20 collateral. They share the same parimutuel idea — buy an outcome, winners split losing pools — but use hosted official metadata, an on-chain creator prompt, FLAP AI resolution, and a `0.05 BNB` creator bond in beta. See [Flap Token Pools](flap-token-pools.md).
+Flap Token Pools use a separate native-token pool stack for creator-launched markets backed by arbitrary BEP20 collateral. They share the same parimutuel idea — buy an outcome, winners split losing pools — but use hosted official metadata, an on-chain creator prompt, FLAP AI resolution, and a `0.05 BNB` creator bond. See [Flap Token Pools](flap-token-pools.md).

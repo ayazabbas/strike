@@ -7,7 +7,7 @@ AI 市场是通过 **FLAP AI 预言机**结算的预测市场，而不是依赖�
 | Surface | Creation | 抵押资产 | Prompt | Model / 费用 |
 |---|---|---|---|---|
 | Standard pool AI 市场 | Admin / 协议创建 | USDT 或 STRIKE，取决于市场 | 由 STRIKE/管理员配置 | 由协议配置 |
-| FLAP 代币池 | Public 创建者流程 | Creator-selected BEP20 代币 | 由创建者提供并存储在链上 | beta 期间由 STRIKE 固定；AI 费用由 STRIKE 承担 |
+| FLAP 代币池 | Public 创建者流程 | Creator-selected BEP20 代币 | 由创建者提供并存储在链上 | 由 STRIKE 固定；AI 费用由 STRIKE 承担 |
 
 对于公开 FLAP 代币池，创建者**不能**选择 AI model，也**不需要**支付特定 model 的预言机费用。他们只需提供市场 prompt，并提交 `0.05 BNB` 创建者 bond。
 
@@ -23,7 +23,7 @@ AI 市场是通过 **FLAP AI 预言机**结算的预测市场，而不是依赖�
 
 ## Public FLAP Token Pool Prompt Scope
 
-当前公开 beta 针对可通过 Ave-supported information 解析的**代币数据问题**优化，例如：
+当前公开 Flap Token Pool 流程针对可通过 Ave-supported information 解析的**代币数据问题**优化，例如：
 
 - price；
 - liquidity；
