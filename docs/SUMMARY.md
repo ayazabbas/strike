@@ -82,3 +82,4 @@
 * [Roadmap](project/roadmap.md)
 * [Design Decisions](project/design-decisions.md)
 * [Community Token](project/community-token.md)
+* [中文文档](zh/README.md)
