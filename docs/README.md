@@ -1,7 +1,5 @@
 # What is Strike?
 
-[English](README.md) | [简体中文](zh/README.md)
-
 **Strike** is a fully on-chain prediction market protocol on BNB Chain — live now at [app.strike.pm](https://app.strike.pm). Strike supports three live market surfaces: **FBA orderbook markets** for active binary trading, **standard parimutuel pool markets** for simple multi-outcome predictions, and **Flap Token Pools** for creator-launched AI-resolved token pools backed by BEP20 collateral.
 
 Orderbook markets use a **Frequent Batch Auction (FBA) CLOB** where orders are collected and cleared at uniform prices in periodic batches. This gives traders real price discovery, limit orders, and fair execution without the MEV problems of continuous orderbooks.

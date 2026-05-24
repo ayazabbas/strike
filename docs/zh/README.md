@@ -1,7 +1,5 @@
 # Strike 简介
 
-[English](../README.md) | 简体中文
-
 **Strike** 是部署于 BNB Chain 的完全链上预测市场协议，现已通过 [app.strike.pm](https://app.strike.pm) 上线。Strike 当前支持三类市场：用于主动二元交易的 **FBA 订单簿市场**、用于简单多结果预测的**标准同注分彩池市场**，以及由创建者发起、使用 BEP20 抵押资产并由 FLAP AI 结算的 **Flap Token Pools**。
 
 订单簿市场使用 **Frequent Batch Auction (FBA) CLOB**。订单会在周期性批次中收集，并按统一价格清算。这为交易者提供真实的价格发现、限价单和公平执行，同时避免连续订单簿常见的 MEV 问题。

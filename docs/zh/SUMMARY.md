@@ -82,4 +82,3 @@
 * [路线图](project/roadmap.md)
 * [设计决策](project/design-decisions.md)
 * [社区代币](project/community-token.md)
-* [GitBook 多语言设置](gitbook-setup.md)
