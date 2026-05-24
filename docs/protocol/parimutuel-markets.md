@@ -1,10 +1,10 @@
 # Parimutuel Pool Markets
 
-Parimutuel markets are Strike's pool-based prediction market format. They sit alongside the FBA orderbook: orderbook markets are best for actively traded binary outcomes, while parimutuel pools are best for multi-choice events, longer-running questions, and markets where users want simple buy-and-hold exposure without managing limit orders.
+Parimutuel markets are Strike's pool-based prediction market format. They sit alongside the FBA orderbook: orderbook markets are best for actively traded binary outcomes, while pool markets are best for multi-choice events, longer-running questions, and simple buy-and-hold exposure without managing limit orders. This page covers standard USDT/STRIKE pool markets; creator-launched BEP20 pools are covered in [Flap Token Pools](flap-token-pools.md).
 
 ## What They Are
 
-A parimutuel market has **2–8 outcomes**. Traders choose an outcome and buy into that outcome's pool with USDT. There is no orderbook and no selling/cashout in V1 — positions are internal, non-transferable claims on the final pool.
+A parimutuel market has **2–8 outcomes**. Traders choose an outcome and buy into that outcome's pool with the configured pool collateral, typically USDT or STRIKE. There is no orderbook and no selling/cashout in the current pool UX — positions are internal, non-transferable claims on the final pool.
 
 When the market resolves, the winning side receives:
 
@@ -25,7 +25,7 @@ Losing outcomes pay nothing. If a market is invalid or cancelled, users can refu
 | Resolution | Pyth, AI, or admin fallback depending on market | Admin, AI, or Pyth with admin fallback |
 | Payout | Winning positions redeem fixed value per lot | Winners split losing pools pro-rata |
 
-Both systems are fully collateralized with USDT and settle through on-chain contracts.
+Both systems are fully collateralized and settle through on-chain contracts. Orderbook markets use USDT; standard pool markets use configured pool collateral such as USDT or STRIKE.
 
 ## Market Timing
 
@@ -75,13 +75,18 @@ The frontend shows:
 
 ## Contracts
 
-The parimutuel stack is separate from the orderbook stack:
+The standard parimutuel stack is separate from the orderbook stack:
 
 - `ParimutuelFactory` — creates markets and coordinates lifecycle/resolution.
 - `ParimutuelPoolManager` — handles buys, pool accounting, and curve math.
-- `ParimutuelVault` — holds USDT collateral for pool markets.
+- `ParimutuelVault` — holds configured collateral for standard pool markets.
 - `ParimutuelRedemption` — claims winning payouts and refunds invalid markets.
 - `ParimutuelAIResolver` — Flap AI Oracle integration and challenge/finality flow.
 - `ParimutuelPythResolver` — Pyth price-threshold resolution.
 
 See [Deployments](../contracts/deployments.md) for live addresses.
+
+
+## Flap Token Pools
+
+Flap Token Pools use a separate native-token pool stack for creator-launched markets backed by arbitrary BEP20 collateral. They share the same parimutuel idea — buy an outcome, winners split losing pools — but use hosted official metadata, an on-chain creator prompt, FLAP AI resolution, and a `0.05 BNB` creator bond in beta. See [Flap Token Pools](flap-token-pools.md).

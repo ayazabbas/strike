@@ -34,6 +34,19 @@ V2 deployed at block `95800733` on 2026-05-01.
 
 The prior mainnet parimutuel deployment at block `95755802` is now legacy. V1 parimutuel rows were archived before the V2 cutover.
 
+### Mainnet Native / Flap Token Pool Contracts
+
+Deployed on 2026-05-23/24 as an isolated stack for creator-launched BEP20-collateral pools.
+
+| Contract | Address |
+|----------|---------|
+| **NativeTokenParimutuelFactory** | [`0xdB7D6d664CaAE3bed9E44f4eceC61A38508aaB8F`](https://bscscan.com/address/0xdB7D6d664CaAE3bed9E44f4eceC61A38508aaB8F) |
+| **NativeTokenPoolManager** | [`0xa2054b1D17a3F83866617fEd1bC1707D6B47708A`](https://bscscan.com/address/0xa2054b1D17a3F83866617fEd1bC1707D6B47708A) |
+| **NativeTokenPoolVault** | [`0x522954e69C5690febBd2B5b36900c68fC0D576c4`](https://bscscan.com/address/0x522954e69C5690febBd2B5b36900c68fC0D576c4) |
+| **NativeTokenPoolRedemption** | [`0x3e842EBB62733A9D29047498582e4eAA4f9705E8`](https://bscscan.com/address/0x3e842EBB62733A9D29047498582e4eAA4f9705E8) |
+| **NativeTokenPoolAIResolver** | [`0xbE3884A9ee0c6f5FD69eCDdeaDC9bEAC6BEf89c1`](https://bscscan.com/address/0xbE3884A9ee0c6f5FD69eCDdeaDC9bEAC6BEf89c1) |
+
+
 ## BSC Testnet (Chain ID: 97)
 
 Deployed at block 104337216.

@@ -46,7 +46,7 @@ No function iterates over unbounded sets. Segment trees provide O(log N) operati
 - **Replay protection:** each market can only be resolved once
 
 ## Trading Safety
-- **Full collateralization:** all orders backed by locked USDT collateral
+- **Full collateralization:** orderbook trades are backed by locked USDT collateral; pool markets are backed by their configured collateral
 - **No leverage:** no margin, no liquidation risk
 - **Deterministic halt:** trading stops when `timeRemaining < batchInterval`, preventing last-second exploitation
 - Funds cannot be locked — cancellation/withdrawal always available

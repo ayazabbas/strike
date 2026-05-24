@@ -1,13 +1,14 @@
 # Oracle Resolution
 
-Strike supports two resolution methods: **Pyth Price Feeds** for price-based markets and the **Flap AI Oracle** for question-based markets. This page covers both.
+Strike supports **Pyth Price Feeds**, the **Flap AI Oracle**, and admin/fallback resolution depending on market type. This page focuses on Pyth and AI flows.
 
 ## Resolution Methods
 
 | Method | Used For | Source |
 |--------|----------|--------|
 | **Pyth Price Feeds** | Price markets ("Will BTC be above $X?") | Cryptographically signed price data |
-| **Flap AI Oracle** | AI markets ("Will the Fed cut rates?") | LLM reasoning with IPFS proof |
+| **Flap AI Oracle** | AI-resolved markets, including Flap Token Pools | LLM/tool reasoning with proof data where available |
+| **Admin / fallback** | Curated sports/event pools, challenged/failed AI flows | Protocol admin action |
 
 ---
 
@@ -70,20 +71,20 @@ This "procedural challenge" mechanism ensures the deterministic rule (earliest u
 
 ## AI Oracle Resolution
 
-AI markets are resolved by the **Flap AI Oracle**, which uses large language models to evaluate question-based prompts. The `AIResolver` contract manages the full lifecycle:
+AI markets are resolved by the **Flap AI Oracle**, which evaluates configured prompts and returns an outcome choice. Different market families use different resolver contracts, including `AIResolver`, `ParimutuelAIResolver`, and `NativeTokenPoolAIResolver`. The general lifecycle is:
 
 1. **Request** — At market expiry, a keeper calls `resolveMarket()` which sends the prompt to the oracle
-2. **LLM reasoning** (~90 seconds) — The oracle backend feeds the prompt to the selected model, which reasons over the question using current information
-3. **Callback** — The oracle calls back with a binary choice (0 = YES, 1 = NO)
+2. **AI/tool reasoning** — The oracle backend evaluates the prompt using the configured Strike/FLAP setup for that market family
+3. **Callback** — The oracle calls back with a numeric outcome choice
 4. **Liveness window** (30 minutes) — The proposed resolution can be challenged
 5. **Finalisation** — If unchallenged, anyone calls `finalise()` to settle the market
 
 ### Challenge Mechanism
 
-During the 30-minute liveness window, anyone can challenge the AI's proposed outcome by posting a 0.1 BNB bond. This extends the window to 24 hours for admin review. The admin either confirms the original resolution (challenger loses bond) or overrides it (challenger gets bond + 0.01 BNB reward).
+During the 30-minute liveness window, an AI proposal can be challenged by posting the configured challenge bond. Challenged markets move to admin review; the admin can confirm the original result or override it according to the resolver rules. Bond sizes/rewards are contract-specific.
 
 ### IPFS Verification
 
-Every AI resolution produces an IPFS proof containing the full prompt, reasoning trace, tool calls, and model metadata. The CID is available via the indexer API or on-chain via `FlapAIProvider.getRequest(requestId)`.
+AI resolution proof data is exposed through the indexer or oracle/provider contracts where available. Availability and exact fields depend on the resolver path and market family.
 
 For full details, see [AI Markets](ai-markets.md).

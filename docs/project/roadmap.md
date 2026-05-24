@@ -64,13 +64,21 @@ Preserved on the `poc` branch.
 - [x] BSC deployment + soak test
 - [x] Documentation
 
+## Live / Recently Shipped
+
+- **[AI Markets](../protocol/ai-markets.md)** — Flap AI Oracle resolution is live for supported market types.
+- **[Parimutuel Pool Markets](../protocol/parimutuel-markets.md)** — USDT/STRIKE multi-outcome pool markets are live.
+- **[Flap Token Pools](../protocol/flap-token-pools.md)** — public beta creator flow is live for BEP20-collateral, AI-resolved token pools.
+
 ## 🔮 Future
 
-- **[AI-Resolved Markets](../coming-soon/ai-resolved-markets.md)** — qualitative event markets (geopolitics, sports, culture) resolved via Flap AI Oracle
-- Multi-asset support (ETH, SOL, BNB + any Pyth feed)
-- Variable market durations (1min, 5min, 15min, 1hr)
+- AI quality gate for official Flap Token Pool creation prompts.
+- Broader multi-asset and Pyth-feed coverage where liquidity supports it.
+- Variable market durations (1min, 5min, 15min, 1hr).
 
 ### Recently Completed
 - [x] BSC mainnet redeployment and production cutover (block 95210316, previous live deployment archived before reset)
 - [x] Canonical BSC testnet stack with `amendOrders` live (block 103312703)
 - [x] Leaderboard (PNL + Volume tabs, 24H/7D/30D/All, username system)
+
+- [x] Native / Flap Token Pools mainnet stack deployed and public beta frontend enabled.

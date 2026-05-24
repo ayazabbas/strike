@@ -136,50 +136,23 @@ redemption.redeem(factoryMarketId, tokenAmount);
 
 Burns `tokenAmount` winning outcome tokens and pays out `tokenAmount * LOT_SIZE` ($0.01 per lot) USDT from the market's redemption pool.
 
-### 5. Create an AI Market
+### 5. AI-Resolved and Flap Token Pool Markets
 
-```solidity
-// MarketFactory — requires MARKET_CREATOR_ROLE
-// msg.value = oracle fee in BNB (query from Flap AI Oracle)
-uint256 marketId = factory.createAIMarket{value: 0.01 ether}(
-    "Will BNB reach $1000 by June 2026?",  // prompt
-    0,                                       // modelId (0 = Gemini Flash)
-    1751302800,                              // expiryTime (Unix timestamp)
-    1                                        // minLots
-);
-```
+AI-resolved markets are now exposed through multiple market families. The public creator flow is **Flap Token Pools**, where creators choose a BEP20 collateral token, define 2–8 outcomes, and store an on-chain prompt. Strike's hosted flow uploads hash-checked metadata before the on-chain create transaction so the pool can be listed in the app.
 
-In TypeScript (ethers.js v6):
+For the public Flap Token Pool beta:
 
-```typescript
-const factory = new Contract(MARKET_FACTORY_ADDRESS, MarketFactoryABI, signer);
-const tx = await factory.createAIMarket(
-  "Will BNB reach $1000 by June 2026?",
-  0,          // modelId
-  1751302800, // expiryTime
-  1,          // minLots
-  { value: parseEther('0.01') }
-);
-```
+- creators do **not** choose the AI model,
+- Strike covers the AI fee,
+- the creator posts the configured `0.05 BNB` creator bond,
+- the prompt should be a token-data question resolvable from Ave-supported data.
 
-The BNB fee varies by model. Query the oracle at runtime:
+The older `MarketFactory.createAIMarket(...)` orderbook path is an admin/protocol integration surface, not the recommended public creator flow. Public integrations should use the current app flow and indexer/API surfaces until a dedicated Flap Token Pool SDK is published.
 
-```typescript
-const provider = new Contract(FLAP_AI_PROVIDER, FlapAIProviderABI, signer);
-const model = await provider.getModel(0); // modelId
-const fee = model.price; // BNB in wei
-```
+See:
 
-### AI Resolution API
-
-After an AI market resolves, fetch resolution details from the indexer:
-
-```
-GET /v1/markets/{id}/ai-resolution
-```
-
-Returns the prompt, model, proposed choice, liveness window, challenge status, and IPFS proof CID. See the live generated OpenAPI reference for the full response schema:
-
+- [Flap Token Pools](protocol/flap-token-pools.md)
+- [AI Markets](protocol/ai-markets.md)
 - [https://app.strike.pm/api-docs/](https://app.strike.pm/api-docs/)
 
 ## Collateral Formulas

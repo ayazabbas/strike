@@ -2,7 +2,7 @@
 
 ## Overview
 
-Strike's protocol is composed of two first-class on-chain market engines: the FBA orderbook stack and the parimutuel pool stack.
+Strike's protocol is composed of three live on-chain market surfaces: the FBA orderbook stack, the standard parimutuel pool stack, and the native-token / Flap Token Pool stack.
 
 ```
 MarketFactory (singleton)
@@ -42,13 +42,22 @@ ParimutuelFactory
   └── Coordinates admin / AI / Pyth resolution
        │
        ▼
-ParimutuelPoolManager ──→ ParimutuelVault (USDT escrow)
+ParimutuelPoolManager ──→ ParimutuelVault (pool collateral escrow)
        │
        ▼
 ParimutuelRedemption
 
 ParimutuelAIResolver ──→ Flap AI Oracle
 ParimutuelPythResolver ──→ Pyth Oracle
+
+NativeTokenParimutuelFactory
+  │
+  └── NativeTokenPoolManager ──→ NativeTokenPoolVault (BEP20 escrow)
+          │
+          ▼
+     NativeTokenPoolRedemption
+
+NativeTokenPoolAIResolver ──→ Flap AI Oracle
 ```
 
 ## Contract Relationships
@@ -66,14 +75,19 @@ ParimutuelPythResolver ──→ Pyth Oracle
 | **FeeModel** | Fee calculation, bounties | Library or singleton |
 | **ParimutuelFactory** | Creates and resolves pool markets | Singleton |
 | **ParimutuelPoolManager** | Buys, pool accounting, probability/payout curve | Singleton |
-| **ParimutuelVault** | Pool-market USDT collateral custody | Singleton |
+| **ParimutuelVault** | Standard pool collateral custody | Singleton |
 | **ParimutuelRedemption** | Pool winner claims and invalid-market refunds | Singleton |
 | **ParimutuelAIResolver** | AI resolution for pool markets | Singleton |
 | **ParimutuelPythResolver** | Pyth threshold resolution for pool markets | Singleton |
+| **NativeTokenParimutuelFactory** | Creates Flap Token Pool markets with hosted metadata + on-chain prompts | Singleton |
+| **NativeTokenPoolManager** | Flap Token Pool buys and accounting | Singleton |
+| **NativeTokenPoolVault** | BEP20 collateral custody for Flap Token Pools | Singleton |
+| **NativeTokenPoolRedemption** | Flap Token Pool claims, refunds, and bond payouts | Singleton |
+| **NativeTokenPoolAIResolver** | FLAP AI resolution for native-token pools | Singleton |
 
 ## Design Principles
 
-**Two market engines.** Strike treats FBA orderbook markets and parimutuel pool markets as separate on-chain primitives. Orderbook markets optimize for active binary trading; parimutuel markets optimize for 2–8 outcome pool predictions with simple buy-and-claim UX.
+**Separate market engines.** Strike treats FBA orderbook markets, standard parimutuel pools, and native-token Flap Token Pools as separate on-chain primitives. Orderbook markets optimize for active binary trading; pool markets optimize for 2–8 outcome predictions with simple buy-and-claim UX; Flap Token Pools add creator-launched BEP20 collateral and FLAP AI resolution.
 
 **Per-market isolation.** Each market's orderbook state is isolated via per-market mappings within the singleton OrderBook contract. Segment trees are allocated per-side per-market, preventing cross-market contention and bounding worst-case gas costs to a single market's depth.
 

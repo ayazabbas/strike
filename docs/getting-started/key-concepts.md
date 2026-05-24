@@ -2,10 +2,11 @@
 
 ## Market Types
 
-Strike supports two first-class market types:
+Strike supports three live market surfaces:
 
 - **FBA orderbook markets** — binary UP/DOWN or YES/NO markets with limit orders, batch clearing, and active position management.
-- **Parimutuel pool markets** — 2–8 outcome markets where users buy into outcome pools and winners split losing pools.
+- **Standard parimutuel pool markets** — 2–8 outcome markets where users buy into outcome pools and winners split losing pools.
+- **Flap Token Pools** — creator-launched BEP20-collateral pools with FLAP AI resolution from an on-chain prompt.
 
 ## Orderbook Positions
 
@@ -58,3 +59,10 @@ Parimutuel V2 markets have two distinct timestamps:
 - **Resolution time** — the event/reference timestamp used by admin, AI, or Pyth resolution.
 
 This lets Strike support markets where betting should stop before the outcome is known, such as sports events, elections, or price-range markets.
+
+
+## Flap Token Pools
+
+Flap Token Pools are creator-launched parimutuel markets backed by a selected BEP20 token. Creators define outcomes, timing, and a resolution prompt; the public beta uses Strike's fixed FLAP AI resolver and official hash-checked metadata before the pool is shown in the app.
+
+The current public flow is optimized for token-data prompts resolvable from Ave-supported data, such as price, liquidity, volume, FDV, or market cap.
