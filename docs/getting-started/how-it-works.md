@@ -77,4 +77,4 @@ Flap Token Pools are creator-launched pool markets backed by a chosen BEP20 toke
 5. **Challenge window** — AI proposals have a 30 minute challenge window.
 6. **Claim or refund** — finalized winners claim; invalid/cancelled markets refund.
 
-Read the full [Flap Token Pools](../protocol/flap-token-pools.md) guide for prompt, collateral, and lifecycle details.
+Read the full [Flap Token Pools](flap-token-pools.md) guide for prompt, collateral, and lifecycle details.

@@ -7,7 +7,7 @@
 * [开始交易](getting-started/quick-start.md)
 * [交易指南](getting-started/trading-guide.md)
 * [同注分彩池市场](protocol/parimutuel-markets.md)
-* [Flap 代币池](protocol/flap-token-pools.md)
+* [Flap 代币池](getting-started/flap-token-pools.md)
 * [排行榜](getting-started/leaderboard.md)
 * [核心概念](getting-started/key-concepts.md)
 
@@ -20,7 +20,7 @@
 * [预言机结算](protocol/oracle-resolution.md)
 * [AI 市场](protocol/ai-markets.md)
 * [同注分彩池市场](protocol/parimutuel-markets.md)
-* [Flap 代币池](protocol/flap-token-pools.md)
+* [Flap 代币池](getting-started/flap-token-pools.md)
 * [费用与激励](protocol/fees-and-incentives.md)
 
 ## 智能合约

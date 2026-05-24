@@ -1,6 +1,6 @@
 # Parimutuel Pool Markets
 
-Parimutuel markets are Strike's pool-based prediction market format. They sit alongside the FBA orderbook: orderbook markets are best for actively traded binary outcomes, while pool markets are best for multi-choice events, longer-running questions, and simple buy-and-hold exposure without managing limit orders. This page covers standard USDT/STRIKE pool markets; creator-launched BEP20 pools are covered in [Flap Token Pools](flap-token-pools.md).
+Parimutuel markets are Strike's pool-based prediction market format. They sit alongside the FBA orderbook: orderbook markets are best for actively traded binary outcomes, while pool markets are best for multi-choice events, longer-running questions, and simple buy-and-hold exposure without managing limit orders. This page covers standard USDT/STRIKE pool markets; creator-launched BEP20 pools are covered in [Flap Token Pools](../getting-started/flap-token-pools.md).
 
 ## What They Are
 
@@ -89,4 +89,4 @@ See [Deployments](../contracts/deployments.md) for live addresses.
 
 ## Flap Token Pools
 
-Flap Token Pools use a separate native-token pool stack for creator-launched markets backed by arbitrary BEP20 collateral. They share the same parimutuel idea — buy an outcome, winners split losing pools — but use hosted official metadata, an on-chain creator prompt, FLAP AI resolution, and a `0.05 BNB` creator bond. See [Flap Token Pools](flap-token-pools.md).
+Flap Token Pools use a separate native-token pool stack for creator-launched markets backed by arbitrary BEP20 collateral. They share the same parimutuel idea — buy an outcome, winners split losing pools — but use hosted official metadata, an on-chain creator prompt, FLAP AI resolution, and a `0.05 BNB` creator bond. See [Flap Token Pools](../getting-started/flap-token-pools.md).

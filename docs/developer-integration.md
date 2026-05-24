@@ -151,7 +151,7 @@ The older `MarketFactory.createAIMarket(...)` orderbook path is an admin/protoco
 
 See:
 
-- [Flap Token Pools](protocol/flap-token-pools.md)
+- [Flap Token Pools](getting-started/flap-token-pools.md)
 - [AI Markets](protocol/ai-markets.md)
 - [https://app.strike.pm/api-docs/](https://app.strike.pm/api-docs/)
 

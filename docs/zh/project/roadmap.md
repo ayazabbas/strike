@@ -75,7 +75,7 @@
 
 - **[AI 市场](../protocol/ai-markets.md)** - FLAP AI 预言机结算已实时用于支持的市场类型。
 - **[Parimutuel 彩池市场](../protocol/parimutuel-markets.md)** - USDT/STRIKE 多结果彩池市场已上线。
-- **[FLAP 代币池](../protocol/flap-token-pools.md)** - 面向 BEP20 抵押资产、由 AI 结算的 token pools 公开创建者流程已上线。
+- **[FLAP 代币池](../getting-started/flap-token-pools.md)** - 面向 BEP20 抵押资产、由 AI 结算的 token pools 公开创建者流程已上线。
 
 ## 未来
 

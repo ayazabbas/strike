@@ -72,7 +72,7 @@ AI resolution data is exposed through the indexer where available. The canonical
 
 ## Related Pages
 
-- [Flap Token Pools](flap-token-pools.md)
+- [Flap Token Pools](../getting-started/flap-token-pools.md)
 - [Parimutuel Pool Markets](parimutuel-markets.md)
 - [Oracle Resolution](oracle-resolution.md)
 - [Deployments](../contracts/deployments.md)

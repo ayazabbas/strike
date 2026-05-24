@@ -76,4 +76,4 @@ FLAP 代币池是由创建者发起的彩池市场，使用创建者选择的 BE
 5. **挑战 window** — AI proposals 有 30 分钟挑战窗口。
 6. **Claim 或退款** — 最终确认获胜方后可领取；无效或取消的市场可退款。
 
-阅读完整 [FLAP 代币池](../protocol/flap-token-pools.md) 指南，了解 prompt、抵押资产和生命周期 details。
+阅读完整 [FLAP 代币池](flap-token-pools.md) 指南，了解 prompt、抵押资产和生命周期 details。

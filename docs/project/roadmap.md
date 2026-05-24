@@ -68,7 +68,7 @@ Preserved on the `poc` branch.
 
 - **[AI Markets](../protocol/ai-markets.md)** — Flap AI Oracle resolution is live for supported market types.
 - **[Parimutuel Pool Markets](../protocol/parimutuel-markets.md)** — USDT/STRIKE multi-outcome pool markets are live.
-- **[Flap Token Pools](../protocol/flap-token-pools.md)** — public creator flow is live for BEP20-collateral, AI-resolved token pools.
+- **[Flap Token Pools](../getting-started/flap-token-pools.md)** — public creator flow is live for BEP20-collateral, AI-resolved token pools.
 
 ## 🔮 Future
 

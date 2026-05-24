@@ -1,6 +1,6 @@
 # 同注分彩池市场
 
-Parimutuel 市场属于 STRIKE 中基于资金池的预测市场形式，与 FBA 订单簿并行存在。订单簿市场更适合活跃交易的二元结果；彩池市场更适合多选事件、周期更长的问题，以及不需要管理限价单的简单买入并持有 exposure。本页介绍标准 USDT/STRIKE 彩池市场；由创建者发起的 BEP20 pools 请参见 [FLAP 代币池](flap-token-pools.md)。
+Parimutuel 市场属于 STRIKE 中基于资金池的预测市场形式，与 FBA 订单簿并行存在。订单簿市场更适合活跃交易的二元结果；彩池市场更适合多选事件、周期更长的问题，以及不需要管理限价单的简单买入并持有 exposure。本页介绍标准 USDT/STRIKE 彩池市场；由创建者发起的 BEP20 pools 请参见 [FLAP 代币池](../getting-started/flap-token-pools.md)。
 
 ## 它们是什么
 
@@ -88,4 +88,4 @@ STRIKE 使用 bounded curve presets 将 pool balances 转换为界面显示的�
 
 ## Flap 代币池
 
-FLAP 代币池使用独立 native-token pool stack，服务于由创建者发起、以任意 BEP20 资产抵押的市场。它们沿用同样的 parimutuel 思路：买入一个结果，获胜方瓜分失败方资金池；同时增加 hosted official metadata、链上创建者 prompt、FLAP AI 结算，以及 `0.05 BNB` 创建者 bond。参见 [FLAP 代币池](flap-token-pools.md)。
+FLAP 代币池使用独立 native-token pool stack，服务于由创建者发起、以任意 BEP20 资产抵押的市场。它们沿用同样的 parimutuel 思路：买入一个结果，获胜方瓜分失败方资金池；同时增加 hosted official metadata、链上创建者 prompt、FLAP AI 结算，以及 `0.05 BNB` 创建者 bond。参见 [FLAP 代币池](../getting-started/flap-token-pools.md)。

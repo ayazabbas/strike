@@ -153,7 +153,7 @@ AI-resolved markets 现在通过多个市场系列提供。公开创建者流程
 
 参见：
 
-- [Flap Token Pools](protocol/flap-token-pools.md)
+- [Flap Token Pools](getting-started/flap-token-pools.md)
 - [AI Markets](protocol/ai-markets.md)
 - [https://app.strike.pm/api-docs/](https://app.strike.pm/api-docs/)
 
