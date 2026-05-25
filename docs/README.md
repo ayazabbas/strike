@@ -1,10 +1,10 @@
 # What is Strike?
 
-**Strike** is a fully on-chain prediction market protocol on BNB Chain — live now at [app.strike.pm](https://app.strike.pm). Strike supports three live market surfaces: **FBA orderbook markets** for active binary trading, **standard parimutuel pool markets** for simple multi-outcome predictions, and **[Flap Token Pools](getting-started/flap-token-pools.md)** for creator-launched AI-resolved token pools backed by BEP20 collateral.
+**Strike** is a fully on-chain prediction market protocol on BNB Chain — live now at [app.strike.pm](https://app.strike.pm). Strike supports live market surfaces including **FBA orderbook markets** for active binary trading, **standard parimutuel pool markets** for simple multi-outcome predictions, **[Flap Token Pools](getting-started/flap-token-pools.md)** for creator-launched AI-resolved token pools backed by BEP20 collateral, and **[World Cup Markets](getting-started/world-cup.md)** for campaign-style USDT prediction pools.
 
 Orderbook markets use a **Frequent Batch Auction (FBA) CLOB** where orders are collected and cleared at uniform prices in periodic batches. This gives traders real price discovery, limit orders, and fair execution without the MEV problems of continuous orderbooks.
 
-Parimutuel pool markets let users back one of 2–8 outcomes directly from a pooled interface. There is no orderbook to manage: users buy into an outcome pool, then winners split the losing pools pro-rata after resolution. [Flap Token Pools](getting-started/flap-token-pools.md) extend this pool model to creator-launched token markets with external BEP20 collateral and FLAP AI resolution.
+Parimutuel pool markets let users back one of 2–8 outcomes directly from a pooled interface. There is no orderbook to manage: users buy into an outcome pool, then winners split the losing pools pro-rata after resolution. [Flap Token Pools](getting-started/flap-token-pools.md) extend this pool model to creator-launched token markets with external BEP20 collateral and FLAP AI resolution. [World Cup Markets](getting-started/world-cup.md) use a campaign-focused USDT experience with wallet USDT, bonus credit, early-pick incentives, and KOL signal icons where configured.
 
 Markets can resolve through **Pyth Network** price feeds, the **Flap AI Oracle**, or admin fallback depending on the market type and configuration.
 

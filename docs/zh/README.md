@@ -1,10 +1,10 @@
 # Strike 简介
 
-**Strike** 是部署于 BNB Chain 的完全链上预测市场协议，现已通过 [app.strike.pm](https://app.strike.pm) 上线。Strike 当前支持三类市场：用于主动二元交易的 **FBA 订单簿市场**、用于简单多结果预测的**标准同注分彩池市场**，以及由创建者发起、使用 BEP20 抵押资产并由 FLAP AI 结算的 **[Flap Token Pools](getting-started/flap-token-pools.md)**。
+**Strike** 是部署于 BNB Chain 的完全链上预测市场协议，现已通过 [app.strike.pm](https://app.strike.pm) 上线。Strike 当前支持多类市场：用于主动二元交易的 **FBA 订单簿市场**、用于简单多结果预测的**标准同注分彩池市场**、由创建者发起并使用 BEP20 抵押资产的 **[Flap Token Pools](getting-started/flap-token-pools.md)**，以及面向活动的 USDT 预测池 **[世界杯市场](getting-started/world-cup.md)**。
 
 订单簿市场使用 **Frequent Batch Auction (FBA) CLOB**。订单会在周期性批次中收集，并按统一价格清算。这为交易者提供真实的价格发现、限价单和公平执行，同时避免连续订单簿常见的 MEV 问题。
 
-同注分彩池市场让用户可以直接在资金池界面中支持 2–8 个结果之一。用户不需要管理订单簿：买入某个结果池后，市场结算时获胜方按比例瓜分失败方资金池。[Flap Token Pools](getting-started/flap-token-pools.md) 将这一资金池模型扩展到由创建者发起的代币市场，支持外部 BEP20 抵押资产与 FLAP AI 结算。
+同注分彩池市场让用户可以直接在资金池界面中支持 2–8 个结果之一。用户不需要管理订单簿：买入某个结果池后，市场结算时获胜方按比例瓜分失败方资金池。[Flap Token Pools](getting-started/flap-token-pools.md) 将这一资金池模型扩展到由创建者发起的代币市场，支持外部 BEP20 抵押资产与 FLAP AI 结算。[世界杯市场](getting-started/world-cup.md) 则提供活动型 USDT 体验，支持钱包 USDT、奖励 Credit、早鸟预测激励，以及在配置后显示 KOL 信号图标。
 
 根据市场类型和配置，市场可以通过 **Pyth 网络** 价格源、**Flap AI Oracle** 或管理员兜底路径完成结算。
 
