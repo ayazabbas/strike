@@ -27,19 +27,8 @@ interface IUSDTCreditReserve {
         uint256 nonce;
     }
 
-    function lockCredit(uint256 eventId, address user, uint256 amount) external;
-    function returnLockedCredit(uint256 eventId, address user, uint256 amount) external;
-    function settleCreditPayout(uint256 eventId, address user, uint256 lockedCreditConsumed, uint256 creditPayout)
-        external;
-    function settleCreditPayoutAndWithdraw(
-        uint256 eventId,
-        address user,
-        uint256 lockedCreditConsumed,
-        uint256 creditPayout,
-        address recipient,
-        uint256 withdrawAmount
-    ) external;
-    function fundFromMarketSettlement(uint256 eventId, uint256 amount) external;
+    function spendCredit(uint256 eventId, address user, address recipientVault, uint256 amount) external;
+    function settleCredit(uint256 eventId, address user, uint256 lockedCreditConsumed, uint256 creditReturned) external;
     function lastObservedUsdtBalance() external view returns (uint256);
     function creditBalance(uint256 eventId, address user) external view returns (uint256);
     function lockedCreditBalance(uint256 eventId, address user) external view returns (uint256);

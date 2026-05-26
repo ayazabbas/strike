@@ -36,8 +36,6 @@ contract WorldCupWinnerMarket is AccessControl, ReentrancyGuard {
     struct SettlementSnapshot {
         bool initialized;
         uint256 totalWinningRewardShares;
-        uint256 realWinningRewardShares;
-        uint256 realLosingPrincipal;
     }
 
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
@@ -89,7 +87,7 @@ contract WorldCupWinnerMarket is AccessControl, ReentrancyGuard {
         uint256 principalAdded,
         uint256 rewardSharesOut
     );
-    event LosingCreditSettled(address indexed user, uint256 consumedCredit, uint256 withdrawnToMarket);
+    event LosingCreditSettled(address indexed user, uint256 consumedCredit);
     event WorldCupResolved(uint8 indexed winningOutcomeId, bool adminFallback, string reason);
     event WorldCupInvalidated(string reason);
     event Claimed(address indexed user, uint256 realPayout, uint256 creditPayout);
@@ -107,10 +105,10 @@ contract WorldCupWinnerMarket is AccessControl, ReentrancyGuard {
     error FlaggedOutcome();
     error Slippage();
     error TransferShortfall();
+    error CreditFeesUnsupported();
     error NoClearWinner();
     error OtherWinner();
     error AlreadySettled();
-    error CreditLossNotSettled();
     error NothingToClaim();
     error NothingToRefund();
     error EmptyOutcomes();
@@ -232,11 +230,9 @@ contract WorldCupWinnerMarket is AccessControl, ReentrancyGuard {
         _requireOpenActiveOutcome(outcomeId);
         BuyQuote memory quote = _quoteBuy(creditAmount, _outcomePools[outcomeId].principal);
         if (quote.rewardSharesOut < minRewardSharesOut) revert Slippage();
+        if (quote.feeAmount > 0) revert CreditFeesUnsupported();
 
-        creditReserve.lockCredit(creditEventId, msg.sender, creditAmount);
-        if (quote.feeAmount > 0) {
-            creditReserve.settleCreditPayout(creditEventId, msg.sender, quote.feeAmount, 0);
-        }
+        creditReserve.spendCredit(creditEventId, msg.sender, address(this), creditAmount);
         _applyBuy(msg.sender, outcomeId, quote, true);
 
         emit BoughtWithCredit(
@@ -253,8 +249,8 @@ contract WorldCupWinnerMarket is AccessControl, ReentrancyGuard {
         bool otherWon;
         for (uint8 outcomeId = 0; outcomeId <= FLAP_OTHER_INDEX; outcomeId++) {
             (bool isReported, bool result, bool isFlagged) = worldCupResolver.getOutcomeStatus(outcomeId);
-            if (isFlagged) revert FlaggedOutcome();
-            if (isReported && result && !isFlagged) {
+            if (isReported && result) {
+                if (isFlagged) revert FlaggedOutcome();
                 if (outcomeId == FLAP_OTHER_INDEX) {
                     otherWon = true;
                 } else {
@@ -271,9 +267,7 @@ contract WorldCupWinnerMarket is AccessControl, ReentrancyGuard {
 
     function adminResolve(uint8 winnerOutcomeId, string calldata reason) external onlyRole(ADMIN_ROLE) nonReentrant {
         if (winnerOutcomeId >= OUTCOME_COUNT) revert InvalidOutcome();
-        if (state != WorldCupWinnerMarketState.Closed && state != WorldCupWinnerMarketState.Open) {
-            revert MarketNotClosed();
-        }
+        if (state != WorldCupWinnerMarketState.Closed) revert MarketNotClosed();
         _resolve(winnerOutcomeId, true, reason);
     }
 
@@ -328,16 +322,8 @@ contract WorldCupWinnerMarket is AccessControl, ReentrancyGuard {
         if (amounts.realPayout == 0 && amounts.creditPayout == 0 && amounts.unsettledLosingCreditPrincipal == 0) {
             revert NothingToClaim();
         }
-        if (amounts.unsettledLosingCreditPrincipal > 0) revert CreditLossNotSettled();
 
-        SettlementSnapshot memory snapshot = _snapshotSettlement();
-        WorldCupPosition memory creditWinningPosition = _creditPositions[msg.sender][winningOutcomeId];
-        uint256 realBackingForCreditPayout;
-        if (creditWinningPosition.rewardShares > 0 && snapshot.totalWinningRewardShares > 0) {
-            realBackingForCreditPayout = Math.mulDiv(
-                snapshot.realLosingPrincipal, creditWinningPosition.rewardShares, snapshot.totalWinningRewardShares
-            );
-        }
+        _snapshotSettlement();
 
         totalPrincipal -= amounts.realPayout + amounts.creditPayout;
         for (uint8 outcomeId = 0; outcomeId < OUTCOME_COUNT; outcomeId++) {
@@ -357,12 +343,15 @@ contract WorldCupWinnerMarket is AccessControl, ReentrancyGuard {
         realPayout = amounts.realPayout;
         creditPayout = amounts.creditPayout;
 
-        if (amounts.winningCreditPrincipal > 0 || creditPayout > 0) {
-            if (realBackingForCreditPayout > 0) {
-                usdt.safeTransfer(address(creditReserve), realBackingForCreditPayout);
-                creditReserve.fundFromMarketSettlement(creditEventId, realBackingForCreditPayout);
+        uint256 consumedCredit = amounts.winningCreditPrincipal + amounts.unsettledLosingCreditPrincipal;
+        if (consumedCredit > 0 || creditPayout > 0) {
+            if (creditPayout > 0) {
+                usdt.safeTransfer(address(creditReserve), creditPayout);
             }
-            creditReserve.settleCreditPayout(creditEventId, msg.sender, amounts.winningCreditPrincipal, creditPayout);
+            creditReserve.settleCredit(creditEventId, msg.sender, consumedCredit, creditPayout);
+            if (amounts.unsettledLosingCreditPrincipal > 0) {
+                losingCreditSettled[msg.sender] = true;
+            }
         }
 
         if (realPayout > 0) {
@@ -408,7 +397,8 @@ contract WorldCupWinnerMarket is AccessControl, ReentrancyGuard {
         totalPrincipal -= realRefund + creditRefund;
 
         if (creditRefund > 0) {
-            creditReserve.returnLockedCredit(creditEventId, msg.sender, creditRefund);
+            usdt.safeTransfer(address(creditReserve), creditRefund);
+            creditReserve.settleCredit(creditEventId, msg.sender, creditRefund, creditRefund);
         }
         if (realRefund > 0) {
             usdt.safeTransfer(msg.sender, realRefund);
@@ -485,35 +475,24 @@ contract WorldCupWinnerMarket is AccessControl, ReentrancyGuard {
 
     function _settleLosingCreditInternal(address[] calldata users) internal {
         if (state != WorldCupWinnerMarketState.Resolved) revert MarketNotResolved();
-        SettlementSnapshot memory snapshot = _snapshotSettlement();
-
         for (uint256 i = 0; i < users.length; i++) {
-            _settleOneLosingCredit(users[i], snapshot.realWinningRewardShares, snapshot.totalWinningRewardShares);
+            _settleOneLosingCredit(users[i]);
         }
     }
 
-    function _settleOneLosingCredit(address user, uint256 realWinningRewardShares, uint256 totalWinningRewardShares)
-        internal
-    {
+    function _settleOneLosingCredit(address user) internal {
         if (losingCreditSettled[user]) revert AlreadySettled();
 
         uint256 losingCreditPrincipal = _totalCreditPrincipal(user) - _creditPositions[user][winningOutcomeId].principal;
         if (losingCreditPrincipal == 0) {
             losingCreditSettled[user] = true;
-            emit LosingCreditSettled(user, 0, 0);
+            emit LosingCreditSettled(user, 0);
             return;
         }
 
-        uint256 withdrawAmount;
-        if (realWinningRewardShares > 0 && totalWinningRewardShares > 0) {
-            withdrawAmount = Math.mulDiv(losingCreditPrincipal, realWinningRewardShares, totalWinningRewardShares);
-        }
-
         losingCreditSettled[user] = true;
-        creditReserve.settleCreditPayoutAndWithdraw(
-            creditEventId, user, losingCreditPrincipal, 0, address(this), withdrawAmount
-        );
-        emit LosingCreditSettled(user, losingCreditPrincipal, withdrawAmount);
+        creditReserve.settleCredit(creditEventId, user, losingCreditPrincipal, 0);
+        emit LosingCreditSettled(user, losingCreditPrincipal);
     }
 
     function _previewRefund(address user, uint8[] calldata outcomeIds)
@@ -549,20 +528,7 @@ contract WorldCupWinnerMarket is AccessControl, ReentrancyGuard {
         }
 
         WorldCupOutcomePool memory winningPool = _outcomePools[winningOutcomeId];
-        snapshot = SettlementSnapshot({
-            initialized: true,
-            totalWinningRewardShares: winningPool.rewardShares,
-            realWinningRewardShares: winningPool.realRewardShares,
-            realLosingPrincipal: _realLosingPrincipal()
-        });
+        snapshot = SettlementSnapshot({initialized: true, totalWinningRewardShares: winningPool.rewardShares});
         _settlementSnapshot = snapshot;
-    }
-
-    function _realLosingPrincipal() internal view returns (uint256 realLosingPrincipal_) {
-        for (uint8 outcomeId = 0; outcomeId < OUTCOME_COUNT; outcomeId++) {
-            if (outcomeId != winningOutcomeId) {
-                realLosingPrincipal_ += _outcomePools[outcomeId].realPrincipal;
-            }
-        }
     }
 }

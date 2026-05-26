@@ -74,7 +74,7 @@ contract USDTParimutuelV3Test is Test {
 
         assertEq(realShares, 100e18);
         assertEq(creditShares, 200e18);
-        assertEq(usdt.balanceOf(address(vault)), 100e18);
+        assertEq(usdt.balanceOf(address(vault)), 300e18);
 
         USDTParimutuelV3Position memory realPosition = manager.getUserRealPosition(marketId, alice, 0);
         USDTParimutuelV3Position memory creditPosition = manager.getUserCreditPosition(marketId, bob, 1);
@@ -105,6 +105,62 @@ contract USDTParimutuelV3Test is Test {
         assertEq(usdt.balanceOf(address(vault)), 0);
         assertEq(reserve.creditBalance(EVENT_ID, bob), 0);
         assertEq(reserve.lockedCreditBalance(EVENT_ID, bob), 0);
+    }
+
+    function test_ManyLosingCreditUsersDoNotBlockRealWinnerClaimAndCanSettleLater() public {
+        uint256 marketId = _createMarket(true);
+
+        vm.prank(alice);
+        manager.buyWithUsdt(marketId, 0, 100e18, 0);
+
+        address firstLoser = address(0);
+        for (uint160 i = 1; i <= 8; i++) {
+            address loser = address(0x1000 + i);
+            if (i == 1) firstLoser = loser;
+            _claimCredit(loser, 100e18);
+            vm.prank(loser);
+            manager.buyWithCredit(marketId, 1, 100e18, 0);
+        }
+
+        _resolve(marketId, 0);
+
+        uint256 aliceBefore = usdt.balanceOf(alice);
+        vm.prank(alice);
+        redemption.claim(marketId, new address[](0));
+
+        assertEq(usdt.balanceOf(alice), aliceBefore + 900e18);
+        assertEq(reserve.lockedCreditBalance(EVENT_ID, firstLoser), 100e18);
+
+        address[] memory users = new address[](1);
+        users[0] = firstLoser;
+        manager.settleLosingCredit(marketId, users);
+        assertEq(reserve.lockedCreditBalance(EVENT_ID, firstLoser), 0);
+        assertEq(reserve.creditBalance(EVENT_ID, firstLoser), 0);
+    }
+
+    function test_ManyLosingCreditUsersDoNotBlockCreditWinnerClaim() public {
+        _claimCredit(alice, 100e18);
+        uint256 marketId = _createMarket(true);
+
+        vm.prank(alice);
+        manager.buyWithCredit(marketId, 0, 100e18, 0);
+
+        for (uint160 i = 1; i <= 8; i++) {
+            address loser = address(0x2000 + i);
+            _claimCredit(loser, 100e18);
+            vm.prank(loser);
+            manager.buyWithCredit(marketId, 1, 100e18, 0);
+        }
+
+        _resolve(marketId, 0);
+
+        uint256 aliceBefore = usdt.balanceOf(alice);
+        vm.prank(alice);
+        redemption.claim(marketId, new address[](0));
+
+        assertEq(usdt.balanceOf(alice), aliceBefore);
+        assertEq(reserve.creditBalance(EVENT_ID, alice), 900e18);
+        assertEq(reserve.lockedCreditBalance(EVENT_ID, alice), 0);
     }
 
     function test_CreditWinnerReceivesReserveCreditNotUsdtTransfer() public {
@@ -171,6 +227,15 @@ contract USDTParimutuelV3Test is Test {
         vm.expectRevert(USDTParimutuelV3Manager.TradingClosed.selector);
         vm.prank(alice);
         manager.buyWithUsdt(marketId, 0, 100e18, 0);
+    }
+
+    function test_CreditBuyRejectsNonZeroFeeMarketsToAvoidStrandedCreditFees() public {
+        _claimCredit(bob, 100e18);
+        uint256 marketId = _createMarketWithFee(true, 100);
+
+        vm.expectRevert(USDTParimutuelV3Manager.CreditFeesUnsupported.selector);
+        vm.prank(bob);
+        manager.buyWithCredit(marketId, 0, 100e18, 0);
     }
 
     function test_DoubleClaimIsRejectedAfterPositionConsumed() public {
@@ -411,11 +476,15 @@ contract USDTParimutuelV3Test is Test {
     }
 
     function _createMarket(bool creditEnabled) internal returns (uint256) {
+        return _createMarketWithFee(creditEnabled, 0);
+    }
+
+    function _createMarketWithFee(bool creditEnabled, uint16 feeBps) internal returns (uint256) {
         USDTParimutuelV3MarketConfig memory config = USDTParimutuelV3MarketConfig({
             tradingCloseTime: uint64(block.timestamp + 1 days),
             resolutionTime: uint64(block.timestamp + 2 days),
             outcomeCount: 2,
-            feeBps: 0,
+            feeBps: feeBps,
             creditEventId: creditEnabled ? EVENT_ID : 0,
             creditEnabled: creditEnabled,
             metadataHash: keccak256("world-cup-match"),

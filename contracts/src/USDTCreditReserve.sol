@@ -42,25 +42,16 @@ contract USDTCreditReserve is IUSDTCreditReserve, AccessControl, EIP712, Reentra
     );
     event MarketAuthorizationUpdated(uint256 indexed eventId, address indexed market, bool authorized);
     event CreditClaimed(uint256 indexed eventId, address indexed user, uint256 amount, uint256 nonce);
-    event CreditLocked(uint256 indexed eventId, address indexed user, address indexed market, uint256 amount);
-    event LockedCreditReturned(uint256 indexed eventId, address indexed user, address indexed market, uint256 amount);
-    event CreditPayoutSettled(
+    event CreditSpent(
+        uint256 indexed eventId, address indexed user, address indexed market, address recipientVault, uint256 amount
+    );
+    event CreditSettled(
         uint256 indexed eventId,
         address indexed user,
         address indexed market,
         uint256 lockedCreditConsumed,
-        uint256 creditPayout
+        uint256 creditReturned
     );
-    event CreditPayoutSettledAndWithdrawn(
-        uint256 indexed eventId,
-        address indexed user,
-        address indexed market,
-        uint256 lockedCreditConsumed,
-        uint256 creditPayout,
-        address recipient,
-        uint256 withdrawAmount
-    );
-    event MarketSettlementFunded(uint256 indexed eventId, address indexed market, uint256 amount);
     event ExcessCreditRedeemed(uint256 indexed eventId, address indexed user, uint256 amount);
 
     error ZeroAddress();
@@ -78,7 +69,6 @@ contract USDTCreditReserve is IUSDTCreditReserve, AccessControl, EIP712, Reentra
     error InsufficientCredit();
     error InsufficientLockedCredit();
     error InsufficientBacking();
-    error WithdrawExceedsConsumedCredit();
     error NothingRedeemable();
     error ActiveAuthorizedMarkets();
 
@@ -191,9 +181,9 @@ contract USDTCreditReserve is IUSDTCreditReserve, AccessControl, EIP712, Reentra
         emit CreditClaimed(eventId, msg.sender, amount, nonce);
     }
 
-    function lockCredit(uint256 eventId, address user, uint256 amount) external nonReentrant {
+    function spendCredit(uint256 eventId, address user, address recipientVault, uint256 amount) external nonReentrant {
         CreditEvent storage creditEvent = _requireMarketEvent(eventId);
-        if (user == address(0)) revert ZeroAddress();
+        if (user == address(0) || recipientVault == address(0)) revert ZeroAddress();
         if (amount == 0) revert ZeroAmount();
 
         CreditAccount storage account = _accounts[eventId][user];
@@ -203,98 +193,48 @@ contract USDTCreditReserve is IUSDTCreditReserve, AccessControl, EIP712, Reentra
         account.lockedCredit += amount;
         creditEvent.freeTotal -= amount;
         creditEvent.lockedTotal += amount;
+        creditEvent.marketWithdrawnTotal += amount;
+        _requireFunded(creditEvent);
 
-        emit CreditLocked(eventId, user, msg.sender, amount);
+        usdt.safeTransfer(recipientVault, amount);
+        _syncObservedBalance();
+        _requireBacked(creditEvent);
+
+        emit CreditSpent(eventId, user, msg.sender, recipientVault, amount);
     }
 
-    function returnLockedCredit(uint256 eventId, address user, uint256 amount) external nonReentrant {
-        CreditEvent storage creditEvent = _requireMarketEvent(eventId);
-        if (user == address(0)) revert ZeroAddress();
-        if (amount == 0) revert ZeroAmount();
-
-        CreditAccount storage account = _accounts[eventId][user];
-        if (account.lockedCredit < amount) revert InsufficientLockedCredit();
-
-        account.lockedCredit -= amount;
-        account.freeCredit += amount;
-        creditEvent.lockedTotal -= amount;
-        creditEvent.freeTotal += amount;
-
-        emit LockedCreditReturned(eventId, user, msg.sender, amount);
-    }
-
-    function settleCreditPayout(uint256 eventId, address user, uint256 lockedCreditConsumed, uint256 creditPayout)
+    function settleCredit(uint256 eventId, address user, uint256 lockedCreditConsumed, uint256 creditReturned)
         external
         nonReentrant
     {
         CreditEvent storage creditEvent = _requireMarketEvent(eventId);
         if (user == address(0)) revert ZeroAddress();
-        if (lockedCreditConsumed == 0 && creditPayout == 0) revert ZeroAmount();
+        if (lockedCreditConsumed == 0 && creditReturned == 0) revert ZeroAmount();
 
         CreditAccount storage account = _accounts[eventId][user];
         if (account.lockedCredit < lockedCreditConsumed) revert InsufficientLockedCredit();
+        if (creditReturned > 0 && usdt.balanceOf(address(this)) < lastObservedUsdtBalance + creditReturned) {
+            revert InsufficientBacking();
+        }
 
         account.lockedCredit -= lockedCreditConsumed;
-        account.freeCredit += creditPayout;
+        account.freeCredit += creditReturned;
         creditEvent.lockedTotal -= lockedCreditConsumed;
-        creditEvent.freeTotal += creditPayout;
+        creditEvent.freeTotal += creditReturned;
         creditEvent.settledConsumedTotal += lockedCreditConsumed;
-        creditEvent.settledPayoutTotal += creditPayout;
-        _requireBacked(creditEvent);
-
-        emit CreditPayoutSettled(eventId, user, msg.sender, lockedCreditConsumed, creditPayout);
-    }
-
-    function settleCreditPayoutAndWithdraw(
-        uint256 eventId,
-        address user,
-        uint256 lockedCreditConsumed,
-        uint256 creditPayout,
-        address recipient,
-        uint256 withdrawAmount
-    ) external nonReentrant {
-        CreditEvent storage creditEvent = _requireMarketEvent(eventId);
-        if (user == address(0) || recipient == address(0)) revert ZeroAddress();
-        if (lockedCreditConsumed == 0 && creditPayout == 0 && withdrawAmount == 0) revert ZeroAmount();
-        if (withdrawAmount > lockedCreditConsumed) revert WithdrawExceedsConsumedCredit();
-
-        CreditAccount storage account = _accounts[eventId][user];
-        if (account.lockedCredit < lockedCreditConsumed) revert InsufficientLockedCredit();
-
-        account.lockedCredit -= lockedCreditConsumed;
-        account.freeCredit += creditPayout;
-        creditEvent.lockedTotal -= lockedCreditConsumed;
-        creditEvent.freeTotal += creditPayout;
-        creditEvent.settledConsumedTotal += lockedCreditConsumed;
-        creditEvent.settledPayoutTotal += creditPayout;
-        creditEvent.marketWithdrawnTotal += withdrawAmount;
+        creditEvent.settledPayoutTotal += creditReturned;
+        creditEvent.fundedUsdt += creditReturned;
+        _syncObservedBalance();
         _requireFunded(creditEvent);
-
-        usdt.safeTransfer(recipient, withdrawAmount);
-        _syncObservedBalance();
         _requireBacked(creditEvent);
 
-        emit CreditPayoutSettledAndWithdrawn(
-            eventId, user, msg.sender, lockedCreditConsumed, creditPayout, recipient, withdrawAmount
-        );
-    }
-
-    function fundFromMarketSettlement(uint256 eventId, uint256 amount) external nonReentrant {
-        CreditEvent storage creditEvent = _requireMarketEvent(eventId);
-        if (amount == 0) revert ZeroAmount();
-        if (usdt.balanceOf(address(this)) < lastObservedUsdtBalance + amount) revert InsufficientBacking();
-
-        creditEvent.fundedUsdt += amount;
-        _syncObservedBalance();
-        _requireBacked(creditEvent);
-
-        emit MarketSettlementFunded(eventId, msg.sender, amount);
+        emit CreditSettled(eventId, user, msg.sender, lockedCreditConsumed, creditReturned);
     }
 
     function finalizeEvent(uint256 eventId) external onlyRole(ADMIN_ROLE) {
         CreditEvent storage creditEvent = _requireEvent(eventId);
         if (creditEvent.finalized) revert EventFinalized();
-        if (creditEvent.lockedTotal != 0 || block.timestamp < creditEvent.eventEnd) revert InvalidWindow();
+        if (block.timestamp < creditEvent.eventEnd) revert InvalidWindow();
         if (creditEvent.authorizedMarketCount != 0) revert ActiveAuthorizedMarkets();
 
         creditEvent.finalized = true;
@@ -355,7 +295,7 @@ contract USDTCreditReserve is IUSDTCreditReserve, AccessControl, EIP712, Reentra
     }
 
     function _requireBacked(CreditEvent storage creditEvent) internal view {
-        uint256 outstandingCredit = creditEvent.freeTotal + creditEvent.lockedTotal;
+        uint256 outstandingCredit = creditEvent.freeTotal;
         _requireFunded(creditEvent);
         if (usdt.balanceOf(address(this)) < outstandingCredit) {
             revert InsufficientBacking();
@@ -363,7 +303,7 @@ contract USDTCreditReserve is IUSDTCreditReserve, AccessControl, EIP712, Reentra
     }
 
     function _requireFunded(CreditEvent storage creditEvent) internal view {
-        uint256 outstandingCredit = creditEvent.freeTotal + creditEvent.lockedTotal;
+        uint256 outstandingCredit = creditEvent.freeTotal;
         if (outstandingCredit + creditEvent.redeemedTotal + creditEvent.marketWithdrawnTotal > creditEvent.fundedUsdt) {
             revert InsufficientBacking();
         }

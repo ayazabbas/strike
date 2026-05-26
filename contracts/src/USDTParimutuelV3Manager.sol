@@ -37,8 +37,6 @@ contract USDTParimutuelV3Manager is AccessControl, ReentrancyGuard {
     struct SettlementSnapshot {
         bool initialized;
         uint256 totalWinningRewardShares;
-        uint256 realWinningRewardShares;
-        uint256 realLosingPrincipal;
     }
 
     bytes32 public constant ADMIN_ROLE = keccak256("ADMIN_ROLE");
@@ -81,9 +79,7 @@ contract USDTParimutuelV3Manager is AccessControl, ReentrancyGuard {
         uint256 principalAdded,
         uint256 rewardSharesOut
     );
-    event LosingCreditSettled(
-        uint256 indexed marketId, address indexed user, uint256 consumedCredit, uint256 withdrawnToVault
-    );
+    event LosingCreditSettled(uint256 indexed marketId, address indexed user, uint256 consumedCredit);
     event Claimed(uint256 indexed marketId, address indexed user, uint256 realPayout, uint256 creditPayout);
     event Refunded(uint256 indexed marketId, address indexed user, uint256 realRefund, uint256 creditRefund);
 
@@ -97,6 +93,7 @@ contract USDTParimutuelV3Manager is AccessControl, ReentrancyGuard {
     error Slippage();
     error TransferShortfall();
     error CreditDisabled();
+    error CreditFeesUnsupported();
     error MarketNotResolved();
     error MarketNotRefundable();
     error NoWinner();
@@ -105,7 +102,6 @@ contract USDTParimutuelV3Manager is AccessControl, ReentrancyGuard {
     error EmptyOutcomes();
     error DuplicateOutcome();
     error AlreadySettled();
-    error CreditLossNotSettled();
     error MissingCreditEvent();
 
     constructor(address admin, address factory_, address vault_, address creditReserve_, address feeRecipient_) {
@@ -186,11 +182,9 @@ contract USDTParimutuelV3Manager is AccessControl, ReentrancyGuard {
 
         BuyQuote memory quote = _quoteBuy(_outcomePools[marketId][outcomeId].principal, creditAmount, market.feeBps);
         if (quote.rewardSharesOut < minRewardSharesOut) revert Slippage();
+        if (quote.feeAmount > 0) revert CreditFeesUnsupported();
 
-        creditReserve.lockCredit(market.creditEventId, msg.sender, creditAmount);
-        if (quote.feeAmount > 0) {
-            creditReserve.settleCreditPayout(market.creditEventId, msg.sender, quote.feeAmount, 0);
-        }
+        creditReserve.spendCredit(market.creditEventId, msg.sender, address(vault), creditAmount);
 
         _applyBuy(marketId, msg.sender, outcomeId, quote, true);
 
@@ -212,8 +206,6 @@ contract USDTParimutuelV3Manager is AccessControl, ReentrancyGuard {
         if (market.state != USDTParimutuelV3MarketState.Resolved) revert MarketNotResolved();
         if (market.creditEventId == 0) revert MissingCreditEvent();
 
-        SettlementSnapshot memory snapshot = _snapshotSettlement(marketId, market);
-
         for (uint256 i = 0; i < users.length; i++) {
             address user = users[i];
             if (losingCreditSettled[marketId][user]) revert AlreadySettled();
@@ -222,22 +214,13 @@ contract USDTParimutuelV3Manager is AccessControl, ReentrancyGuard {
                 - _creditPositions[marketId][user][market.winningOutcomeId].principal;
             if (losingCreditPrincipal == 0) {
                 losingCreditSettled[marketId][user] = true;
-                emit LosingCreditSettled(marketId, user, 0, 0);
+                emit LosingCreditSettled(marketId, user, 0);
                 continue;
             }
 
-            uint256 withdrawAmount;
-            if (snapshot.realWinningRewardShares > 0 && snapshot.totalWinningRewardShares > 0) {
-                withdrawAmount = Math.mulDiv(
-                    losingCreditPrincipal, snapshot.realWinningRewardShares, snapshot.totalWinningRewardShares
-                );
-            }
-
             losingCreditSettled[marketId][user] = true;
-            creditReserve.settleCreditPayoutAndWithdraw(
-                market.creditEventId, user, losingCreditPrincipal, 0, address(vault), withdrawAmount
-            );
-            emit LosingCreditSettled(marketId, user, losingCreditPrincipal, withdrawAmount);
+            creditReserve.settleCredit(market.creditEventId, user, losingCreditPrincipal, 0);
+            emit LosingCreditSettled(marketId, user, losingCreditPrincipal);
         }
     }
 
@@ -250,21 +233,12 @@ contract USDTParimutuelV3Manager is AccessControl, ReentrancyGuard {
         if (market.state != USDTParimutuelV3MarketState.Resolved) revert MarketNotResolved();
         if (!market.hasWinner) revert NoWinner();
 
-        SettlementSnapshot memory snapshot = _snapshotSettlement(marketId, market);
+        _snapshotSettlement(marketId, market);
         amounts = _previewClaim(marketId, market, user);
         if (amounts.realPayout == 0 && amounts.creditPayout == 0 && amounts.unsettledLosingCreditPrincipal == 0) {
             revert NothingToClaim();
         }
-        if (amounts.unsettledLosingCreditPrincipal > 0) revert CreditLossNotSettled();
 
-        USDTParimutuelV3Position memory creditWinningPosition =
-            _creditPositions[marketId][user][market.winningOutcomeId];
-        uint256 realBackingForCreditPayout;
-        if (creditWinningPosition.rewardShares > 0 && snapshot.totalWinningRewardShares > 0) {
-            realBackingForCreditPayout = Math.mulDiv(
-                snapshot.realLosingPrincipal, creditWinningPosition.rewardShares, snapshot.totalWinningRewardShares
-            );
-        }
         marketTotalPrincipal[marketId] -= amounts.realPayout + amounts.creditPayout;
 
         for (uint8 outcomeId = 0; outcomeId < market.outcomeCount; outcomeId++) {
@@ -281,14 +255,15 @@ contract USDTParimutuelV3Manager is AccessControl, ReentrancyGuard {
             delete _creditPositions[marketId][user][outcomeId];
         }
 
-        if (amounts.winningCreditPrincipal > 0 || amounts.creditPayout > 0) {
-            if (realBackingForCreditPayout > 0) {
-                vault.transferTo(address(creditReserve), realBackingForCreditPayout);
-                creditReserve.fundFromMarketSettlement(market.creditEventId, realBackingForCreditPayout);
+        uint256 consumedCredit = amounts.winningCreditPrincipal + amounts.unsettledLosingCreditPrincipal;
+        if (consumedCredit > 0 || amounts.creditPayout > 0) {
+            if (amounts.creditPayout > 0) {
+                vault.transferTo(address(creditReserve), amounts.creditPayout);
             }
-            creditReserve.settleCreditPayout(
-                market.creditEventId, user, amounts.winningCreditPrincipal, amounts.creditPayout
-            );
+            creditReserve.settleCredit(market.creditEventId, user, consumedCredit, amounts.creditPayout);
+            if (amounts.unsettledLosingCreditPrincipal > 0) {
+                losingCreditSettled[marketId][user] = true;
+            }
         }
 
         emit Claimed(marketId, user, amounts.realPayout, amounts.creditPayout);
@@ -328,7 +303,8 @@ contract USDTParimutuelV3Manager is AccessControl, ReentrancyGuard {
         marketTotalPrincipal[marketId] -= amounts.realRefund + amounts.creditRefund;
 
         if (amounts.creditRefund > 0) {
-            creditReserve.returnLockedCredit(market.creditEventId, user, amounts.creditRefund);
+            vault.transferTo(address(creditReserve), amounts.creditRefund);
+            creditReserve.settleCredit(market.creditEventId, user, amounts.creditRefund, amounts.creditRefund);
         }
 
         emit Refunded(marketId, user, amounts.realRefund, amounts.creditRefund);
@@ -464,25 +440,8 @@ contract USDTParimutuelV3Manager is AccessControl, ReentrancyGuard {
         }
 
         USDTParimutuelV3OutcomePool memory winningPool = _outcomePools[marketId][market.winningOutcomeId];
-        snapshot = SettlementSnapshot({
-            initialized: true,
-            totalWinningRewardShares: winningPool.rewardShares,
-            realWinningRewardShares: winningPool.realRewardShares,
-            realLosingPrincipal: _realLosingPrincipal(marketId, market.outcomeCount, market.winningOutcomeId)
-        });
+        snapshot = SettlementSnapshot({initialized: true, totalWinningRewardShares: winningPool.rewardShares});
         _settlementSnapshots[marketId] = snapshot;
-    }
-
-    function _realLosingPrincipal(uint256 marketId, uint8 outcomeCount, uint8 winningOutcomeId)
-        internal
-        view
-        returns (uint256 realLosingPrincipal)
-    {
-        for (uint8 outcomeId = 0; outcomeId < outcomeCount; outcomeId++) {
-            if (outcomeId != winningOutcomeId) {
-                realLosingPrincipal += _outcomePools[marketId][outcomeId].realPrincipal;
-            }
-        }
     }
 
     function _quoteBuy(uint256 currentPrincipal, uint256 amountIn, uint16 feeBps)

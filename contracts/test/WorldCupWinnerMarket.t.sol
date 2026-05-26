@@ -109,6 +109,19 @@ contract WorldCupWinnerMarketTest is Test {
         market.buyWithUsdt(0, 100e18, 0);
     }
 
+    function test_CreditBuyRejectsNonZeroFeeMarketsToAvoidStrandedCreditFees() public {
+        WorldCupWinnerMarket feeMarket = new WorldCupWinnerMarket(
+            admin, address(usdt), address(reserve), address(resolver), EVENT_ID, feeRecipient, 100
+        );
+        vm.prank(admin);
+        reserve.setAuthorizedMarket(EVENT_ID, address(feeMarket), true);
+        _claimCredit(bob, 100e18);
+
+        vm.expectRevert(WorldCupWinnerMarket.CreditFeesUnsupported.selector);
+        vm.prank(bob);
+        feeMarket.buyWithCredit(0, 100e18, 0);
+    }
+
     function test_MixedSettlementCreditLoserFundsRealWinner() public {
         _claimCredit(bob, 100e18);
 
@@ -131,6 +144,58 @@ contract WorldCupWinnerMarketTest is Test {
         assertEq(reserve.lockedCreditBalance(EVENT_ID, bob), 0);
     }
 
+    function test_ManyLosingCreditUsersDoNotBlockRealWinnerClaimAndCanSettleLater() public {
+        vm.prank(alice);
+        market.buyWithUsdt(0, 100e18, 0);
+
+        address firstLoser = address(0);
+        for (uint160 i = 1; i <= 8; i++) {
+            address loser = address(0x3000 + i);
+            if (i == 1) firstLoser = loser;
+            _claimCredit(loser, 100e18);
+            vm.prank(loser);
+            market.buyWithCredit(1, 100e18, 0);
+        }
+
+        _adminResolve(0);
+
+        uint256 aliceBefore = usdt.balanceOf(alice);
+        vm.prank(alice);
+        market.claim(new address[](0));
+
+        assertEq(usdt.balanceOf(alice), aliceBefore + 900e18);
+        assertEq(reserve.lockedCreditBalance(EVENT_ID, firstLoser), 100e18);
+
+        address[] memory users = new address[](1);
+        users[0] = firstLoser;
+        market.settleLosingCredit(users);
+        assertEq(reserve.lockedCreditBalance(EVENT_ID, firstLoser), 0);
+        assertEq(reserve.creditBalance(EVENT_ID, firstLoser), 0);
+    }
+
+    function test_ManyLosingCreditUsersDoNotBlockCreditWinnerClaim() public {
+        _claimCredit(alice, 100e18);
+        vm.prank(alice);
+        market.buyWithCredit(0, 100e18, 0);
+
+        for (uint160 i = 1; i <= 8; i++) {
+            address loser = address(0x4000 + i);
+            _claimCredit(loser, 100e18);
+            vm.prank(loser);
+            market.buyWithCredit(1, 100e18, 0);
+        }
+
+        _adminResolve(0);
+
+        uint256 aliceBefore = usdt.balanceOf(alice);
+        vm.prank(alice);
+        market.claim(new address[](0));
+
+        assertEq(usdt.balanceOf(alice), aliceBefore);
+        assertEq(reserve.creditBalance(EVENT_ID, alice), 900e18);
+        assertEq(reserve.lockedCreditBalance(EVENT_ID, alice), 0);
+    }
+
     function test_CreditWinnerReceivesReserveCreditNotUsdtTransfer() public {
         _claimCredit(bob, 100e18);
 
@@ -151,10 +216,16 @@ contract WorldCupWinnerMarketTest is Test {
         assertEq(usdt.balanceOf(address(market)), 0);
     }
 
-    function test_AdminFallbackResolutionWorks() public {
+    function test_AdminFallbackRequiresClosedMarket() public {
         vm.prank(alice);
         market.buyWithUsdt(7, 100e18, 0);
 
+        vm.expectRevert(WorldCupWinnerMarket.MarketNotClosed.selector);
+        vm.prank(admin);
+        market.adminResolve(7, "fallback");
+
+        vm.prank(admin);
+        market.closeBetting();
         vm.prank(admin);
         market.adminResolve(7, "fallback");
 
@@ -193,6 +264,24 @@ contract WorldCupWinnerMarketTest is Test {
         resolver.setStatus(4, true, true, false);
         resolver.setStatus(5, true, true, false);
         vm.expectRevert(WorldCupWinnerMarket.NoClearWinner.selector);
+        market.resolveFromFlap();
+    }
+
+    function test_ResolveFromFlapIgnoresFlaggedNonWinnerButBlocksFlaggedWinner() public {
+        vm.prank(admin);
+        market.closeBetting();
+
+        resolver.setStatus(2, true, false, true);
+        resolver.setStatus(8, true, true, false);
+        market.resolveFromFlap();
+
+        assertEq(market.winningOutcomeId(), 8);
+
+        setUp();
+        vm.prank(admin);
+        market.closeBetting();
+        resolver.setStatus(8, true, true, true);
+        vm.expectRevert(WorldCupWinnerMarket.FlaggedOutcome.selector);
         market.resolveFromFlap();
     }
 
@@ -320,6 +409,8 @@ contract WorldCupWinnerMarketTest is Test {
     }
 
     function _adminResolve(uint8 outcomeId) internal {
+        vm.prank(admin);
+        market.closeBetting();
         vm.prank(admin);
         market.adminResolve(outcomeId, "test");
     }

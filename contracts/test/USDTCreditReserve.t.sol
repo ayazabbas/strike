@@ -136,18 +136,21 @@ contract USDTCreditReserveTest is Test {
         reserve.claimCredit(EVENT_ID, 100e18, staleStart, staleEnd, staleSig);
     }
 
-    function test_AuthorizedMarketCanLockAndReturnCredit() public {
+    function test_AuthorizedMarketCanSpendAndReturnCredit() public {
         _claim(alice, 1_000e18);
 
         vm.prank(market);
-        reserve.lockCredit(EVENT_ID, alice, 400e18);
+        reserve.spendCredit(EVENT_ID, alice, vault, 400e18);
 
         USDTCreditReserve.CreditAccount memory account = reserve.getAccount(EVENT_ID, alice);
         assertEq(account.freeCredit, 600e18);
         assertEq(account.lockedCredit, 400e18);
+        assertEq(usdt.balanceOf(vault), 400e18);
 
+        vm.prank(vault);
+        usdt.transfer(address(reserve), 150e18);
         vm.prank(market);
-        reserve.returnLockedCredit(EVENT_ID, alice, 150e18);
+        reserve.settleCredit(EVENT_ID, alice, 150e18, 150e18);
 
         account = reserve.getAccount(EVENT_ID, alice);
         assertEq(account.freeCredit, 750e18);
@@ -158,10 +161,13 @@ contract USDTCreditReserveTest is Test {
         _claim(alice, 1_000e18);
 
         vm.prank(market);
-        reserve.lockCredit(EVENT_ID, alice, 500e18);
+        reserve.spendCredit(EVENT_ID, alice, vault, 500e18);
 
+        usdt.mint(vault, 1_000e18);
+        vm.prank(vault);
+        usdt.transfer(address(reserve), 1_500e18);
         vm.prank(market);
-        reserve.settleCreditPayout(EVENT_ID, alice, 500e18, 1_500e18);
+        reserve.settleCredit(EVENT_ID, alice, 500e18, 1_500e18);
 
         USDTCreditReserve.CreditAccount memory account = reserve.getAccount(EVENT_ID, alice);
         assertEq(account.assignedBaseline, 1_000e18);
@@ -179,25 +185,22 @@ contract USDTCreditReserveTest is Test {
         assertEq(authorizedMarketCount, 1);
         assertEq(settledConsumedTotal, 500e18);
         assertEq(settledPayoutTotal, 1_500e18);
-        assertEq(marketWithdrawnTotal, 0);
+        assertEq(marketWithdrawnTotal, 500e18);
     }
 
-    function test_AuthorizedMarketCanSettleCreditPayoutAndWithdrawConsumedBacking() public {
+    function test_AuthorizedMarketSpendsBackingAtBuyTime() public {
         _claim(alice, 1_000e18);
-
-        vm.prank(market);
-        reserve.lockCredit(EVENT_ID, alice, 600e18);
 
         uint256 reserveBefore = usdt.balanceOf(address(reserve));
 
         vm.prank(market);
-        reserve.settleCreditPayoutAndWithdraw(EVENT_ID, alice, 600e18, 200e18, vault, 400e18);
+        reserve.spendCredit(EVENT_ID, alice, vault, 600e18);
 
         USDTCreditReserve.CreditAccount memory account = reserve.getAccount(EVENT_ID, alice);
-        assertEq(account.freeCredit, 600e18);
-        assertEq(account.lockedCredit, 0);
-        assertEq(usdt.balanceOf(vault), 400e18);
-        assertEq(usdt.balanceOf(address(reserve)), reserveBefore - 400e18);
+        assertEq(account.freeCredit, 400e18);
+        assertEq(account.lockedCredit, 600e18);
+        assertEq(usdt.balanceOf(vault), 600e18);
+        assertEq(usdt.balanceOf(address(reserve)), reserveBefore - 600e18);
 
         (
             ,,,,,,,
@@ -207,71 +210,82 @@ contract USDTCreditReserveTest is Test {
             uint256 settledPayoutTotal,
             uint256 marketWithdrawnTotal
         ) = reserve.creditEvents(EVENT_ID);
-        assertEq(freeTotal, 600e18);
-        assertEq(lockedTotal, 0);
-        assertEq(settledConsumedTotal, 600e18);
-        assertEq(settledPayoutTotal, 200e18);
-        assertEq(marketWithdrawnTotal, 400e18);
-        assertGe(usdt.balanceOf(address(reserve)), freeTotal + lockedTotal);
+        assertEq(freeTotal, 400e18);
+        assertEq(lockedTotal, 600e18);
+        assertEq(settledConsumedTotal, 0);
+        assertEq(settledPayoutTotal, 0);
+        assertEq(marketWithdrawnTotal, 600e18);
+        assertGe(usdt.balanceOf(address(reserve)), freeTotal);
     }
 
-    function test_AuthorizedMarketCannotFundSettlementWithoutIncrementalTransfer() public {
-        assertEq(usdt.balanceOf(address(reserve)), 10_000e18);
-        assertEq(reserve.lastObservedUsdtBalance(), 10_000e18);
+    function test_AuthorizedMarketCannotSettleReturnWithoutIncrementalTransfer() public {
+        _claim(alice, 1_000e18);
+
+        vm.prank(market);
+        reserve.spendCredit(EVENT_ID, alice, vault, 500e18);
+
+        assertEq(usdt.balanceOf(address(reserve)), 9_500e18);
+        assertEq(reserve.lastObservedUsdtBalance(), 9_500e18);
 
         vm.expectRevert(USDTCreditReserve.InsufficientBacking.selector);
         vm.prank(market);
-        reserve.fundFromMarketSettlement(EVENT_ID, 1_000e18);
+        reserve.settleCredit(EVENT_ID, alice, 500e18, 1_000e18);
 
         (,,,,, uint256 fundedUsdt,,,,,,,,) = reserve.creditEvents(EVENT_ID);
         assertEq(fundedUsdt, 10_000e18);
+        assertEq(usdt.balanceOf(address(reserve)), 9_500e18);
+        assertEq(reserve.lastObservedUsdtBalance(), 9_500e18);
+    }
+
+    function test_AuthorizedMarketCanSettleReturnAfterTransfer() public {
+        _claim(alice, 1_000e18);
+
+        vm.prank(market);
+        reserve.spendCredit(EVENT_ID, alice, vault, 500e18);
+
+        vm.prank(vault);
+        usdt.transfer(address(reserve), 500e18);
+        vm.prank(market);
+        reserve.settleCredit(EVENT_ID, alice, 500e18, 500e18);
+
+        (,,,,, uint256 fundedUsdt,,,,,,,,) = reserve.creditEvents(EVENT_ID);
+        assertEq(fundedUsdt, 10_500e18);
         assertEq(usdt.balanceOf(address(reserve)), 10_000e18);
         assertEq(reserve.lastObservedUsdtBalance(), 10_000e18);
     }
 
-    function test_AuthorizedMarketCanFundSettlementAfterTransfer() public {
-        usdt.mint(market, 1_000e18);
-
-        vm.startPrank(market);
-        usdt.transfer(address(reserve), 1_000e18);
-        reserve.fundFromMarketSettlement(EVENT_ID, 1_000e18);
-        vm.stopPrank();
-
-        (,,,,, uint256 fundedUsdt,,,,,,,,) = reserve.creditEvents(EVENT_ID);
-        assertEq(fundedUsdt, 11_000e18);
-        assertEq(usdt.balanceOf(address(reserve)), 11_000e18);
-        assertEq(reserve.lastObservedUsdtBalance(), 11_000e18);
-    }
-
-    function test_CannotWithdrawMoreThanConsumedLockedCredit() public {
+    function test_CannotSettleMoreThanLockedCredit() public {
         _claim(alice, 100e18);
 
         vm.prank(market);
-        reserve.lockCredit(EVENT_ID, alice, 100e18);
+        reserve.spendCredit(EVENT_ID, alice, vault, 100e18);
 
-        vm.expectRevert(USDTCreditReserve.WithdrawExceedsConsumedCredit.selector);
+        vm.expectRevert(USDTCreditReserve.InsufficientLockedCredit.selector);
         vm.prank(market);
-        reserve.settleCreditPayoutAndWithdraw(EVENT_ID, alice, 50e18, 0, vault, 51e18);
+        reserve.settleCredit(EVENT_ID, alice, 101e18, 0);
     }
 
-    function test_UnauthorizedMarketCannotWithdrawConsumedBacking() public {
+    function test_UnauthorizedMarketCannotSettleCredit() public {
         _claim(alice, 100e18);
 
         vm.prank(market);
-        reserve.lockCredit(EVENT_ID, alice, 100e18);
+        reserve.spendCredit(EVENT_ID, alice, vault, 100e18);
 
         vm.expectRevert(USDTCreditReserve.UnauthorizedMarket.selector);
         vm.prank(unauthorizedMarket);
-        reserve.settleCreditPayoutAndWithdraw(EVENT_ID, alice, 100e18, 0, vault, 100e18);
+        reserve.settleCredit(EVENT_ID, alice, 100e18, 0);
     }
 
     function test_FinalizationAndRedeemOnlyExcessAboveBaseline() public {
         _claim(alice, 1_000e18);
 
-        vm.startPrank(market);
-        reserve.lockCredit(EVENT_ID, alice, 500e18);
-        reserve.settleCreditPayout(EVENT_ID, alice, 500e18, 1_500e18);
-        vm.stopPrank();
+        vm.prank(market);
+        reserve.spendCredit(EVENT_ID, alice, vault, 500e18);
+        usdt.mint(vault, 1_000e18);
+        vm.prank(vault);
+        usdt.transfer(address(reserve), 1_500e18);
+        vm.prank(market);
+        reserve.settleCredit(EVENT_ID, alice, 500e18, 1_500e18);
 
         vm.warp(block.timestamp + 7 days);
         vm.prank(admin);
@@ -303,23 +317,31 @@ contract USDTCreditReserveTest is Test {
 
         vm.expectRevert(USDTCreditReserve.UnauthorizedMarket.selector);
         vm.prank(unauthorizedMarket);
-        reserve.lockCredit(EVENT_ID, alice, 1e18);
+        reserve.spendCredit(EVENT_ID, alice, vault, 1e18);
 
         vm.expectRevert(USDTCreditReserve.InsufficientCredit.selector);
         vm.prank(market);
-        reserve.lockCredit(EVENT_ID, alice, 101e18);
+        reserve.spendCredit(EVENT_ID, alice, vault, 101e18);
 
         vm.prank(market);
-        reserve.lockCredit(EVENT_ID, alice, 100e18);
+        reserve.spendCredit(EVENT_ID, alice, vault, 100e18);
 
         vm.expectRevert(USDTCreditReserve.InsufficientLockedCredit.selector);
         vm.prank(market);
-        reserve.returnLockedCredit(EVENT_ID, alice, 101e18);
+        reserve.settleCredit(EVENT_ID, alice, 101e18, 0);
 
-        vm.expectRevert(USDTCreditReserve.InvalidWindow.selector);
+        vm.expectRevert(USDTCreditReserve.ActiveAuthorizedMarkets.selector);
         vm.warp(block.timestamp + 7 days);
         vm.prank(admin);
         reserve.finalizeEvent(EVENT_ID);
+
+        vm.prank(admin);
+        reserve.setAuthorizedMarket(EVENT_ID, market, false);
+        vm.prank(admin);
+        reserve.finalizeEvent(EVENT_ID);
+
+        (,,,, bool finalized,,,,,,,,,) = reserve.creditEvents(EVENT_ID);
+        assertTrue(finalized);
     }
 
     function test_FinalizationRequiresNoAuthorizedMarkets() public {
@@ -354,10 +376,10 @@ contract USDTCreditReserveTest is Test {
 
         vm.expectRevert(USDTCreditReserve.UnauthorizedMarket.selector);
         vm.prank(market);
-        reserve.lockCredit(EVENT_ID, bob, 1e18);
+        reserve.spendCredit(EVENT_ID, bob, vault, 1e18);
 
         vm.prank(market);
-        reserve.lockCredit(SECOND_EVENT_ID, bob, 25e18);
+        reserve.spendCredit(SECOND_EVENT_ID, bob, vault, 25e18);
 
         USDTCreditReserve.CreditAccount memory account = reserve.getAccount(SECOND_EVENT_ID, bob);
         assertEq(account.freeCredit, 75e18);
@@ -377,14 +399,16 @@ contract USDTCreditReserveTest is Test {
         reserve.claimCredit(EVENT_ID, 1e18, claimStart, claimEnd, sig);
 
         vm.prank(market);
-        reserve.lockCredit(EVENT_ID, alice, 10_000e18);
+        reserve.spendCredit(EVENT_ID, alice, vault, 10_000e18);
 
         vm.expectRevert(USDTCreditReserve.InsufficientBacking.selector);
         vm.prank(market);
-        reserve.settleCreditPayout(EVENT_ID, alice, 10_000e18, 10_001e18);
+        reserve.settleCredit(EVENT_ID, alice, 10_000e18, 10_001e18);
 
+        vm.prank(vault);
+        usdt.transfer(address(reserve), 10_000e18);
         vm.prank(market);
-        reserve.settleCreditPayout(EVENT_ID, alice, 10_000e18, 10_000e18);
+        reserve.settleCredit(EVENT_ID, alice, 10_000e18, 10_000e18);
 
         vm.warp(block.timestamp + 7 days);
         vm.prank(admin);
@@ -400,19 +424,23 @@ contract USDTCreditReserveTest is Test {
             uint256 redeemedTotal,,,,
             uint256 marketWithdrawnTotal
         ) = reserve.creditEvents(EVENT_ID);
-        assertEq(freeTotal + lockedTotal + redeemedTotal + marketWithdrawnTotal, fundedUsdt);
-        assertEq(usdt.balanceOf(address(reserve)), freeTotal + lockedTotal);
+        assertEq(freeTotal + redeemedTotal + marketWithdrawnTotal, fundedUsdt);
+        assertEq(lockedTotal, 0);
+        assertEq(usdt.balanceOf(address(reserve)), freeTotal);
     }
 
     function test_FinalSolvencyTotalsIncludeMarketWithdrawalsAndOutstandingCreditBacked() public {
         _claim(alice, 10_000e18);
 
         vm.prank(market);
-        reserve.lockCredit(EVENT_ID, alice, 10_000e18);
+        reserve.spendCredit(EVENT_ID, alice, vault, 10_000e18);
 
         uint256 reserveBefore = usdt.balanceOf(address(reserve));
+        usdt.mint(vault, 6_000e18);
+        vm.prank(vault);
+        usdt.transfer(address(reserve), 6_000e18);
         vm.prank(market);
-        reserve.settleCreditPayoutAndWithdraw(EVENT_ID, alice, 10_000e18, 6_000e18, vault, 4_000e18);
+        reserve.settleCredit(EVENT_ID, alice, 10_000e18, 6_000e18);
 
         vm.warp(block.timestamp + 7 days);
         vm.prank(admin);
@@ -430,11 +458,11 @@ contract USDTCreditReserveTest is Test {
         ) = reserve.creditEvents(EVENT_ID);
         assertEq(freeTotal, 6_000e18);
         assertEq(lockedTotal, 0);
-        assertEq(marketWithdrawnTotal, 4_000e18);
-        assertEq(freeTotal + lockedTotal + redeemedTotal + marketWithdrawnTotal, fundedUsdt);
-        assertEq(usdt.balanceOf(vault), 4_000e18);
-        assertEq(usdt.balanceOf(address(reserve)), reserveBefore - 4_000e18);
-        assertEq(usdt.balanceOf(address(reserve)), freeTotal + lockedTotal);
+        assertEq(marketWithdrawnTotal, 10_000e18);
+        assertEq(freeTotal + redeemedTotal + marketWithdrawnTotal, fundedUsdt);
+        assertEq(usdt.balanceOf(vault), 10_000e18);
+        assertEq(usdt.balanceOf(address(reserve)), reserveBefore + 6_000e18);
+        assertEq(usdt.balanceOf(address(reserve)), freeTotal);
     }
 
     function test_GrantCannotReplayAcrossReserveAddress() public {
