@@ -23,7 +23,7 @@ For public Flap Token Pools, creators do **not** choose the AI model and do **no
 
 ## Public Flap Token Pool Prompt Scope
 
-The current public Flap Token Pool flow is optimized for **token-data questions** resolvable from Ave-supported information, such as:
+The current public Flap Token Pool flow is optimized for **token-data questions** resolvable from current Ave-supported information, such as:
 
 - price,
 - liquidity,
@@ -31,7 +31,17 @@ The current public Flap Token Pool flow is optimized for **token-data questions*
 - FDV / market cap,
 - other token-specific metrics available to the resolver.
 
-Avoid prompts that require social/news/web evidence, exchange listing announcements, Discord or X activity, subjective judgments, or private evidence. Those are not suitable for the current public Flap Token Pool flow.
+Avoid prompts that require historical prices, social/news/web evidence, exchange listing announcements, Discord or X activity, subjective judgments, or private evidence. Those are not suitable for the current public Flap Token Pool flow.
+
+## Current Oracle Limitations
+
+The FLAP AI Oracle is not a general-purpose truth engine. For public Flap Token Pools, creators should assume:
+
+- Ave data is read at AI invocation time; the public flow is not suitable for historical snapshots or before/after comparisons.
+- The hosted creator flow uses a fixed Strike-selected model and tool setup.
+- Evidence outside the supported token-data toolset may be unavailable or unsuitable.
+- The oracle returns one numeric outcome index, so every valid result must map cleanly to one listed outcome.
+- Ambiguous prompts, unavailable data, oracle failures, or challenged proposals may require fallback/admin handling.
 
 ## Writing Good Prompts
 
@@ -41,7 +51,7 @@ They should include:
 
 1. **Token + chain** — e.g. token contract on BNB Chain.
 2. **Data source scope** — current public Flap pools should use Ave token data.
-3. **Exact UTC time/window** — no vague “today”, “soon”, or “after launch”.
+3. **Resolution-time data rule** — say that the market should use Ave data when the market resolves; do not depend on past snapshots.
 4. **Threshold and equality rule** — define “above”, “at or below”, “greater than or equal”, etc.
 5. **Outcome mapping** — every outcome must be mutually exclusive and cover all possible results.
 
@@ -49,9 +59,9 @@ They should include:
 
 | Use case | Better prompt |
 |---|---|
-| Price threshold | “Resolve using Ave spot price data for TOKEN on BNB Chain at 00:00 UTC on June 30, 2026. Choose `Above $0.10` only if price is strictly greater than $0.10; otherwise choose `At or below $0.10`.” |
-| Liquidity threshold | “Resolve using Ave liquidity data for TOKEN on BNB Chain at 00:00 UTC on June 30, 2026. Choose `Above $100k` only if liquidity is strictly greater than $100,000; otherwise choose `At or below $100k`.” |
-| FDV threshold | “Resolve using Ave FDV or market cap data for TOKEN on BNB Chain at 00:00 UTC on July 15, 2026. Choose `Reached` only if FDV is greater than or equal to $50,000,000; otherwise choose `Not reached`.” |
+| Price threshold | “Resolve using Ave spot price data for TOKEN on BNB Chain when this market resolves. Choose `Above $0.10` only if price is strictly greater than $0.10; otherwise choose `At or below $0.10`.” |
+| Liquidity threshold | “Resolve using Ave liquidity data for TOKEN on BNB Chain when this market resolves. Choose `Above $100k` only if liquidity is strictly greater than $100,000; otherwise choose `At or below $100k`.” |
+| FDV threshold | “Resolve using Ave FDV or market cap data for TOKEN on BNB Chain when this market resolves. Choose `Reached` only if FDV is greater than or equal to $50,000,000; otherwise choose `Not reached`.” |
 
 ### Avoid
 

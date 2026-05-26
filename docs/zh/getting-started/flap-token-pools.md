@@ -4,6 +4,22 @@ FLAP 代币池属于 STRIKE 中面向公开创建者的 pool 形式，用于由 
 
 FLAP 代币池已在 [app.strike.pm/flap](https://app.strike.pm/flap) 上线。
 
+## 创建者指南
+
+当你想为公开 BEP20 代币创建一个简单、由 AI 结算的代币数据市场时，可以使用 FLAP 代币池。当前托管创建流程适合 STRIKE/FLAP resolver 能在请求结算时通过 Ave 当前代币数据回答的问题。
+
+创建前：
+
+1. **选择抵押代币** — 选择用户买入和领取时使用的 BEP20 代币。外部抵押资产存在代币风险，应避免转账异常、高转账税、approval 受限或流动性很薄的代币。
+2. **定义 2-8 个结果** — 结果必须互斥，并覆盖所有有效情况。阈值不满足时也应有明确的 fallback outcome。
+3. **设置交易与结算时间** — `tradingCloseTime` 后停止买入；`resolutionTime` 后请求 AI 预言机。应给用户留出足够交易时间。
+4. **编写可结算 prompt** — 写清代币、链、指标、阈值、时间规则、相等情况处理方式，以及完整 outcome mapping。
+5. **检查质量提示** — 如果 prompt 看起来主观、不受支持或超出当前 Ave 代币数据范围，应用可能会提示风险。
+6. **提交创建者 bond** — 官方创建需要配置的 `0.05 BNB` bond 及 gas。
+7. **提交创建交易** — STRIKE 会托管经过 hash 校验的 metadata，然后你的钱包提交包含 metadata hash/URI 和 prompt 的链上交易。
+
+创建后，可以分享 pool URL，关注交易关闭前的买入情况，并在 AI 提出结果后留意挑战窗口。如果结果被挑战，或 AI 路径失败，STRIKE 可以通过配置的 fallback/admin 流程处理。
+
 ## 它们是什么
 
 一个 FLAP Token Pool 包含：
@@ -32,7 +48,7 @@ STRIKE 应用只展示通过 official hosted 流程创建的 pools：
 
 ## Prompt 要求
 
-当前公开 FLAP Token Pool 流程针对代币数据市场优化。Prompts 应可通过 Ave 支持的代币信息解析，例如：
+当前公开 FLAP Token Pool 流程针对代币数据市场优化。Prompts 应可通过 Ave 支持的当前代币信息解析，例如：
 
 - price；
 - liquidity；
@@ -40,19 +56,30 @@ STRIKE 应用只展示通过 official hosted 流程创建的 pools：
 - FDV / 市场 cap；
 - resolver toolset 可用的代币相关指标。
 
-避免使用需要社交、新闻、网页证据、交易所上币公告、Discord 或 X 活动、主观判断或私有证据的 prompt。这些问题不适合当前公开 FLAP Token Pool 流程。
+避免使用需要历史价格、社交、新闻、网页证据、交易所上币公告、Discord 或 X 活动、主观判断或私有证据的 prompt。这些问题不适合当前公开 FLAP Token Pool 流程。
 
 一个好的 prompt 应包含：
 
 - 准确的代币和链；
-- UTC 时间戳或明确的 UTC window；
+- 结算时数据规则；
 - 明确阈值；
 - 相等情况的处理规则；
 - 完整的结果 mapping。
 
 示例：
 
-> 结算时使用 BNB Chain 上该代币的 Ave liquidity data，以 June 30, 2026 00:00 UTC 为准。仅当 reported liquidity strictly greater than $100,000 时选择 "Above $100k"；否则选择 "At or below $100k"。
+> 结算时使用 BNB Chain 上该代币在本市场结算时的 Ave liquidity data。仅当 reported liquidity strictly greater than $100,000 时选择 "Above $100k"；否则选择 "At or below $100k"。
+
+## 当前 FLAP AI 预言机限制
+
+FLAP AI 预言机适合支持范围内的代币数据问题，但它不是通用真相引擎。当前公开 FLAP 代币池有以下限制：
+
+- **Ave 当前数据 only** — 公开 resolver 路径预期使用 AI 调用时的 Ave 代币信息。不应把它用于历史价格检查、before/after 对比，或需要过去快照的问题。
+- **证据范围有限** — 公开流程不适合社交、新闻、交易所上币、治理、Discord、X 或私有信息问题。
+- **固定 STRIKE-selected model** — 创建者不能在托管创建流程中选择 AI model、tool configuration，或支付费用切换到其他 model path。
+- **数字 outcome callback** — resolver 返回一个 outcome index。Prompt 必须把所有可能结果清晰映射到列出的 outcomes。
+- **边界情况需要挑战/fallback** — 模糊 prompt、数据不可用、预言机失败或被挑战的答案，可能需要管理员/fallback 处理。
+- **不保证支持所有代币** — 如果 Ave 无法为某个代币提供可靠数据，该市场可能不适合创建，或需要取消/退款。
 
 ## 生命周期
 

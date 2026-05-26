@@ -4,6 +4,22 @@ Flap Token Pools are Strike's public, creator-facing pool format for AI-resolved
 
 Flap Token Pools are live at [app.strike.pm/flap](https://app.strike.pm/flap).
 
+## Creator Guide
+
+Use Flap Token Pools when you want to launch a simple AI-resolved token-data market for a public BEP20 token. The current hosted creator flow is designed for questions that the Strike/FLAP resolver can answer from Ave token data at the time resolution is requested.
+
+Before creating a pool:
+
+1. **Pick the collateral token** — choose the BEP20 token users will spend and receive. External collateral carries token risk, so avoid tokens with broken transfers, high transfer taxes, blocked approvals, or thin liquidity.
+2. **Define 2-8 outcomes** — outcomes must be mutually exclusive and collectively cover every valid result. Include a clear fallback outcome when the threshold is not met.
+3. **Set trading and resolution times** — buying stops at `tradingCloseTime`; the AI oracle is requested after `resolutionTime`. Give users enough time to trade before the market closes.
+4. **Write a resolvable prompt** — describe the token, chain, metric, threshold, timing rule, equality rule, and exact outcome mapping.
+5. **Review the quality checks** — the app may flag prompts that look subjective, unsupported, or outside the current Ave token-data scope.
+6. **Post the creator bond** — official creation requires the configured `0.05 BNB` bond plus gas.
+7. **Submit the create transaction** — Strike hosts hash-checked metadata, then your wallet submits the on-chain transaction containing the metadata hash/URI and prompt.
+
+After creation, share the pool URL, monitor trading before close, and be prepared for the challenge window after AI proposes a winner. If a result is challenged or the AI path fails, Strike can resolve through the configured fallback/admin process.
+
 ## What They Are
 
 A Flap Token Pool has:
@@ -32,7 +48,7 @@ Direct on-chain pools remain valid contract-level markets, but they are not auto
 
 ## Prompt Requirements
 
-The current public Flap Token Pool flow is optimized for token-data markets. Prompts should be resolvable from Ave-supported token information such as:
+The current public Flap Token Pool flow is optimized for token-data markets. Prompts should be resolvable from current Ave-supported token information such as:
 
 - price,
 - liquidity,
@@ -40,19 +56,30 @@ The current public Flap Token Pool flow is optimized for token-data markets. Pro
 - FDV / market cap,
 - token-specific metrics available through the resolver's toolset.
 
-Avoid prompts that require social/news/web evidence, exchange listing announcements, Discord or X activity, subjective judgments, or private evidence. These are not suitable for the current public Flap Token Pool flow.
+Avoid prompts that require historical prices, social/news/web evidence, exchange listing announcements, Discord or X activity, subjective judgments, or private evidence. These are not suitable for the current public Flap Token Pool flow.
 
 A good prompt should include:
 
 - exact token and chain,
-- UTC timestamp or bounded UTC window,
+- resolution-time data rule,
 - explicit threshold,
 - equality rule,
 - complete outcome mapping.
 
 Example:
 
-> Resolve using Ave token liquidity data for TOKEN on BNB Chain at 00:00 UTC on June 30, 2026. Choose "Above $100k" only if reported liquidity is strictly greater than $100,000; otherwise choose "At or below $100k".
+> Resolve using Ave token liquidity data for TOKEN on BNB Chain when this market resolves. Choose "Above $100k" only if reported liquidity is strictly greater than $100,000; otherwise choose "At or below $100k".
+
+## Current FLAP AI Oracle Limitations
+
+The FLAP AI Oracle is useful for supported token-data questions, but it is not a general-purpose truth engine. Current public Flap Token Pools have these limitations:
+
+- **Ave current-data only** — the public resolver path is expected to use Ave token information at AI invocation time. It should not be used for historical price checks, "before/after" comparisons, or claims that require past snapshots.
+- **Limited evidence scope** — the public flow is not intended for social, news, exchange listing, governance, Discord, X, or private-information questions.
+- **Fixed Strike-selected model** — creators cannot choose the AI model, tool configuration, or pay for a different model path in the hosted creator flow.
+- **Numeric outcome callback** — the resolver returns one outcome index. Prompts must map every possible result cleanly to the listed outcomes.
+- **Challenge/fallback required for edge cases** — ambiguous prompts, unavailable data, oracle failures, or challenged answers may require admin/fallback handling.
+- **No guarantee for unsupported tokens** — if Ave cannot provide reliable data for a token, the market may be unsuitable or may need to be cancelled/refunded.
 
 ## Lifecycle
 
