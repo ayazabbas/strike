@@ -83,4 +83,4 @@
 
 * [路线图](project/roadmap.md)
 * [设计决策](project/design-decisions.md)
-* [社区代币](project/community-token.md)
+* [STRIKE 平台代币](project/community-token.md)

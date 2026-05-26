@@ -15,7 +15,8 @@ Markets can resolve through **Pyth Network** price feeds, the **Flap AI Oracle**
 - **Batch auction clearing** — orderbook markets match at a single uniform clearing price per batch, with pro-rata fills on the oversubscribed side
 - **Parimutuel pools** — 2–8 outcome markets where winners receive principal back plus a proportional share of losing pools
 - **Split pool timing** — parimutuel markets support separate `tradingCloseTime` and `resolutionTime`, so betting can close before the event resolves
-- **Multiple collateral types** — orderbook markets use USDT; standard pools use USDT or STRIKE; Flap Token Pools can use creator-selected BEP20 collateral
+- **Official platform token** — `$STRIKE` is the official platform token for the Strike protocol
+- **Multiple collateral types** — orderbook markets use USDT; standard pools use USDT or `$STRIKE`; Flap Token Pools can use creator-selected BEP20 collateral
 - **Pyth + FLAP AI resolution** — deterministic price-feed markets, admin-resolved pools, and AI-resolved pools are supported, with challenge/fallback paths where configured
 - **Atomic orderbook settlement** — `clearBatch(marketId)` clears an orderbook batch and settles all orders inline in a single transaction
 - **Uniform fees** — orderbook trades use 20 bps filled-collateral fees; pool markets use configured protocol fees

@@ -1,46 +1,53 @@
-# Community Token
+# STRIKE Platform Token
 
 ## Overview
 
-A community token for Strike was created on [flap.sh](https://flap.sh) by members of the BNB degen community. We want to be transparent about what this token is and what it isn't.
+`$STRIKE` is the official platform token for the Strike protocol.
+
+The token began as a community-launched token on [flap.sh](https://flap.sh). Strike accepted that support with gratitude and used the momentum around the token to help build the product that exists today. Since then, `$STRIKE` has become an integral part of the platform itself, so it is no longer accurate to describe it as only a community token.
 
 - **Contract:** `0xdccc017b0f923cf3f3acdb535eb1019439717777`
 - **flap.sh:** [https://flap.sh/bnb/0xdccc017b0f923cf3f3acdb535eb1019439717777](https://flap.sh/bnb/0xdccc017b0f923cf3f3acdb535eb1019439717777)
 
 ## What You Should Know
 
-**This is not an official Strike token.**
+**`$STRIKE` is now the official platform token for Strike.**
 
-Strike has not launched a token. The community token on flap.sh is an independent initiative created by community members. It was not designed, deployed, or endorsed by the Strike team. The locked LP and its trading fees are separate from Strike protocol operations.
+The token was launched by the community, not originally by the Strike team. That history remains important. The change is that Strike now officially adopts `$STRIKE` as the platform token for the protocol going forward.
 
-We're grateful for the enthusiasm and support from the BNB community. It's a reflection of the energy around what we're building.
+Strike is being built for the long term. Officially adopting `$STRIKE` is intended to align the protocol, product, and community more closely as the platform grows.
 
-## Why This Token Cannot Become the Official Strike Token
+## Platform Role
 
-Even setting aside the question of whether Strike will ever launch a token, there are concrete reasons why this community token could not be adopted as one.
+`$STRIKE` is already part of the Strike platform experience:
 
-**Legal.** The Strike team had no involvement in the creation or deployment of this token. Adopting it retroactively would raise serious legal and regulatory questions around liability, securities classification, and distribution. That is not a position we can put the project in.
+- STRIKE-denominated prediction pools
+- STRIKE credit and reward campaigns where configured
+- Community alignment around the protocol
+- Future platform features and incentives as they are announced
 
-**The token name is fixed.** The token is named "Hackathon Runner-Up" and that name cannot be changed. It does not represent the project, and we cannot build an official token narrative around a name we did not choose and cannot modify.
+More details on the token's platform role will be shared through official Strike channels and reflected in these docs as they are finalized.
 
-**We had no input on tokenomics.** Supply, distribution, and allocation were all decided without the Strike team's involvement. An official token requires careful design of these parameters. Inheriting tokenomics we had no hand in is not feasible.
+## Strategic Contributions
 
-**An airdrop campaign is not viable.** The structure of this token does not lend itself to a meaningful airdrop campaign to our users or community. Any future token distribution would need to be designed from the ground up with that goal in mind.
+Strike may share token supply with people or teams who have been, or may become, key strategic partners for the protocol.
 
-## Our Position on Tokens
+These distributions are contributions and invitations to keep building with Strike. They are not commercial deals, sale terms, or guarantees of future work.
 
-**Strike currently has no plans to launch an official token.**
+## Flap Acknowledgement
 
-We're focused on delivering the protocol to mainnet. That is the priority. Any decision about a future token, if one is ever made, will be announced officially through our channels and documented here.
-
-## A Note on Future Plans
-
-If Strike does launch an official token at some point in the future, we recognise that community token holders took an early bet on the project. We would explore ways to acknowledge that, whether through an airdrop, a migration path, or another mechanism.
-
-**This is not a commitment or guarantee.** No terms exist yet, and nothing has been decided. We're simply saying: we see you, and we wouldn't forget it.
+Strike's early growth was made possible by the Flap ecosystem. We are grateful to the Flap team and community for building the products and infrastructure that helped Strike gain its initial traction.
 
 ## Holder Tracking
 
-We are already tracking community token holder addresses, balances, and holding durations on-chain. This data is being recorded passively and will be incorporated into any future points programme, should one be introduced.
+Strike tracks `$STRIKE` holder addresses, balances, and holding durations on-chain. This data may be used for points, rewards, credit campaigns, or other platform programmes where announced.
 
-Holding earlier and longer will be reflected in any such programme. No action is required from holders — the data is captured automatically from on-chain state.
+Holding earlier and longer can be reflected in those programmes when relevant. No action is required from holders for passive on-chain tracking.
+
+## Important Notes
+
+- Official adoption of `$STRIKE` does not by itself create new claim rights, redemption rights, or guaranteed rewards.
+- Specific campaigns, incentives, or distributions will be documented separately when announced.
+- Always use the official contract address above when checking the token.
+
+Strike's goal is to grow the platform and align that growth with the community around `$STRIKE`.
