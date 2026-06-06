@@ -63,6 +63,7 @@ contract StrikeDuelsWagerVault is AccessControl, Pausable, ReentrancyGuard {
     error InsufficientAiRewardLiquidity();
     error AiRewardExposureExceeded();
     error NativeTransferFailed();
+    error InsufficientRecoverableBalance();
 
     IERC20 public immutable strikeToken;
 
@@ -73,9 +74,13 @@ contract StrikeDuelsWagerVault is AccessControl, Pausable, ReentrancyGuard {
     uint256 public maxPvpStakeAmount;
     uint256 public maxAiRewardExposure;
     uint256 public aiRewardExposure;
+    uint256 public aiStakeEscrowed;
+    uint256 public nativeEscrowed;
+    uint256 public nativePendingWithdrawalsTotal;
 
     mapping(uint256 => bool) public pvpBracketEnabled;
     mapping(bytes32 => Wager) public wagers;
+    mapping(address => uint256) public pendingNativeWithdrawals;
 
     event PvpWagerCreated(
         bytes32 indexed wagerId, address indexed creator, address indexed opponent, uint256 stakeAmount
@@ -102,6 +107,10 @@ contract StrikeDuelsWagerVault is AccessControl, Pausable, ReentrancyGuard {
     event PvpBracketUpdated(uint256 amount, bool enabled);
     event AiPrizeUpdated(uint256 stakeAmount, uint256 winRewardAmount);
     event PvpFeeUpdated(uint16 feeBps);
+    event NativeSurplusRecovered(address indexed to, uint256 amount);
+    event ERC20Recovered(address indexed token, address indexed to, uint256 amount);
+    event NativePayoutPending(address indexed recipient, uint256 amount);
+    event NativePayoutClaimed(address indexed recipient, uint256 amount);
 
     constructor(
         address strikeToken_,
@@ -140,6 +149,7 @@ contract StrikeDuelsWagerVault is AccessControl, Pausable, ReentrancyGuard {
         if (msg.value > maxPvpStakeAmount) revert PvpStakeExceedsCap();
         if (opponent == msg.sender) revert InvalidPvpOpponent();
 
+        nativeEscrowed += msg.value;
         wagers[wagerId] = Wager({
             mode: Mode.Pvp,
             status: Status.Created,
@@ -163,6 +173,7 @@ contract StrikeDuelsWagerVault is AccessControl, Pausable, ReentrancyGuard {
         if (wager.opponent != address(0) && msg.sender != wager.opponent) revert InvalidPvpJoiner();
         if (msg.value != wager.stakeAmount) revert IncorrectPvpStake();
 
+        nativeEscrowed += msg.value;
         wager.playerB = msg.sender;
         wager.status = Status.Joined;
 
@@ -178,6 +189,7 @@ contract StrikeDuelsWagerVault is AccessControl, Pausable, ReentrancyGuard {
         uint256 reward = aiWinRewardAmount;
         aiRewardExposure += reward;
         strikeToken.safeTransferFrom(msg.sender, address(this), stake);
+        aiStakeEscrowed += stake;
 
         wagers[wagerId] = Wager({
             mode: Mode.Ai,
@@ -216,15 +228,19 @@ contract StrikeDuelsWagerVault is AccessControl, Pausable, ReentrancyGuard {
         if (wager.mode == Mode.Pvp) {
             if (wager.status != Status.Created && wager.status != Status.Joined) revert InvalidWagerStatus();
             Status status = wager.status;
+            uint256 refundAmount = wager.stakeAmount;
+            if (status == Status.Joined) refundAmount += wager.stakeAmount;
+            nativeEscrowed -= refundAmount;
             wager.status = Status.Refunded;
-            _sendNative(wager.playerA, wager.stakeAmount);
+            _sendOrCreditNative(wager.playerA, wager.stakeAmount);
             if (status == Status.Joined) {
-                _sendNative(wager.playerB, wager.stakeAmount);
+                _sendOrCreditNative(wager.playerB, wager.stakeAmount);
             }
         } else if (wager.mode == Mode.Ai) {
             if (wager.status != Status.Created) revert InvalidWagerStatus();
             wager.status = Status.Refunded;
             aiRewardExposure -= wager.aiWinRewardAmount;
+            aiStakeEscrowed -= wager.stakeAmount;
             strikeToken.safeTransfer(wager.playerA, wager.stakeAmount);
         } else {
             revert InvalidWagerStatus();
@@ -270,15 +286,48 @@ contract StrikeDuelsWagerVault is AccessControl, Pausable, ReentrancyGuard {
         _unpause();
     }
 
+    function recoverNativeSurplus(address to, uint256 amount) external nonReentrant onlyRole(TREASURY_ROLE) {
+        if (to == address(0)) revert ZeroAddress();
+        if (amount > _recoverableNative()) revert InsufficientRecoverableBalance();
+        _sendNative(to, amount);
+        emit NativeSurplusRecovered(to, amount);
+    }
+
+    function recoverERC20(address token, address to, uint256 amount) external nonReentrant onlyRole(TREASURY_ROLE) {
+        if (token == address(0) || to == address(0)) revert ZeroAddress();
+        if (amount > _recoverableERC20(token)) revert InsufficientRecoverableBalance();
+        IERC20(token).safeTransfer(to, amount);
+        emit ERC20Recovered(token, to, amount);
+    }
+
+    function claimNativePayout() external nonReentrant {
+        _claimNativePayoutTo(msg.sender, payable(msg.sender));
+    }
+
+    function claimNativePayoutTo(address payable to) external nonReentrant {
+        if (to == address(0)) revert ZeroAddress();
+        _claimNativePayoutTo(msg.sender, to);
+    }
+
+    function _claimNativePayoutTo(address recipient, address payable to) internal {
+        uint256 amount = pendingNativeWithdrawals[recipient];
+        if (amount == 0) revert InsufficientRecoverableBalance();
+        pendingNativeWithdrawals[recipient] = 0;
+        nativePendingWithdrawalsTotal -= amount;
+        _sendNative(to, amount);
+        emit NativePayoutClaimed(recipient, amount);
+    }
+
     function _finalizePvp(bytes32 wagerId, Wager storage wager, Result result, bytes32 matchSummaryHash) internal {
         if (wager.status != Status.Joined) revert InvalidWagerStatus();
         wager.status = Status.Finalized;
         wager.matchSummaryHash = matchSummaryHash;
 
         uint256 pool = wager.stakeAmount * 2;
+        nativeEscrowed -= pool;
         if (result == Result.DrawNoContest) {
-            _sendNative(wager.playerA, wager.stakeAmount);
-            _sendNative(wager.playerB, wager.stakeAmount);
+            _sendOrCreditNative(wager.playerA, wager.stakeAmount);
+            _sendOrCreditNative(wager.playerB, wager.stakeAmount);
             emit WagerFinalized(wagerId, result, matchSummaryHash, address(0), pool, 0);
             return;
         }
@@ -286,8 +335,8 @@ contract StrikeDuelsWagerVault is AccessControl, Pausable, ReentrancyGuard {
         address winner = result == Result.PlayerAWins ? wager.playerA : wager.playerB;
         uint256 fee = (pool * wager.pvpFeeBps) / MAX_BPS;
         uint256 payout = pool - fee;
-        if (fee > 0) _sendNative(treasury, fee);
-        _sendNative(winner, payout);
+        if (fee > 0) _sendOrCreditNative(treasury, fee);
+        _sendOrCreditNative(winner, payout);
 
         emit WagerFinalized(wagerId, result, matchSummaryHash, winner, payout, fee);
     }
@@ -297,6 +346,7 @@ contract StrikeDuelsWagerVault is AccessControl, Pausable, ReentrancyGuard {
         wager.status = Status.Finalized;
         wager.matchSummaryHash = matchSummaryHash;
         aiRewardExposure -= wager.aiWinRewardAmount;
+        aiStakeEscrowed -= wager.stakeAmount;
 
         uint256 payout;
         if (result == Result.PlayerAWins) {
@@ -312,8 +362,34 @@ contract StrikeDuelsWagerVault is AccessControl, Pausable, ReentrancyGuard {
 
     function _availableAiRewardLiquidity() internal view returns (uint256) {
         uint256 balance = strikeToken.balanceOf(address(this));
-        if (balance <= aiRewardExposure) return 0;
-        return balance - aiRewardExposure;
+        uint256 reserved = aiRewardExposure + aiStakeEscrowed;
+        if (balance <= reserved) return 0;
+        return balance - reserved;
+    }
+
+    function _recoverableNative() internal view returns (uint256) {
+        uint256 reserved = nativeEscrowed + nativePendingWithdrawalsTotal;
+        if (address(this).balance <= reserved) return 0;
+        return address(this).balance - reserved;
+    }
+
+    function _recoverableERC20(address token) internal view returns (uint256) {
+        uint256 balance = IERC20(token).balanceOf(address(this));
+        if (token != address(strikeToken)) return balance;
+
+        uint256 reserved = aiRewardExposure + aiStakeEscrowed;
+        if (balance <= reserved) return 0;
+        return balance - reserved;
+    }
+
+    function _sendOrCreditNative(address to, uint256 amount) internal {
+        if (amount == 0) return;
+        (bool ok,) = to.call{value: amount}("");
+        if (ok) return;
+
+        pendingNativeWithdrawals[to] += amount;
+        nativePendingWithdrawalsTotal += amount;
+        emit NativePayoutPending(to, amount);
     }
 
     function _sendNative(address to, uint256 amount) internal {

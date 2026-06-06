@@ -6,7 +6,7 @@
 
 It supports two isolated wager modes:
 
-- **PvP native BNB:** both players deposit the same enabled BNB bracket. The winner receives the pool minus protocol fee. Draw/no-contest refunds both players.
+- **PvP native BNB:** both players deposit the same enabled BNB bracket. The winner receives the pool minus protocol fee. Draw/no-contest refunds both players. If a native transfer recipient rejects BNB, the payout is held as a claimable pending withdrawal instead of blocking settlement.
 - **AI `$STRIKE` pool:** player deposits the fixed AI stake in `$STRIKE`. If the player beats the server-authoritative hard AI, the player receives their stake back plus the fixed reward from the treasury-funded reward pool. If AI wins/forfeit, the player stake remains in the pool. Draw/no-contest refunds the player stake.
 
 The contract does **not** decide gameplay results. Only an address with `SETTLER_ROLE` can finalize a wager with a server-authored result and match-summary hash.
@@ -16,7 +16,7 @@ The contract does **not** decide gameplay results. Only an address with `SETTLER
 - `DEFAULT_ADMIN_ROLE`: bootstrap/admin role; can grant/revoke roles.
 - `SETTLER_ROLE`: can call `finalizeWager` and `refundWager`.
 - `PAUSER_ROLE`: can pause/unpause create/join/finalize/refund flows.
-- `TREASURY_ROLE`: can update treasury, caps, fee bps, PvP brackets, and AI fixed amounts.
+- `TREASURY_ROLE`: can update treasury, caps, fee bps, PvP brackets, AI fixed amounts, and recover only unreserved surplus assets.
 
 ## Constructor
 
@@ -77,6 +77,8 @@ enum Result {
 
 function finalizeWager(bytes32 wagerId, Result result, bytes32 matchSummaryHash) external;
 function refundWager(bytes32 wagerId, bytes32 reason) external;
+function claimNativePayout() external;
+function claimNativePayoutTo(address payable to) external;
 ```
 
 - Only `SETTLER_ROLE` can settle/refund.
@@ -86,6 +88,8 @@ function refundWager(bytes32 wagerId, bytes32 reason) external;
   - `PlayerAWins`: creator receives pool minus fee.
   - `PlayerBWins`: joiner receives pool minus fee.
   - `DrawNoContest`: both players are refunded their stakes.
+  - If a native payout transfer fails, the amount is recorded in `pendingNativeWithdrawals(recipient)` and can later be pulled with `claimNativePayout()`.
+  - Recipients that permanently reject BNB can call `claimNativePayoutTo(to)` to withdraw their pending payout to an alternate payable address.
 - AI:
   - `PlayerAWins`: player receives `aiStakeAmount + aiWinRewardAmount`.
   - `PlayerBWins`: player's stake remains in reward pool.
@@ -101,7 +105,15 @@ function setCaps(uint256 maxPvpStakeAmount, uint256 maxAiRewardExposure) externa
 function setAiPrize(uint256 stakeAmount, uint256 winRewardAmount) external;
 function pause() external;
 function unpause() external;
+function recoverNativeSurplus(address to, uint256 amount) external;
+function recoverERC20(address token, address to, uint256 amount) external;
 ```
+
+Recovery is treasury-only and cannot withdraw active escrow:
+
+- Native recovery excludes open PvP stake escrow plus pending native withdrawals.
+- `$STRIKE` recovery excludes open AI reward exposure plus refundable open AI player stakes.
+- Unrelated ERC20 recovery can rescue accidental token transfers to the vault.
 
 ## Events
 
@@ -116,6 +128,10 @@ event CapsUpdated(uint256 maxPvpStakeAmount, uint256 maxAiRewardExposure);
 event PvpBracketUpdated(uint256 amount, bool enabled);
 event AiPrizeUpdated(uint256 stakeAmount, uint256 winRewardAmount);
 event PvpFeeUpdated(uint16 feeBps);
+event NativeSurplusRecovered(address indexed to, uint256 amount);
+event ERC20Recovered(address indexed token, address indexed to, uint256 amount);
+event NativePayoutPending(address indexed recipient, uint256 amount);
+event NativePayoutClaimed(address indexed recipient, uint256 amount);
 ```
 
 ## Deployment / ABI prep
@@ -151,3 +167,4 @@ jq '.abi' out/StrikeDuelsWagerVault.sol/StrikeDuelsWagerVault.json \
 - Wager mode remains disabled in product/backend config until legal/product approval.
 - Deployment/broadcast requires explicit approval. Scripts are dry-run-first.
 - The contract has no geoblock; any jurisdiction gate must live in product/backend configuration for v1.
+- Treasury recovery functions are for accidental/surplus balances only and preserve open PvP escrow, pending native payouts, open AI reward exposure, and open AI player stakes.

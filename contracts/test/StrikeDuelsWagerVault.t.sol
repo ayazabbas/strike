@@ -251,6 +251,134 @@ contract StrikeDuelsWagerVaultTest is Test {
         assertEq(address(winner).balance, 1 ether + (SMALL_BNB * 2 - fee));
         assertTrue(winner.reentryBlocked());
     }
+
+    function testTreasuryCanRecoverSurplusNativeWithoutTouchingOpenPvpEscrow() public {
+        bytes32 wagerId = keccak256("native-surplus-open-pvp");
+
+        vm.prank(playerA);
+        vault.createPvpWager{value: SMALL_BNB}(wagerId, playerB);
+        vm.deal(address(vault), address(vault).balance + 0.5 ether);
+
+        uint256 beforeTreasury = treasury.balance;
+
+        vm.prank(treasury);
+        vault.recoverNativeSurplus(treasury, 0.5 ether);
+
+        assertEq(treasury.balance - beforeTreasury, 0.5 ether);
+        assertEq(address(vault).balance, SMALL_BNB);
+    }
+
+    function testTreasuryCannotRecoverNativeReservedForOpenPvpWager() public {
+        bytes32 wagerId = keccak256("native-reserved-open-pvp");
+
+        vm.prank(playerA);
+        vault.createPvpWager{value: SMALL_BNB}(wagerId, playerB);
+
+        vm.expectRevert();
+        vm.prank(treasury);
+        vault.recoverNativeSurplus(treasury, SMALL_BNB);
+    }
+
+    function testTreasuryCanRecoverSurplusStrikeButNotReservedAiExposureOrStake() public {
+        bytes32 wagerId = keccak256("strike-surplus-open-ai");
+
+        vm.prank(playerA);
+        vault.createAiWager(wagerId, AI_CONFIG);
+
+        uint256 beforeTreasury = strike.balanceOf(treasury);
+
+        vm.prank(treasury);
+        vault.recoverERC20(address(strike), treasury, 450_000 ether);
+
+        assertEq(strike.balanceOf(treasury) - beforeTreasury, 450_000 ether);
+        assertEq(strike.balanceOf(address(vault)), AI_STAKE + AI_REWARD);
+
+        vm.expectRevert();
+        vm.prank(treasury);
+        vault.recoverERC20(address(strike), treasury, 1);
+    }
+
+    function testTreasuryCanRescueUnrelatedERC20() public {
+        MockStrikeToken unrelated = new MockStrikeToken();
+        unrelated.mint(address(vault), 123 ether);
+
+        vm.prank(treasury);
+        vault.recoverERC20(address(unrelated), treasury, 123 ether);
+
+        assertEq(unrelated.balanceOf(treasury), 123 ether);
+        assertEq(unrelated.balanceOf(address(vault)), 0);
+    }
+
+    function testNonTreasuryCannotRecoverAssets() public {
+        vm.deal(address(vault), 1 ether);
+
+        vm.expectRevert();
+        vm.prank(attacker);
+        vault.recoverNativeSurplus(attacker, 1 ether);
+
+        vm.expectRevert();
+        vm.prank(attacker);
+        vault.recoverERC20(address(strike), attacker, 1 ether);
+    }
+
+    function testRejectedNativePayoutCreatesClaimableBalanceAndDoesNotTrapSurplus() public {
+        bytes32 wagerId = keccak256("failed-native-payout");
+        RejectingNativeReceiver winner = new RejectingNativeReceiver(vault, wagerId);
+        vm.deal(address(winner), 1 ether);
+
+        winner.create{value: SMALL_BNB}(playerB);
+        vm.prank(playerB);
+        vault.joinPvpWager{value: SMALL_BNB}(wagerId);
+        vm.deal(address(vault), address(vault).balance + 0.25 ether);
+
+        uint256 fee = (SMALL_BNB * 2 * 500) / 10_000;
+        uint256 payout = SMALL_BNB * 2 - fee;
+        uint256 beforeTreasury = treasury.balance;
+
+        vm.prank(settler);
+        vault.finalizeWager(wagerId, StrikeDuelsWagerVault.Result.PlayerAWins, MATCH_HASH);
+
+        assertEq(vault.pendingNativeWithdrawals(address(winner)), payout);
+
+        vm.prank(treasury);
+        vault.recoverNativeSurplus(treasury, 0.25 ether);
+
+        assertEq(treasury.balance - beforeTreasury, fee + 0.25 ether);
+        assertEq(address(vault).balance, payout);
+
+        winner.setRejectNative(false);
+        winner.claimNativePayout();
+
+        assertEq(vault.pendingNativeWithdrawals(address(winner)), 0);
+        assertEq(address(winner).balance, 1 ether + payout);
+        assertEq(address(vault).balance, 0);
+    }
+
+    function testRejectingRecipientCanClaimNativePayoutToAlternateAddress() public {
+        bytes32 wagerId = keccak256("failed-native-payout-to");
+        RejectingNativeReceiver winner = new RejectingNativeReceiver(vault, wagerId);
+        address payable alternate = payable(address(0xA17E));
+        vm.deal(address(winner), 1 ether);
+
+        winner.create{value: SMALL_BNB}(playerB);
+        vm.prank(playerB);
+        vault.joinPvpWager{value: SMALL_BNB}(wagerId);
+
+        uint256 fee = (SMALL_BNB * 2 * 500) / 10_000;
+        uint256 payout = SMALL_BNB * 2 - fee;
+        uint256 beforeAlternate = alternate.balance;
+
+        vm.prank(settler);
+        vault.finalizeWager(wagerId, StrikeDuelsWagerVault.Result.PlayerAWins, MATCH_HASH);
+
+        assertEq(vault.pendingNativeWithdrawals(address(winner)), payout);
+
+        winner.claimNativePayoutTo(alternate);
+
+        assertEq(vault.pendingNativeWithdrawals(address(winner)), 0);
+        assertEq(alternate.balance - beforeAlternate, payout);
+        assertEq(address(vault).balance, 0);
+    }
 }
 
 contract ReenteringPvpWinner {
@@ -275,5 +403,36 @@ contract ReenteringPvpWinner {
         } catch {
             reentryBlocked = true;
         }
+    }
+}
+
+contract RejectingNativeReceiver {
+    StrikeDuelsWagerVault public immutable vault;
+    bytes32 public immutable wagerId;
+    bool public rejectNative = true;
+
+    constructor(StrikeDuelsWagerVault vault_, bytes32 wagerId_) {
+        vault = vault_;
+        wagerId = wagerId_;
+    }
+
+    function create(address opponent) external payable {
+        vault.createPvpWager{value: msg.value}(wagerId, opponent);
+    }
+
+    function setRejectNative(bool rejectNative_) external {
+        rejectNative = rejectNative_;
+    }
+
+    function claimNativePayout() external {
+        vault.claimNativePayout();
+    }
+
+    function claimNativePayoutTo(address payable to) external {
+        vault.claimNativePayoutTo(to);
+    }
+
+    receive() external payable {
+        if (rejectNative) revert("reject native");
     }
 }
