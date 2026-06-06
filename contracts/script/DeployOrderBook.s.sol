@@ -35,7 +35,7 @@ contract DeployOrderBookScript is Script {
         console.log("  OPERATOR_ROLE granted to BatchAuction");
 
         // Grant admin to mainnet deployer too
-        ob.grantRole(ob.DEFAULT_ADMIN_ROLE(), 0x2FB6243F7616F6aF550869eFE0f08Bbf43315F68);
+        ob.grantRole(ob.DEFAULT_ADMIN_ROLE(), 0xDA680a19C8E5a43a5B6280d2a1e1A5E2E8ACD874);
 
         vm.stopBroadcast();
 

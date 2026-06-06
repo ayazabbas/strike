@@ -14,7 +14,7 @@ contract DeployFactoryAndOBScript is Script {
     function run() external {
         uint256 pk = vm.envUint("PRIVATE_KEY");
         address deployer = vm.addr(pk);
-        address mainnetDeployer = 0x2FB6243F7616F6aF550869eFE0f08Bbf43315F68;
+        address mainnetDeployer = 0xDA680a19C8E5a43a5B6280d2a1e1A5E2E8ACD874;
         address keeper = 0x0501241B6De84ab14575ea08e30b5b81bf92090C;
         address resolutionKeeper = 0x36a868a3C46b706047CEdC4332cF3bdb11C76915;
 
