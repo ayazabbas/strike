@@ -56,6 +56,9 @@ No function iterates over unbounded sets. Segment trees provide O(log N) operati
 ### Internal Audit v1.2
 An internal security audit (v1.2) was conducted covering all core contracts. Key areas reviewed include fee split logic, chunked settlement, resting order mechanics, and per-user order caps. All findings have been addressed. See `docs/technical/internal-audit-v1.2.md` for the full report.
 
+### World Cup Multiplier Predictions V0 Audit
+An internal Codex-assisted current-state audit was conducted for World Cup Multiplier Predictions V0 persistence, API, admin surfaces, frontend prototype/admin gating, and migrations 043/044. This was not an external third-party audit. The final review verdict was PASS for V0 from a fund-theft and funds-stuck perspective after hardening, with payment execution still disabled. See `docs/technical/world-cup-multiplier-predictions-v0-audit.md` for the full report.
+
 ### Static Analysis
 - Slither static analysis
 - Mythril symbolic execution
