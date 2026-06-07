@@ -6,14 +6,19 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 
 /// @title StrikeMultiplierPredictionVault
 /// @notice USDT escrow and bonus backstop vault for server-authoritative Strike Multiplier Predictions.
-contract StrikeMultiplierPredictionVault is AccessControl, Pausable, ReentrancyGuard {
+contract StrikeMultiplierPredictionVault is AccessControl, EIP712, Pausable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     bytes32 public constant EVENT_MANAGER_ROLE = keccak256("EVENT_MANAGER_ROLE");
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
+    bytes32 public constant SUBMIT_PREDICTION_QUOTE_TYPEHASH = keccak256(
+        "SubmitPredictionQuote(bytes32 predictionId,bytes32 eventId,address predictor,uint256 predictionAmount,uint256 potentialPayout,uint256 expiresAt)"
+    );
 
     uint256 public constant MAX_BPS = 10_000;
     // Coverage BPS limits are admission and withdrawal safety gates. Settlements may draw down the backstop,
@@ -87,6 +92,8 @@ contract StrikeMultiplierPredictionVault is AccessControl, Pausable, ReentrancyG
     error DuplicateWinningPrediction();
     error EventNotSettleable();
     error BackstopCoverageImpaired();
+    error ExpiredPredictionQuote();
+    error InvalidPredictionQuoteSigner();
 
     IERC20 public immutable usdt;
 
@@ -132,7 +139,7 @@ contract StrikeMultiplierPredictionVault is AccessControl, Pausable, ReentrancyG
     event ERC20Recovered(address indexed token, address indexed to, uint256 amount);
     event USDTSurplusRecovered(address indexed to, uint256 amount);
 
-    constructor(address usdt_, address admin, address eventManager) {
+    constructor(address usdt_, address admin, address eventManager) EIP712("StrikeMultiplierPredictionVault", "1") {
         if (usdt_ == address(0) || admin == address(0) || eventManager == address(0)) revert ZeroAddress();
 
         usdt = IERC20(usdt_);
@@ -230,6 +237,60 @@ contract StrikeMultiplierPredictionVault is AccessControl, Pausable, ReentrancyG
         uint256 predictionAmount,
         uint256 potentialPayout
     ) external nonReentrant whenNotPaused onlyRole(EVENT_MANAGER_ROLE) {
+        _acceptPrediction(predictionId, eventId, predictor, predictionAmount, potentialPayout);
+    }
+
+    function submitPredictionWithQuote(
+        bytes32 predictionId,
+        bytes32 eventId,
+        uint256 predictionAmount,
+        uint256 potentialPayout,
+        uint256 expiresAt,
+        bytes calldata signature
+    ) external nonReentrant whenNotPaused {
+        if (block.timestamp > expiresAt) revert ExpiredPredictionQuote();
+
+        address signer = ECDSA.recover(
+            getSubmitPredictionQuoteDigest(
+                predictionId, eventId, msg.sender, predictionAmount, potentialPayout, expiresAt
+            ),
+            signature
+        );
+        if (!hasRole(EVENT_MANAGER_ROLE, signer)) revert InvalidPredictionQuoteSigner();
+
+        _acceptPrediction(predictionId, eventId, msg.sender, predictionAmount, potentialPayout);
+    }
+
+    function getSubmitPredictionQuoteDigest(
+        bytes32 predictionId,
+        bytes32 eventId,
+        address predictor,
+        uint256 predictionAmount,
+        uint256 potentialPayout,
+        uint256 expiresAt
+    ) public view returns (bytes32) {
+        return _hashTypedDataV4(
+            keccak256(
+                abi.encode(
+                    SUBMIT_PREDICTION_QUOTE_TYPEHASH,
+                    predictionId,
+                    eventId,
+                    predictor,
+                    predictionAmount,
+                    potentialPayout,
+                    expiresAt
+                )
+            )
+        );
+    }
+
+    function _acceptPrediction(
+        bytes32 predictionId,
+        bytes32 eventId,
+        address predictor,
+        uint256 predictionAmount,
+        uint256 potentialPayout
+    ) internal {
         if (predictionId == bytes32(0) || eventId == bytes32(0)) revert ZeroId();
         if (predictor == address(0)) revert ZeroAddress();
         if (predictionAmount == 0 || potentialPayout == 0) revert ZeroAmount();

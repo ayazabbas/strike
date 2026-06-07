@@ -9,15 +9,18 @@ contract StrikeMultiplierPredictionVaultTest is Test {
     StrikeMultiplierPredictionVault vault;
     MockUSDT usdt;
 
+    uint256 managerPrivateKey = 0xBEEF;
+    uint256 strangerPrivateKey = 0xBAD;
+
     address admin = address(0xA11CE);
-    address manager = address(0xBEEF);
+    address manager = vm.addr(managerPrivateKey);
     address contributorA = address(0xCA);
     address contributorB = address(0xCB);
     address predictorA = address(0xA1);
     address predictorB = address(0xB2);
     address predictorC = address(0xC3);
     address recipient = address(0x777);
-    address stranger = address(0xBAD);
+    address stranger = vm.addr(strangerPrivateKey);
 
     uint256 constant USDT = 1e6;
     bytes32 constant EVENT_ID = keccak256("world-cup-final");
@@ -86,6 +89,128 @@ contract StrikeMultiplierPredictionVaultTest is Test {
         assertEq(potentialPayout, 25 * USDT);
         assertEq(requiredCoverage, 5 * USDT);
         assertEq(uint256(status), uint256(StrikeMultiplierPredictionVault.PredictionStatus.Accepted));
+    }
+
+    function testSubmitPredictionWithQuoteTransfersUSDTAndRecordsReceipt() public {
+        _contribute(contributorA, 200 * USDT);
+
+        bytes32 predictionId = keccak256("quoted-accepted");
+        uint256 predictionAmount = 20 * USDT;
+        uint256 potentialPayout = 25 * USDT;
+        uint256 expiresAt = block.timestamp + 1 hours;
+        bytes memory signature = _quoteSignature(
+            managerPrivateKey, predictionId, EVENT_ID, predictorA, predictionAmount, potentialPayout, expiresAt
+        );
+
+        uint256 beforePredictor = usdt.balanceOf(predictorA);
+        vm.prank(predictorA);
+        vault.submitPredictionWithQuote(predictionId, EVENT_ID, predictionAmount, potentialPayout, expiresAt, signature);
+
+        assertEq(beforePredictor - usdt.balanceOf(predictorA), predictionAmount);
+        assertEq(usdt.balanceOf(address(vault)), 220 * USDT);
+        assertEq(vault.totalPredictionPoolEscrowed(), predictionAmount);
+        assertEq(vault.reservedBackstopCoverage(), 5 * USDT);
+
+        (
+            bytes32 eventId,
+            address predictor,
+            uint256 recordedPredictionAmount,
+            uint256 recordedPotentialPayout,
+            uint256 requiredCoverage,
+            StrikeMultiplierPredictionVault.PredictionStatus status
+        ) = vault.predictionReceipts(predictionId);
+        assertEq(eventId, EVENT_ID);
+        assertEq(predictor, predictorA);
+        assertEq(recordedPredictionAmount, predictionAmount);
+        assertEq(recordedPotentialPayout, potentialPayout);
+        assertEq(requiredCoverage, 5 * USDT);
+        assertEq(uint256(status), uint256(StrikeMultiplierPredictionVault.PredictionStatus.Accepted));
+    }
+
+    function testSubmitPredictionWithQuoteRejectsExpiredQuote() public {
+        _contribute(contributorA, 200 * USDT);
+
+        bytes32 predictionId = keccak256("expired-quote");
+        uint256 expiresAt = block.timestamp - 1;
+        bytes memory signature =
+            _quoteSignature(managerPrivateKey, predictionId, EVENT_ID, predictorA, 20 * USDT, 25 * USDT, expiresAt);
+
+        vm.expectRevert(StrikeMultiplierPredictionVault.ExpiredPredictionQuote.selector);
+        vm.prank(predictorA);
+        vault.submitPredictionWithQuote(predictionId, EVENT_ID, 20 * USDT, 25 * USDT, expiresAt, signature);
+    }
+
+    function testSubmitPredictionWithQuoteRejectsWrongSigner() public {
+        _contribute(contributorA, 200 * USDT);
+
+        bytes32 predictionId = keccak256("wrong-signer-quote");
+        uint256 expiresAt = block.timestamp + 1 hours;
+        bytes memory signature =
+            _quoteSignature(strangerPrivateKey, predictionId, EVENT_ID, predictorA, 20 * USDT, 25 * USDT, expiresAt);
+
+        vm.expectRevert(StrikeMultiplierPredictionVault.InvalidPredictionQuoteSigner.selector);
+        vm.prank(predictorA);
+        vault.submitPredictionWithQuote(predictionId, EVENT_ID, 20 * USDT, 25 * USDT, expiresAt, signature);
+    }
+
+    function testSubmitPredictionWithQuoteBindsSignedFields() public {
+        _contribute(contributorA, 200 * USDT);
+        _createEvent(EVENT_TWO);
+
+        bytes32 predictionId = keccak256("bound-quote");
+        uint256 predictionAmount = 20 * USDT;
+        uint256 potentialPayout = 25 * USDT;
+        uint256 expiresAt = block.timestamp + 1 hours;
+        bytes memory signature = _quoteSignature(
+            managerPrivateKey, predictionId, EVENT_ID, predictorA, predictionAmount, potentialPayout, expiresAt
+        );
+
+        vm.expectRevert(StrikeMultiplierPredictionVault.InvalidPredictionQuoteSigner.selector);
+        vm.prank(predictorB);
+        vault.submitPredictionWithQuote(predictionId, EVENT_ID, predictionAmount, potentialPayout, expiresAt, signature);
+
+        vm.expectRevert(StrikeMultiplierPredictionVault.InvalidPredictionQuoteSigner.selector);
+        vm.prank(predictorA);
+        vault.submitPredictionWithQuote(
+            predictionId, EVENT_ID, predictionAmount + 1, potentialPayout, expiresAt, signature
+        );
+
+        vm.expectRevert(StrikeMultiplierPredictionVault.InvalidPredictionQuoteSigner.selector);
+        vm.prank(predictorA);
+        vault.submitPredictionWithQuote(
+            predictionId, EVENT_ID, predictionAmount, potentialPayout + 1, expiresAt, signature
+        );
+
+        vm.expectRevert(StrikeMultiplierPredictionVault.InvalidPredictionQuoteSigner.selector);
+        vm.prank(predictorA);
+        vault.submitPredictionWithQuote(
+            predictionId, EVENT_TWO, predictionAmount, potentialPayout, expiresAt, signature
+        );
+
+        vm.expectRevert(StrikeMultiplierPredictionVault.InvalidPredictionQuoteSigner.selector);
+        vm.prank(predictorA);
+        vault.submitPredictionWithQuote(
+            keccak256("tampered-prediction-id"), EVENT_ID, predictionAmount, potentialPayout, expiresAt, signature
+        );
+    }
+
+    function testSubmitPredictionWithQuoteRejectsReplayByPredictionId() public {
+        _contribute(contributorA, 200 * USDT);
+
+        bytes32 predictionId = keccak256("replayed-quote");
+        uint256 predictionAmount = 20 * USDT;
+        uint256 potentialPayout = 25 * USDT;
+        uint256 expiresAt = block.timestamp + 1 hours;
+        bytes memory signature = _quoteSignature(
+            managerPrivateKey, predictionId, EVENT_ID, predictorA, predictionAmount, potentialPayout, expiresAt
+        );
+
+        vm.prank(predictorA);
+        vault.submitPredictionWithQuote(predictionId, EVENT_ID, predictionAmount, potentialPayout, expiresAt, signature);
+
+        vm.expectRevert(StrikeMultiplierPredictionVault.PredictionExists.selector);
+        vm.prank(predictorA);
+        vault.submitPredictionWithQuote(predictionId, EVENT_ID, predictionAmount, potentialPayout, expiresAt, signature);
     }
 
     function testRejectUncoveredPredictionWhenNoBackstopPool() public {
@@ -480,5 +605,21 @@ contract StrikeMultiplierPredictionVaultTest is Test {
         usdt.mint(account, amount);
         vm.prank(account);
         usdt.approve(address(vault), type(uint256).max);
+    }
+
+    function _quoteSignature(
+        uint256 signerPrivateKey,
+        bytes32 predictionId,
+        bytes32 eventId,
+        address predictor,
+        uint256 predictionAmount,
+        uint256 potentialPayout,
+        uint256 expiresAt
+    ) internal view returns (bytes memory) {
+        bytes32 digest = vault.getSubmitPredictionQuoteDigest(
+            predictionId, eventId, predictor, predictionAmount, potentialPayout, expiresAt
+        );
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerPrivateKey, digest);
+        return abi.encodePacked(r, s, v);
     }
 }
