@@ -64,6 +64,7 @@ contract StrikeDuelsWagerVault is AccessControl, Pausable, ReentrancyGuard {
     error AiRewardExposureExceeded();
     error NativeTransferFailed();
     error InsufficientRecoverableBalance();
+    error NoAiRewardClaimable();
 
     IERC20 public immutable strikeToken;
 
@@ -75,12 +76,14 @@ contract StrikeDuelsWagerVault is AccessControl, Pausable, ReentrancyGuard {
     uint256 public maxAiRewardExposure;
     uint256 public aiRewardExposure;
     uint256 public aiStakeEscrowed;
+    uint256 public aiClaimableRewards;
     uint256 public nativeEscrowed;
     uint256 public nativePendingWithdrawalsTotal;
 
     mapping(uint256 => bool) public pvpBracketEnabled;
     mapping(bytes32 => Wager) public wagers;
     mapping(address => uint256) public pendingNativeWithdrawals;
+    mapping(address => uint256) public pendingAiRewards;
 
     event PvpWagerCreated(
         bytes32 indexed wagerId, address indexed creator, address indexed opponent, uint256 stakeAmount
@@ -111,6 +114,8 @@ contract StrikeDuelsWagerVault is AccessControl, Pausable, ReentrancyGuard {
     event ERC20Recovered(address indexed token, address indexed to, uint256 amount);
     event NativePayoutPending(address indexed recipient, uint256 amount);
     event NativePayoutClaimed(address indexed recipient, uint256 amount);
+    event AiRewardClaimable(bytes32 indexed wagerId, address indexed recipient, uint256 amount);
+    event AiRewardClaimed(address indexed recipient, uint256 amount);
 
     constructor(
         address strikeToken_,
@@ -309,6 +314,17 @@ contract StrikeDuelsWagerVault is AccessControl, Pausable, ReentrancyGuard {
         _claimNativePayoutTo(msg.sender, to);
     }
 
+    function claimAiReward() external nonReentrant {
+        uint256 amount = pendingAiRewards[msg.sender];
+        if (amount == 0) revert NoAiRewardClaimable();
+
+        pendingAiRewards[msg.sender] = 0;
+        aiClaimableRewards -= amount;
+        strikeToken.safeTransfer(msg.sender, amount);
+
+        emit AiRewardClaimed(msg.sender, amount);
+    }
+
     function _claimNativePayoutTo(address recipient, address payable to) internal {
         uint256 amount = pendingNativeWithdrawals[recipient];
         if (amount == 0) revert InsufficientRecoverableBalance();
@@ -350,8 +366,11 @@ contract StrikeDuelsWagerVault is AccessControl, Pausable, ReentrancyGuard {
 
         uint256 payout;
         if (result == Result.PlayerAWins) {
-            payout = wager.stakeAmount + wager.aiWinRewardAmount;
+            payout = wager.stakeAmount;
+            pendingAiRewards[wager.playerA] += wager.aiWinRewardAmount;
+            aiClaimableRewards += wager.aiWinRewardAmount;
             strikeToken.safeTransfer(wager.playerA, payout);
+            emit AiRewardClaimable(wagerId, wager.playerA, wager.aiWinRewardAmount);
         } else if (result == Result.DrawNoContest) {
             payout = wager.stakeAmount;
             strikeToken.safeTransfer(wager.playerA, payout);
@@ -362,7 +381,7 @@ contract StrikeDuelsWagerVault is AccessControl, Pausable, ReentrancyGuard {
 
     function _availableAiRewardLiquidity() internal view returns (uint256) {
         uint256 balance = strikeToken.balanceOf(address(this));
-        uint256 reserved = aiRewardExposure + aiStakeEscrowed;
+        uint256 reserved = aiRewardExposure + aiStakeEscrowed + aiClaimableRewards;
         if (balance <= reserved) return 0;
         return balance - reserved;
     }
@@ -377,7 +396,7 @@ contract StrikeDuelsWagerVault is AccessControl, Pausable, ReentrancyGuard {
         uint256 balance = IERC20(token).balanceOf(address(this));
         if (token != address(strikeToken)) return balance;
 
-        uint256 reserved = aiRewardExposure + aiStakeEscrowed;
+        uint256 reserved = aiRewardExposure + aiStakeEscrowed + aiClaimableRewards;
         if (balance <= reserved) return 0;
         return balance - reserved;
     }

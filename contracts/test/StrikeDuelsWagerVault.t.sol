@@ -16,8 +16,8 @@ contract StrikeDuelsWagerVaultTest is Test {
     address playerB = address(0xB0B01);
     address attacker = address(0xBAD01);
 
-    uint256 constant AI_STAKE = 50_000 ether;
-    uint256 constant AI_REWARD = 50_000 ether;
+    uint256 constant AI_STAKE = 20_000 ether;
+    uint256 constant AI_REWARD = 20_000 ether;
     uint256 constant SMALL_BNB = 0.001 ether;
     uint256 constant LARGE_BNB = 0.01 ether;
 
@@ -121,7 +121,7 @@ contract StrikeDuelsWagerVaultTest is Test {
         vault.finalizeWager(wagerId, StrikeDuelsWagerVault.Result.PlayerAWins, MATCH_HASH);
     }
 
-    function testAiPlayerWinReceivesStakePlusFixedReward() public {
+    function testAiPlayerWinReceivesStakeAndClaimableFixedReward() public {
         bytes32 wagerId = keccak256("ai-player-win");
 
         vm.prank(playerA);
@@ -131,8 +131,34 @@ contract StrikeDuelsWagerVaultTest is Test {
         vm.prank(settler);
         vault.finalizeWager(wagerId, StrikeDuelsWagerVault.Result.PlayerAWins, MATCH_HASH);
 
-        assertEq(strike.balanceOf(playerA) - before, AI_STAKE + AI_REWARD);
+        assertEq(strike.balanceOf(playerA) - before, AI_STAKE);
+        assertEq(vault.pendingAiRewards(playerA), AI_REWARD);
+        assertEq(vault.aiClaimableRewards(), AI_REWARD);
         assertEq(vault.aiRewardExposure(), 0);
+
+        vm.prank(playerA);
+        vault.claimAiReward();
+
+        assertEq(strike.balanceOf(playerA) - before, AI_STAKE + AI_REWARD);
+        assertEq(vault.pendingAiRewards(playerA), 0);
+        assertEq(vault.aiClaimableRewards(), 0);
+    }
+
+    function testAiRewardCannotBeClaimedTwice() public {
+        bytes32 wagerId = keccak256("ai-duplicate-claim");
+
+        vm.prank(playerA);
+        vault.createAiWager(wagerId, AI_CONFIG);
+
+        vm.prank(settler);
+        vault.finalizeWager(wagerId, StrikeDuelsWagerVault.Result.PlayerAWins, MATCH_HASH);
+
+        vm.prank(playerA);
+        vault.claimAiReward();
+
+        vm.expectRevert(StrikeDuelsWagerVault.NoAiRewardClaimable.selector);
+        vm.prank(playerA);
+        vault.claimAiReward();
     }
 
     function testAiWinKeepsPlayerStakeInPool() public {
@@ -288,14 +314,41 @@ contract StrikeDuelsWagerVaultTest is Test {
         uint256 beforeTreasury = strike.balanceOf(treasury);
 
         vm.prank(treasury);
-        vault.recoverERC20(address(strike), treasury, 450_000 ether);
+        vault.recoverERC20(address(strike), treasury, 480_000 ether);
 
-        assertEq(strike.balanceOf(treasury) - beforeTreasury, 450_000 ether);
+        assertEq(strike.balanceOf(treasury) - beforeTreasury, 480_000 ether);
         assertEq(strike.balanceOf(address(vault)), AI_STAKE + AI_REWARD);
 
         vm.expectRevert();
         vm.prank(treasury);
         vault.recoverERC20(address(strike), treasury, 1);
+    }
+
+    function testTreasuryCannotRecoverClaimableAiReward() public {
+        bytes32 wagerId = keccak256("claimable-ai-reserved");
+
+        vm.prank(playerA);
+        vault.createAiWager(wagerId, AI_CONFIG);
+
+        vm.prank(settler);
+        vault.finalizeWager(wagerId, StrikeDuelsWagerVault.Result.PlayerAWins, MATCH_HASH);
+
+        uint256 beforeTreasury = strike.balanceOf(treasury);
+
+        vm.prank(treasury);
+        vault.recoverERC20(address(strike), treasury, 480_000 ether);
+
+        assertEq(strike.balanceOf(treasury) - beforeTreasury, 480_000 ether);
+        assertEq(strike.balanceOf(address(vault)), AI_REWARD);
+
+        vm.expectRevert();
+        vm.prank(treasury);
+        vault.recoverERC20(address(strike), treasury, 1);
+
+        vm.prank(playerA);
+        vault.claimAiReward();
+
+        assertEq(strike.balanceOf(address(vault)), 0);
     }
 
     function testTreasuryCanRescueUnrelatedERC20() public {
