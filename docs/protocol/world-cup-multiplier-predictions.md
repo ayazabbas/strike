@@ -97,4 +97,4 @@ Contributor views should show Bonus Backstop Pool contribution state, estimated 
 
 ## Security and audit reference
 
-The historical audit and smoke addendum are available at [World Cup Multiplier Predictions V0 Historical Audit & Smoke Addendum](../technical/world-cup-multiplier-predictions-v0-audit.md).
+The current internal review for the candidate cross-event ticket model is available at [World Cup Multiplier Cross-Event Ticket Internal Review](../technical/world-cup-multiplier-predictions-v0-audit.md). It is an internal Codex-assisted review, not an external third-party audit, and it should be read together with the blocker findings before treating cross-event tickets as release-ready.

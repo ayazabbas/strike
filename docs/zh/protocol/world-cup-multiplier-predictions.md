@@ -97,4 +97,4 @@ API 响应应明确哪些值是估算值，哪些值是已接受或已结算值�
 
 ## 安全与审计参考
 
-历史审计与 smoke 补充见[世界杯倍数预测 V0 历史审计与 Smoke 补充](../technical/world-cup-multiplier-predictions-v0-audit.md)。
+候选跨事件票据模型的当前内部复核见[世界杯倍数预测跨事件票据内部复核](../technical/world-cup-multiplier-predictions-v0-audit.md)。这是内部 Codex 辅助复核，不是外部第三方审计；在把跨事件票据视为 release-ready 前，应同时阅读其中的 blocker findings。

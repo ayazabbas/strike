@@ -76,7 +76,7 @@
 * [Gas & Costs](technical/gas-and-costs.md)
 * [MEV Mitigation](technical/mev.md)
 * [Internal Audit v1.2](technical/internal-audit-v1.2.md)
-* [World Cup Multiplier Predictions V0 Historical Audit & Smoke Addendum](technical/world-cup-multiplier-predictions-v0-audit.md)
+* [World Cup Multiplier Cross-Event Ticket Internal Review](technical/world-cup-multiplier-predictions-v0-audit.md)
 
 ## Coming Soon
 
