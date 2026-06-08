@@ -12,7 +12,7 @@
 [![Powered by Pyth](https://img.shields.io/badge/Powered%20by-Pyth%20Network-6B48FF?style=flat-square)](https://pyth.network/)
 [![License: BUSL-1.1](https://img.shields.io/badge/License-BUSL--1.1-blue?style=flat-square)](LICENSE)
 
-**Website:** [strike.pm](https://strike.pm) · **App:** [app.strike.pm](https://app.strike.pm) · **Docs:** [docs.strike.pm](https://docs.strike.pm)
+**Website:** [strike.pm](https://strike.pm) · **App:** [app.strike.pm](https://app.strike.pm) · **Docs:** [docs.strike.fun](https://docs.strike.fun)
 
 ---
 
@@ -226,6 +226,6 @@ Production deploys are not done from this repo directly. Use `strike-infra/ansib
 
 - App: <https://app.strike.pm>
 - Website: <https://strike.pm>
-- Docs: <https://docs.strike.pm>
+- Docs: <https://docs.strike.fun>
 - BNB Chain: <https://www.bnbchain.org/>
 - Pyth: <https://pyth.network/>

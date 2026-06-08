@@ -47,6 +47,6 @@ Off-chain (non-authoritative):
 ## Links
 
 - **App:** [app.strike.pm](https://app.strike.pm)
-- **Docs:** [docs.strike.pm](https://docs.strike.pm)
+- **Docs:** [docs.strike.fun](https://docs.strike.fun)
 - **Chain:** BNB Chain (BSC)
 - **Oracle:** [Pyth Network](https://pyth.network/)

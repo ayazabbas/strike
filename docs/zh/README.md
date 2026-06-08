@@ -47,6 +47,6 @@ Off-chain (non-authoritative):
 ## 链接
 
 - **应用：** [app.strike.pm](https://app.strike.pm)
-- **文档：** [docs.strike.pm](https://docs.strike.pm)
+- **文档：** [docs.strike.fun](https://docs.strike.fun)
 - **链：** BNB Chain (BSC)
 - **预言机：** [Pyth 网络](https://pyth.network/)
