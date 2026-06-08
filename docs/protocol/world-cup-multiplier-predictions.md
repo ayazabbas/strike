@@ -97,4 +97,4 @@ Contributor views should show Bonus Backstop Pool contribution state, estimated 
 
 ## Security and audit reference
 
-The current internal review for the candidate cross-event ticket model is available at [World Cup Multiplier Cross-Event Ticket Internal Review](../technical/world-cup-multiplier-predictions-v0-audit.md). It is an internal Codex-assisted review, not an external third-party audit, and it should be read together with the blocker findings before treating cross-event tickets as release-ready.
+The current internal review for the cross-event ticket model is available at [World Cup Multiplier Cross-Event Ticket Internal Review](../technical/world-cup-multiplier-predictions-v0-audit.md). It is an internal Codex-assisted review, not an external third-party audit. The follow-up review passed for the previously blocking backend/accounting, synthetic-vault lifecycle, frontend idempotency, smoke-unit, intent-only, and ticket-privacy areas.

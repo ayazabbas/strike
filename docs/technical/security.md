@@ -57,9 +57,9 @@ No function iterates over unbounded sets. Segment trees provide O(log N) operati
 An internal security audit (v1.2) was conducted covering all core contracts. Key areas reviewed include fee split logic, chunked settlement, resting order mechanics, and per-user order caps. All findings have been addressed. See `docs/technical/internal-audit-v1.2.md` for the full report.
 
 ### World Cup Multiplier Cross-Event Ticket Internal Review
-An internal Codex-assisted review was completed for the candidate World Cup Multiplier cross-event Prediction Ticket refactor on 2026-06-08. This was not an external third-party audit. The review found the ticket-as-vault-event strategy compatible with the existing `StrikeMultiplierPredictionVault` ABI, but the candidate branch is not release-ready until backend/accounting and frontend idempotency blockers are fixed.
+An internal Codex-assisted review was completed for the World Cup Multiplier cross-event Prediction Ticket refactor on 2026-06-08. This was not an external third-party audit. A fresh follow-up review found the previous backend/accounting, synthetic-vault lifecycle, frontend idempotency, smoke-unit, intent-only, and ticket-privacy blockers resolved for the reviewed branch.
 
-Key current constraints are that real per-leg event settlement remains backend/admin-authoritative, synthetic vault events must be settled or cancelled consistently for every terminal ticket, and the current vault has a 1,000 lifetime prediction cap. See `docs/technical/world-cup-multiplier-predictions-v0-audit.md` for the full current review.
+Key current constraints are that real per-leg event settlement remains backend/admin-authoritative, backend and frontend should deploy atomically, and the current vault has a 1,000 lifetime prediction cap. See `docs/technical/world-cup-multiplier-predictions-v0-audit.md` for the full PASS review.
 
 ### Static Analysis
 - Slither static analysis

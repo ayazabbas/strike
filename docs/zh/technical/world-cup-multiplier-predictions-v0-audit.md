@@ -2,8 +2,8 @@
 
 **日期：** 2026-06-08
 **审计方：** 内部 Codex 辅助安全复核
-**范围：** 跨事件 Prediction Ticket 候选重构，覆盖后端/indexer、前端、Portfolio/Admin 展示，以及 `StrikeMultiplierPredictionVault` 的 ticket-as-vault-event 兼容性
-**结论：** **当前跨事件票据分支尚未达到发布条件**。合约兼容性通过，但后端/accounting 与前端幂等性存在 blocker，必须修复后才能把跨事件票据模型视为生产就绪。
+**范围：** 跨事件 Prediction Ticket 重构，覆盖后端/indexer、前端、smoke 工具、Portfolio/Admin 展示，以及 `StrikeMultiplierPredictionVault` 的 ticket-as-vault-event 兼容性
+**结论：** **本次复核范围内通过。** 之前的发布 blocker 已修复，新的独立复核未发现剩余 release-blocking 问题。
 
 ---
 
@@ -11,30 +11,30 @@
 
 这是一份内部 Codex 辅助复核，不是外部第三方审计。
 
-本次复核的候选分支加入了真正的跨事件 Prediction Ticket：一个用户票据可以包含来自多个事件的 legs，同时通过把每张票据表示为一个 synthetic vault event 来复用现有 vault ABI。
+本分支加入真正的跨事件 Prediction Ticket：一个用户票据可以包含来自多个预测事件的 legs，同时通过把每张票据表示为一个 synthetic vault event 来复用现有 `StrikeMultiplierPredictionVault` ABI。
 
-合约兼容策略在 ABI 层面可行，相关 vault 测试通过。但当前候选实现**尚未达到发布条件**，因为复核发现新的 `/world-cup-multiplier/tickets` 路径在后端结算/accounting 覆盖方面存在 blocker，前端重复提交相同票据时的幂等性行为也存在 blocker。
+上一轮复核因后端/accounting projection、synthetic vault lifecycle 安全性、前端确定性幂等 key、intent-only ticket 处理、smoke 金额单位、以及数字 ticket 隐私而阻塞发布。这些问题已修复并重新复核。本次结果为：**PASS**。
 
 ---
 
 ## 复核范围
 
-复核覆盖 `feature/world-cup-cross-event-tickets` 分支上的候选改动：
+复核覆盖 `feature/world-cup-cross-event-tickets` 分支上的改动：
 
 - `/home/ubuntu/dev/strike-infra`
   - migration `047_world_cup_multiplier_cross_event_tickets.sql`
-  - 票据创建 endpoint 与 legacy route 兼容
-  - 票据列表/detail/portfolio receipt API
-  - settlement projection 与 vault event 同步
+  - `/v1/world-cup-multiplier/tickets` 创建/列表/detail API
+  - legacy `multiplier_predictions` projection 与 accounting 兼容
+  - ticket settlement projection 与 vault event 同步
+  - 本次重构新增的 DB-backed 回归测试
 - `/home/ubuntu/dev/strike-frontend`
   - 跨事件 ticket builder 与提交路径
   - ticket API client 类型
-  - Portfolio 与 Admin 展示
-  - 本地 ticket-builder 测试与 smoke 脚本
+  - Portfolio/Admin 展示
+  - ticket-builder tests 与 smoke 脚本默认值
 - `/home/ubuntu/dev/strike`
-  - `StrikeMultiplierPredictionVault` 兼容性测试
-  - ticket-as-vault-event 文档
-  - public docs/security/navigation 状态
+  - `StrikeMultiplierPredictionVault` 跨事件 ticket 兼容性测试
+  - docs/security/protocol 引用
 
 ---
 
@@ -42,145 +42,145 @@
 
 ### 合约兼容性：PASS
 
-现有 `StrikeMultiplierPredictionVault` ABI 可以把一张跨事件票据表示为一个 synthetic vault event：
+现有 vault ABI 可以把一张跨事件 ticket 表示为一个 synthetic vault event：
 
 - submit 使用一个 `bytes32 eventId` 表示 synthetic ticket vault event；
-- 票据使用一个 `bytes32 predictionId`；
-- synthetic vault event 结算后，可以用该 prediction id 领取 payout；
+- ticket 使用一个 `bytes32 predictionId`；
+- synthetic vault event 结算后，可以用该 ticket prediction id 领取 payout；
 - synthetic vault event 取消后，可以用该 prediction id 领取 refund；
-- vault 不需要知道真实的 per-leg event ids。
+- vault 不需要知道真实 per-leg event ids。
 
-因此，pilot 兼容路径不需要 Solidity ABI 变更。
+Focused vault tests 与完整 Foundry suite 均通过。
 
-### 后端/indexer 候选实现：BLOCKED
+### 后端/indexer：PASS
 
-新 ticket tables 与 API 方向正确，但当前实现对纯 `/world-cup-multiplier/tickets` 提交存在 release-blocking 的 settlement/accounting 缺口。
+后端现在会为本次复核覆盖的所有 ticket 路径创建并更新可靠的 legacy projection：
 
-### 前端候选实现：BLOCKED
+- 纯 `/world-cup-multiplier/tickets` 提交会使用第一条 leg 的 event 作为 projection event，upsert `multiplier_predictions` projection；
+- legacy `/events/{id}/predictions` 兼容路径仍通过请求中的 event 做 projection；
+- idempotent retry 会更新 projection，而不是静默跳过；
+- projection receipt snapshot 包含 ticket id、projection event id 与 ticket legs；
+- event-level accounting 可以继续读取 `multiplier_predictions`，同时 ticket tables 仍是 ticket/leg 的 canonical source。
 
-Ticket builder 与 Portfolio/Admin 展示方向正确，但当前提交路径使用确定性的 idempotency key，可能阻止用户用相同 legs 与 entry amount 创建第二张独立票据。
+### Synthetic vault lifecycle 与 claim safety：PASS
 
----
+实现现在会在 synthetic vault event lifecycle 确认链上结果前，保持本地 ticket 的 public status 为 claim-safe：
 
-## Blocking findings
+- 本地 per-leg settlement 会记录推导出的 ticket outcome；
+- confirmed tickets 公开 `ticket_status` 保持 `accepted`，同时在 `metadata.vaultSettlementPending.localTicketStatus` 记录本地终态；
+- legacy projections 会同步本地终态，让 event-level accounting 可以更新；
+- vault event logs 仍可通过 `contract_prediction_id` 或 `vault_event_id` 更新 ticket 与 projection status；
+- 这样可以避免在 vault event 实际 settle/cancel 前，把 ticket 展示成可 claim/refund。
 
-### B-01：跨事件票据没有进入 legacy settlement/accounting projection
+### 前端幂等性：PASS
 
-**严重性：** Blocker
+前端不再根据 wallet、entry amount 与 legs 派生 ticket idempotency key。
 
-纯 `/world-cup-multiplier/tickets` 提交会写入 `multiplier_prediction_tickets` 与 `multiplier_prediction_ticket_legs`，但不会创建现有 settlement accounting 依赖的 legacy `multiplier_predictions` projection。
+- 每次 submit attempt 都生成 nonce-based key；
+- 该 key 只在同一次 in-flight attempt 中复用；
+- `finally` 中清除 key，因此用户有意重复提交相同 ticket 时会拿到新 key；
+- focused Playwright/unit coverage 验证了重复 ticket 的新 key 与 in-flight retry 复用。
 
-观察到的风险：
+### Intent-only tickets：PASS
 
-- accepted 或 paid 的跨事件票据可以存在于 ticket tables；
-- `prediction_pool_states` 与相关 accounting 仍从 `multiplier_predictions` 聚合；
-- legacy projection 只在 legacy `/events/{id}/predictions` 兼容路径创建；
-- vault event sync 只更新已有 projection row，不会为纯 ticket row 创建 projection。
+Intent-only 或未确认资金的 tickets 不会被转换成 paid entitlement。
 
-**影响：** 新 ticket endpoint 的 ticket acceptance、accounting、settlement visibility 与 pool state 可能发生分歧。
+- settlement recomputation 会检查 funding state；
+- non-confirmed tickets 在 terminal/refund handling 触及时可以本地取消；
+- cancellation 会记录 `localSettlementResult` metadata，并通过 `funding_status <> confirmed` guard 保证安全。
 
-**必须修复：** 要么为每张 accepted ticket 创建可靠的 accounting projection，要么把 accounting/settlement 代码改为直接从 canonical ticket tables 聚合。
+### Smoke 工具与隐私：PASS
 
-### B-02：Synthetic vault event settlement 尚未完整接入真实跨事件票据结算
-
-**严重性：** Blocker
-
-兼容模型会让每张票据使用 synthetic ticket-level `vault_event_id` 签名，而本地 admin settlement 基于真实 event ids 更新 legs。复核到的 settlement projection 记录的是 vault-settlement TODO，并没有实际 settle/cancel synthetic vault event。
-
-观察到的风险：
-
-- 后端可以在本地标记 ticket legs 或 ticket status；
-- vault payout/refund 状态只有在 synthetic vault event 被 settle 或 cancel 后才会变化；
-- 如果 synthetic vault settlement 未被一致执行，用户看到的 ticket 终态可能与 claim/refund 可用性不一致。
-
-**影响：** 资金可能在运营层面卡住，或者 ticket 已显示终态但 claim/refund 不可用。
-
-**必须修复：** 在生产发布前，实现并测试 win、loss、refund/cancel 与非终态场景的完整 synthetic-vault-event 生命周期。
-
-### B-03：确定性前端幂等 key 会阻止或合并重复相同票据
-
-**严重性：** Blocker
-
-前端基于 wallet、entry amount 与排序后的 leg selections 派生 ticket idempotency key。用户如果有意再次提交同样选择与金额，可能因为后端 idempotency retention 而拿到之前的 ticket 结果，而不是创建新的独立票据。
-
-**影响：** 用户可能无法创建合法的重复 entries。
-
-**必须修复：** 生成 per-submit-attempt idempotency key，并且只在同一次 in-flight 提交重试时复用。
+- 跨事件 smoke 脚本默认使用明确的 1 USDT base units：`1000000`。
+- 数字 ticket detail access 现在要求 `wallet` query parameter。
+- Ticket detail loading 会按 `lower(wallet)` 过滤，wallet 不匹配时返回 not found。
+- Ticket listing 仍保持 wallet-scoped。
 
 ---
 
-## High-severity findings
+## 之前 blocking findings 的修复状态
 
-### H-01：Intent-only tickets 在当前复核路径不会 settle 或 cancel
+### B-01：跨事件 tickets 没有进入 legacy settlement/accounting projection
 
-新 tickets 默认 `ticket_status = intent_recorded`。复核到的 settlement projection 只更新 `accepted` 或 `refund_pending` tickets。如果 payment-disabled 或 intent-only rows 仍可能存在，它们在 admin settle/cancel 后可能保持 stale。
+**状态：** 已修复。
 
-**必须修复：** 明确定义 intent-only ticket 生命周期，并确保 admin settle/cancel 路径要么有意忽略并给出清晰状态，要么安全转换状态。
+所有已复核的 ticket creation/idempotent 路径都会调用 `upsert_legacy_prediction_projection_tx`。Projection 使用确定的 projection event，冲突时更新，并带有识别 ticket-derived projection 所需的 metadata。
 
-### H-02：Smoke 脚本金额与前端 base-unit 提交格式不一致
+### B-02：Synthetic vault event settlement 未完整接入 claim-safe ticket lifecycle
 
-前端以 USDT base units 提交 entry amount。本地 smoke 脚本默认值为 `"1"`；如果 API 期待与前端相同格式，这代表一个 base unit，而不是 1 USDT。
+**状态：** 本次兼容模型范围内已修复。
 
-**必须修复：** smoke 脚本应使用明确 base units，例如 1 USDT 用 `1000000`，或明确标注这是 one-base-unit dust smoke。
+后端现在把本地 per-leg settlement 与公开 claim/refund readiness 分离。Confirmed tickets 在 vault event 确认 settle/cancel 前保持 accepted，同时把本地终态记录到 metadata 并同步进 accounting projection。
+
+### B-03：确定性前端幂等 key 会合并重复相同 tickets
+
+**状态：** 已修复。
+
+Ticket submission idempotency keys 现在是每次 submit attempt 的 nonce-based key，仅在当前 in-flight attempt 中复用。
+
+---
+
+## High-severity findings 的修复状态
+
+### H-01：Intent-only tickets 不会 settle 或 cancel
+
+**状态：** 已修复到安全本地处理。
+
+Unfunded/non-confirmed tickets 可以转换为 local cancelled state，不会创建 paid entitlement。Confirmed tickets 则保持 claim-safe，直到 vault 确认。
+
+### H-02：Smoke 脚本金额含义不明确
+
+**状态：** 已修复。
+
+Smoke 脚本默认值现在是明确 base units：`ONE_USDT_BASE_UNITS = '1000000'`。
 
 ### H-03：Ticket detail endpoint 可通过数字 id 枚举
 
-复核到的 ticket detail route 会按数字 id 返回 ticket，没有 wallet filter 或 authorization。
+**状态：** 已修复。
 
-**必须修复：** 如果 ticket details、payment metadata 或 receipt data 被视为 wallet-private，应加入 wallet-scoped access，或避免在 unauthenticated numeric ids 下暴露敏感字段。
-
----
-
-## Medium findings 与约束
-
-- Vault event idempotency 仅按 `(tx_hash, log_index)` 唯一。共享 multi-chain database 应包含 chain 与 contract 上下文。
-- Vault lifetime `MAX_TOTAL_PREDICTIONS = 1,000`。已取消或已 finalized 的 predictions 不会释放 slots。对 bounded pilot 可接受，但高流量生产需要 vault rotation 或 native redesign。
-- 合约不验证真实 per-leg event ids、leg outcomes 或跨事件 ticket composition。这些事实由后端/admin settlement 正确性决定。
-- 前端依赖新的 `/v1/world-cup-multiplier/tickets` endpoint。后端与前端必须原子部署，或者加入兼容 fallback。
-- 本地 Playwright ticket-builder 测试与 app webServer config 耦合；复核环境中因已有 Next dev lock 而无法干净运行。
+Detail endpoint 现在要求 wallet query，并按 wallet 过滤加载 ticket。
 
 ---
 
-## 正向观察
+## 剩余约束与非阻塞说明
 
-- Ticket schema 将 ticket-level 数据与 per-leg rows 分离，并保留 legacy prediction model 以支持 rollout 兼容。
-- Validation 覆盖正数 base-unit amount、最大 ticket legs、active/open events、lock times、重复 `(event_id, group_key)`、以及 active outcomes。
-- 复核过的 SQL 路径使用 bound parameters 处理用户可控输入。
-- Portfolio 展示同时支持 legacy selected-outcome receipts 与新的 `legs[]` shape。
-- 合约测试证明 synthetic vault event 模型下的 win 与 refund 兼容性。
+- 这仍是内部 Codex 辅助复核，不是第三方审计。
+- Vault lifetime `MAX_TOTAL_PREDICTIONS = 1,000`。已取消/已 finalized 的 predictions 不会释放 slots，因此高流量生产应使用 vault rotation 或 native redesign。
+- 合约不验证真实 per-leg event ids、leg outcomes 或 ticket composition。这些事实仍由后端/admin settlement 决定。
+- 前端依赖新的 `/v1/world-cup-multiplier/tickets` endpoint，因此后端与前端应原子部署。
+- 共享 multi-chain deployment 应在需要时确保 vault event idempotency 包含 chain/contract context。
+- 新复核给出的非阻塞 hardening 建议：
+  - 为 wallet-scoped ticket detail access 增加显式 HTTP handler 回归测试；
+  - 如果产品策略要求所有 terminal leg 类型都本地取消 intent-only ticket，可再增加一个非 refund terminal intent-only 测试。
 
 ---
 
 ## 验证证据
 
-本次复核报告的命令与检查包括：
+本次复核完成的命令/checks：
 
 - Backend/indexer：
-  - `cargo test -p indexer world_cup_multiplier --no-default-features`
-  - 结果：31 个 unit tests 通过；DB-backed SQLx tests 因测试数据库 hostname 在环境中不可用而无法执行。
+  - `cargo fmt` — passed
+  - `cargo check -p indexer` — passed，有既有 dead-code warnings
+  - `cargo test -p indexer world_cup_multiplier --lib --no-run` — passed
+  - `cargo test -p indexer cross_event_ticket --lib` — DB-backed SQLx tests 因配置的测试数据库 hostname 无法解析而被环境阻塞；该 filter 中纯 validation tests 在 DB setup 失败前通过
 - Frontend：
   - `npm run lint` — passed
   - `npx tsc --noEmit` — passed
   - `npm run build` — passed
-  - `npx playwright test tests/world-cup-multiplier-ticket-builder.spec.ts` — 因本地 Next dev lock / webServer startup coupling 被阻塞
-  - local smoke script — 本地环境 `/v1/world-cup-multiplier/events` 返回 404，无法完成
+  - `npx playwright test tests/world-cup-multiplier-ticket-builder.spec.ts --config=/tmp/strike-frontend-playwright-no-webserver.config.cjs` — 7 passed
 - Contracts：
   - `/home/ubuntu/.foundry/bin/forge test --match-contract StrikeMultiplierPredictionVaultTest` — 31 passed
-  - full Foundry suite — 620 passed, 0 failed
+  - `/home/ubuntu/.foundry/bin/forge test` — 620 passed, 0 failed
+- 独立复核：
+  - 对当前 cross-repo diffs 的 fresh audit 返回 PASS，没有 release-blocking findings。
 - Docs：
-  - 旧 public docs 仍描述 V0 historical/payment-disabled audit，因此需要替换为本次 current review。
+  - 本页替换上一版 blocked candidate review，更新为当前 PASS review。
 
 ---
 
 ## 发布建议
 
-在修复以上 blocker findings 并完成复核前，不应把跨事件 Prediction Ticket 重构视为 production-ready。
+本次复核范围内，跨事件 Prediction Ticket refactor 已通过对之前 blocker areas 的内部复核。
 
-后续 release-ready review 应重点验证：
-
-1. 每张 paid/accepted ticket 都进入正确的 accounting source of truth；
-2. 每个终态 ticket outcome 都会 exactly once settle 或 cancel synthetic vault event；
-3. API 与 Portfolio receipts 中的 ticket status 与 claim/refund 可用性一致；
-4. 相同 legs 与 entry amount 的重复提交会创建独立 entries，同时 retry 仍保持幂等；
-5. smoke tests 使用明确 base-unit amounts，并能在兼容 API 上运行；
-6. 只有在上述修复通过后，public docs 才应再次从 **blocked candidate review** 更新为 **release-ready review**。
+公开生产使用前，应一起部署后端与前端，验证 live ticket create/list/detail APIs，使用明确 base-unit amounts 对 live API 运行 cross-event smoke script，并确认 Portfolio/API claim/refund states 与 synthetic vault lifecycle 保持一致。

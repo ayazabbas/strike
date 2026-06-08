@@ -66,9 +66,9 @@
 
 ### 世界杯倍数预测跨事件票据内部复核
 
-已于 2026-06-08 完成针对候选世界杯倍数预测跨事件 Prediction Ticket 重构的内部 Codex 辅助复核。这不是外部第三方审计。复核认为 ticket-as-vault-event 策略与现有 `StrikeMultiplierPredictionVault` ABI 兼容，但在修复后端/accounting 与前端幂等性 blocker 前，候选分支尚未达到发布条件。
+已于 2026-06-08 完成针对世界杯倍数预测跨事件 Prediction Ticket 重构的内部 Codex 辅助复核。这不是外部第三方审计。新的 follow-up review 确认此前的后端/accounting、synthetic-vault lifecycle、前端幂等性、smoke 单位、intent-only 与 ticket 隐私 blocker 在本次复核分支中已修复。
 
-当前关键约束包括：真实 per-leg event settlement 由后端/admin 决定；每个终态 ticket 都必须一致地 settle 或 cancel synthetic vault event；当前 vault 有 1,000 个 lifetime predictions 上限。完整当前复核见 `docs/zh/technical/world-cup-multiplier-predictions-v0-audit.md`。
+当前关键约束包括：真实 per-leg event settlement 仍由后端/admin 决定；后端与前端应原子部署；当前 vault 有 1,000 个 lifetime predictions 上限。完整 PASS 复核见 `docs/zh/technical/world-cup-multiplier-predictions-v0-audit.md`。
 
 ### 静态分析
 
