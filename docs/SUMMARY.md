@@ -24,7 +24,7 @@
 * [Parimutuel Pool Markets](protocol/parimutuel-markets.md)
 * [Flap Token Pools](getting-started/flap-token-pools.md)
 * [World Cup Markets](getting-started/world-cup.md)
-* [World Cup Multiplier Predictions](getting-started/world-cup-multiplier-predictions.md)
+* [World Cup Multiplier Predictions Protocol](protocol/world-cup-multiplier-predictions.md)
 * [Fees & Incentives](protocol/fees-and-incentives.md)
 
 ## Smart Contracts

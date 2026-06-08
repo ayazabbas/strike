@@ -1,73 +1,54 @@
 # World Cup Multiplier Predictions
 
-Strike Multiplier Predictions is a World Cup campaign product for structured exact-result predictions with fixed multipliers.
+Strike Multiplier Predictions is a World Cup campaign product for fixed-multiplier, exact-result predictions.
 
 The live app is available at [strike.fun/world-cup-multiplier-predictions](https://strike.fun/world-cup-multiplier-predictions).
 
-## How it works
+For protocol, economics, coverage, settlement, API, and vault details, see [World Cup Multiplier Predictions Protocol](../protocol/world-cup-multiplier-predictions.md).
 
-Each multiplier event has a set of admin-configured outcomes, such as exact match result fields or other clearly defined World Cup outcomes. Every selectable outcome has an assigned multiplier.
+## What it is
 
-To submit a prediction:
-
-1. Choose an active multiplier event.
-2. Select one or more outcomes.
-3. Review the combined multiplier and potential payout.
-4. Enter a prediction amount in USDT.
-5. Confirm the wallet flow: USDT approval, then vault submission.
+Each event lists one or more clearly defined World Cup outcomes, such as exact match result fields. Every selectable outcome has a fixed multiplier.
 
 A prediction wins only if **every selected outcome is correct**. If any selected outcome is wrong, the multiplier prediction does not win.
 
-## Combined multipliers
+## Quick example
 
-When you select multiple outcomes in one event, the UI multiplies the selected outcome multipliers together and shows the combined multiplier before you submit.
-
-Example:
-
-- Outcome A: 2×
-- Outcome B: 3×
-- Combined multiplier: 6×
+- Outcome A: 2x
+- Outcome B: 3x
+- Combined multiplier: 6x
 - Prediction amount: 10 USDT
-- Potential payout if all selected outcomes are correct: 60 USDT
+- Potential payout if both selected outcomes are correct: 60 USDT
 
-The quoted payout is only available for accepted predictions that pass the API and vault coverage checks.
+The app shows the combined multiplier and potential payout before you submit. The final accepted amount depends on the quote and vault checks.
 
-## Prediction Pool and Bonus Backstop Pool
+## Submit a prediction
 
-Multiplier Predictions use two pools:
+1. Open [strike.fun/world-cup-multiplier-predictions](https://strike.fun/world-cup-multiplier-predictions).
+2. Choose an active multiplier event.
+3. Select one or more outcomes.
+4. Review the combined multiplier and potential payout.
+5. Enter your prediction amount in USDT.
+6. Confirm the wallet flow: USDT approval if needed, then vault submission.
+7. Check your portfolio receipt for status, selected outcomes, prediction amount, potential payout or refund, and transaction links.
 
-- **Prediction Pool** — funded by user prediction amounts.
-- **Bonus Backstop Pool** — contributed by users who want to earn from leftover Prediction Pool rewards while also providing backstop coverage.
+## Earn and Bonus Backstop
 
-If no prediction wins, or if winning predictions do not use the whole Prediction Pool, the leftover Prediction Pool is distributed to Bonus Backstop Pool contributors pro-rata.
+The Earn tab lets users contribute USDT to the Bonus Backstop Pool.
 
-Current product economics:
+Contributors may earn when the Prediction Pool has leftover funds after settlement. The Bonus Backstop Pool can also be used to cover accepted prediction payouts when the Prediction Pool is not enough, so contributions carry downside risk.
 
-- 100% of leftover Prediction Pool goes to Bonus Backstop Pool contributors.
-- 0% platform reserve / skim on leftover Prediction Pool.
-- 0% fee on prediction amounts, winnings, and contributor rewards for this product direction.
+Review the app’s pool, coverage, and risk information before contributing. For the full economics, see [World Cup Multiplier Predictions Protocol](../protocol/world-cup-multiplier-predictions.md).
 
-## Earn: contributing to the Bonus Backstop Pool
-
-The Earn tab lets users contribute USDT to the Bonus Backstop Pool through the vault.
-
-Contributors may earn when the Prediction Pool has leftover funds. However, the Bonus Backstop Pool may also be used to cover accepted prediction payouts when the Prediction Pool is not enough.
-
-This means contributors have downside risk. The app shows risk and coverage information before contribution or prediction submission, and the API/vault checks remain the authority for accepted amounts, withdrawals, claims, refunds, and settlement state.
-
-## Coverage preflight
-
-Before requesting a quote, the frontend estimates whether the current Bonus Backstop Pool can support the selected multiplier and prediction amount.
-
-If coverage looks insufficient, the UI may show a reduced maximum prediction amount. This is a client estimate only; the API quote and vault transaction checks are still authoritative.
-
-## Settlement, claims, and refunds
+## Claim or refund
 
 After an event is settled:
 
 - Winning predictions can claim their eligible payout.
 - Cancelled or refunded events can expose refund actions.
-- Portfolio receipts show multiplier prediction entries, status, selected outcomes, prediction amount, potential payout/refund, transaction links, and claim/refund actions when available.
+- Portfolio receipts show claim or refund actions when they are available.
+
+If a claim or refund is not shown, the event may still be open, settlement may not be finalized, or the connected wallet may not have an eligible receipt.
 
 ## Important notes
 
@@ -75,4 +56,3 @@ After an event is settled:
 - Exact-result rules matter: every selected outcome must be correct to win.
 - Bonus Backstop Pool contributors can earn rewards but also carry backstop risk.
 - Always review the event, selected outcomes, combined multiplier, prediction amount, potential payout, and wallet prompts before confirming.
-- The audit and smoke addendum are available at [World Cup Multiplier Predictions V0 Historical Audit & Smoke Addendum](../technical/world-cup-multiplier-predictions-v0-audit.md).
