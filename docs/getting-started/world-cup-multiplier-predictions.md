@@ -14,11 +14,11 @@ A prediction wins only if **every selected outcome is correct**. If any selected
 
 ## Quick example
 
-- Outcome A: 2x
-- Outcome B: 3x
-- Combined multiplier: 6x
+- Outcome A: 5x
+- Outcome B: 10x
+- Combined multiplier: 50x
 - Prediction amount: 10 USDT
-- Potential payout if both selected outcomes are correct: 60 USDT
+- Potential payout if both selected outcomes are correct: 500 USDT
 
 The app shows the combined multiplier and potential payout before you submit. The final accepted amount depends on the quote and vault checks.
 
