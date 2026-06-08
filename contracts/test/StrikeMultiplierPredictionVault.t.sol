@@ -213,6 +213,103 @@ contract StrikeMultiplierPredictionVaultTest is Test {
         vault.submitPredictionWithQuote(predictionId, EVENT_ID, predictionAmount, potentialPayout, expiresAt, signature);
     }
 
+    function testCrossEventTicketCanSubmitAsSingleVaultPredictionAndClaim() public {
+        _contribute(contributorA, 200 * USDT);
+
+        bytes32 backendRealEventA = keccak256("backend-real-event-france-vs-brazil");
+        bytes32 backendRealEventB = keccak256("backend-real-event-spain-vs-germany");
+        bytes32 vaultEventId = keccak256("ticket-vault-event-cross-event-claim");
+        bytes32 contractPredictionId = keccak256("ticket-contract-prediction-cross-event-claim");
+        assertTrue(backendRealEventA != backendRealEventB);
+        assertTrue(vaultEventId != backendRealEventA);
+        assertTrue(vaultEventId != backendRealEventB);
+
+        _createEvent(vaultEventId);
+
+        uint256 predictionAmount = 20 * USDT;
+        uint256 potentialPayout = 25 * USDT;
+        uint256 expiresAt = block.timestamp + 1 hours;
+        bytes memory signature = _quoteSignature(
+            managerPrivateKey,
+            contractPredictionId,
+            vaultEventId,
+            predictorA,
+            predictionAmount,
+            potentialPayout,
+            expiresAt
+        );
+
+        vm.prank(predictorA);
+        vault.submitPredictionWithQuote(
+            contractPredictionId, vaultEventId, predictionAmount, potentialPayout, expiresAt, signature
+        );
+
+        assertEq(vault.predictionIdsLength(), 1);
+        assertEq(vault.eventPredictionIdsLength(vaultEventId), 1);
+        assertEq(vault.eventPredictionIdAt(vaultEventId, 0), contractPredictionId);
+
+        (StrikeMultiplierPredictionVault.EventStatus realEventAStatus,,,,,,,,) =
+            vault.predictionEvents(backendRealEventA);
+        (StrikeMultiplierPredictionVault.EventStatus realEventBStatus,,,,,,,,) =
+            vault.predictionEvents(backendRealEventB);
+        assertEq(uint256(realEventAStatus), uint256(StrikeMultiplierPredictionVault.EventStatus.None));
+        assertEq(uint256(realEventBStatus), uint256(StrikeMultiplierPredictionVault.EventStatus.None));
+
+        (
+            bytes32 recordedVaultEventId,
+            address predictor,
+            uint256 recordedPredictionAmount,
+            uint256 recordedPotentialPayout,,
+            StrikeMultiplierPredictionVault.PredictionStatus status
+        ) = vault.predictionReceipts(contractPredictionId);
+        assertEq(recordedVaultEventId, vaultEventId);
+        assertEq(predictor, predictorA);
+        assertEq(recordedPredictionAmount, predictionAmount);
+        assertEq(recordedPotentialPayout, potentialPayout);
+        assertEq(uint256(status), uint256(StrikeMultiplierPredictionVault.PredictionStatus.Accepted));
+
+        _settle(vaultEventId, _ids(contractPredictionId));
+
+        uint256 before = usdt.balanceOf(predictorA);
+        vm.prank(predictorA);
+        vault.claimPredictionPayout(contractPredictionId);
+
+        assertEq(usdt.balanceOf(predictorA) - before, potentialPayout);
+        assertEq(vault.totalClaimablePayouts(), 0);
+    }
+
+    function testCrossEventTicketCanRefundFromSingleVaultEvent() public {
+        _contribute(contributorA, 200 * USDT);
+
+        bytes32 backendRealEventA = keccak256("backend-real-event-cancelled-leg");
+        bytes32 backendRealEventB = keccak256("backend-real-event-still-pending-leg");
+        bytes32 vaultEventId = keccak256("ticket-vault-event-cross-event-refund");
+        bytes32 contractPredictionId = keccak256("ticket-contract-prediction-cross-event-refund");
+        assertTrue(backendRealEventA != backendRealEventB);
+
+        _createEvent(vaultEventId);
+
+        vm.prank(manager);
+        vault.acceptPrediction(contractPredictionId, vaultEventId, predictorA, 20 * USDT, 25 * USDT);
+
+        vm.prank(manager);
+        vault.cancelEvent(vaultEventId);
+
+        (StrikeMultiplierPredictionVault.EventStatus realEventAStatus,,,,,,,,) =
+            vault.predictionEvents(backendRealEventA);
+        (StrikeMultiplierPredictionVault.EventStatus realEventBStatus,,,,,,,,) =
+            vault.predictionEvents(backendRealEventB);
+        assertEq(uint256(realEventAStatus), uint256(StrikeMultiplierPredictionVault.EventStatus.None));
+        assertEq(uint256(realEventBStatus), uint256(StrikeMultiplierPredictionVault.EventStatus.None));
+
+        uint256 before = usdt.balanceOf(predictorA);
+        vm.prank(predictorA);
+        vault.claimRefund(contractPredictionId);
+
+        assertEq(usdt.balanceOf(predictorA) - before, 20 * USDT);
+        assertEq(vault.totalRefundablePredictions(), 0);
+    }
+
     function testRejectUncoveredPredictionWhenNoBackstopPool() public {
         vm.expectRevert(StrikeMultiplierPredictionVault.CoverageUnavailable.selector);
         vm.prank(manager);
@@ -272,6 +369,11 @@ contract StrikeMultiplierPredictionVaultTest is Test {
         vm.expectRevert(StrikeMultiplierPredictionVault.TotalPredictionLimitExceeded.selector);
         vm.prank(manager);
         vault.acceptPrediction(bytes32(uint256(maxTotal + 1)), extraEvent, predictorA, 1 * USDT, 1 * USDT);
+    }
+
+    function testTicketAsVaultEventLimitConstantsAreDeploymentCaps() public view {
+        assertEq(vault.MAX_TOTAL_PREDICTIONS(), 1_000);
+        assertEq(vault.MAX_PREDICTIONS_PER_EVENT(), 128);
     }
 
     function testRejectSettlementWinnersAboveCap() public {
