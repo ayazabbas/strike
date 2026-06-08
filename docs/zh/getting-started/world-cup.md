@@ -4,6 +4,8 @@ Strike 的世界杯专区是围绕 2026 FIFA 世界杯设计的活动型预测�
 
 线上入口：[app.strike.pm/world-cup](https://app.strike.pm/world-cup)。
 
+固定倍率的精确结果产品见[世界杯倍数预测](world-cup-multiplier-predictions.md)。
+
 ## 可以交易什么
 
 ### 2026 世界杯冠军

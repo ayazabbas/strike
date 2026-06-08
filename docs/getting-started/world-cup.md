@@ -4,6 +4,8 @@ Strike’s World Cup section is a campaign-style prediction experience for the 2
 
 The live app is available at [app.strike.pm/world-cup](https://app.strike.pm/world-cup).
 
+For the fixed-multiplier exact-result product, see [World Cup Multiplier Predictions](world-cup-multiplier-predictions.md).
+
 ## What you can trade
 
 ### 2026 World Cup Winner

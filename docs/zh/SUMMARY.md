@@ -9,6 +9,7 @@
 * [同注分彩池市场](protocol/parimutuel-markets.md)
 * [Flap 代币池](getting-started/flap-token-pools.md)
 * [世界杯市场](getting-started/world-cup.md)
+* [世界杯倍数预测](getting-started/world-cup-multiplier-predictions.md)
 * [排行榜](getting-started/leaderboard.md)
 * [核心概念](getting-started/key-concepts.md)
 
@@ -23,6 +24,7 @@
 * [同注分彩池市场](protocol/parimutuel-markets.md)
 * [Flap 代币池](getting-started/flap-token-pools.md)
 * [世界杯市场](getting-started/world-cup.md)
+* [世界杯倍数预测](getting-started/world-cup-multiplier-predictions.md)
 * [费用与激励](protocol/fees-and-incentives.md)
 
 ## 智能合约
