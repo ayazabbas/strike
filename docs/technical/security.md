@@ -56,8 +56,10 @@ No function iterates over unbounded sets. Segment trees provide O(log N) operati
 ### Internal Audit v1.2
 An internal security audit (v1.2) was conducted covering all core contracts. Key areas reviewed include fee split logic, chunked settlement, resting order mechanics, and per-user order caps. All findings have been addressed. See `docs/technical/internal-audit-v1.2.md` for the full report.
 
-### World Cup Multiplier Predictions V0 Audit
-An internal Codex-assisted current-state audit was conducted for World Cup Multiplier Predictions V0 persistence, API, admin surfaces, frontend prototype/admin gating, and migrations 043/044. This was not an external third-party audit. The final review verdict was PASS for V0 from a fund-theft and funds-stuck perspective after hardening, with payment execution still disabled. See `docs/technical/world-cup-multiplier-predictions-v0-audit.md` for the full report.
+### World Cup Multiplier Predictions V0 Historical Audit
+An internal Codex-assisted audit was conducted for the World Cup Multiplier Predictions V0 state on 2026-06-07, covering persistence, API, admin surfaces, frontend prototype/admin gating, and migrations 043/044. This was not an external third-party audit. The final review verdict was PASS for V0 from a fund-theft and funds-stuck perspective after hardening.
+
+After that historical audit, the production route `/world-cup-multiplier-predictions` was smoked through frontend wallet, API, and vault flows using vault `0x6859109EEBd3E6A885150d7AF1dE1d3Cd97399f3` and tiny smoke event id `2`. Verification covered submit prediction, contribute, settle, claim paid, finalize, and portfolio/API/UI smoke. See `docs/technical/world-cup-multiplier-predictions-v0-audit.md` for the full report and addendum.
 
 ### Static Analysis
 - Slither static analysis

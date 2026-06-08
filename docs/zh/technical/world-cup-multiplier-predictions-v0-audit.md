@@ -1,19 +1,21 @@
-# 世界杯倍数预测 V0 审计
+# 世界杯倍数预测 V0 历史审计
 
 **日期：** 2026-06-07
 **审计方：** Internal Codex-assisted security review
-**范围：** 世界杯倍数预测 V0 的持久化、API、管理端表面、前端原型与管理钱包门控、迁移 043 与 044
+**范围：** 审查日期当时的世界杯倍数预测 V0 持久化、API、管理端表面、前端原型与管理钱包门控、迁移 043 与 044
 **结论：** 从 V0 的资金被盗与资金卡死视角看，结论为 PASS
 
 ---
 
 ## 执行摘要
 
-本报告是内部、Codex 辅助的当前状态审计报告。它不是外部第三方审计，也不表示相关代码已经 push、部署或在生产环境启用。
+本报告是内部、Codex 辅助的历史审计报告，反映审查当时的当前状态。它不是外部第三方审计。
 
-经过已记录的安全加固后，当前世界杯倍数预测 V0 实现从资金被盗和资金卡死两个核心视角看可用于 V0。最终独立 Codex 复核结论为 **PASS**，没有剩余 blocking findings。
+经过已记录的安全加固后，当时的世界杯倍数预测 V0 实现从资金被盗和资金卡死两个核心视角看可用于 V0。最终独立 Codex 复核结论为 **PASS**，没有剩余 blocking findings。
 
-V0 支付执行仍然禁用。当前审查状态不会为世界杯倍数预测执行 token transfers、claims、refunds、contract writes 或 mainnet broadcasts。公开预测创建只记录链下预测意图。
+在本次审计当时，V0 支付执行处于禁用状态。被审查状态不会为世界杯倍数预测执行 token transfers、claims、refunds、contract writes 或 mainnet broadcasts。公开预测创建只记录链下预测意图。
+
+后续生产 smoke 背景见[生产发布 Smoke 补充](#生产发布-smoke-补充)。
 
 ---
 
@@ -22,18 +24,18 @@ V0 支付执行仍然禁用。当前审查状态不会为世界杯倍数预测�
 本次审查覆盖：
 
 - 世界杯倍数预测的持久化、API 和管理端表面
-- 前端原型行为和管理钱包默认值/门控
+- 当时的前端原型行为和管理钱包默认值/门控
 - 数据库迁移 `043_world_cup_multiplier_persistence.sql` 与 `044_world_cup_multiplier_security_hardening.sql`
 - 后端当前 commits `3325997` 与 `4b92a02`
 - 前端当前 commits `1c4c71f` 与 `0c34854`
 
-本次审查不覆盖合约支付执行。V0 支付执行仍然禁用：没有 token transfers，没有 claims 或 refunds，没有 contract writes，也没有 mainnet broadcasts。
+本次审查不覆盖合约支付执行。在审查当时，V0 支付执行处于禁用状态：没有 token transfers，没有 claims 或 refunds，没有 contract writes，也没有 mainnet broadcasts。
 
 ---
 
 ## 主要审查风险
 
-本次审查重点关注可能让 payment-disabled 原型变成经济责任或产生不安全管理路径的风险：
+本次审查重点关注可能让当时被审查的 payment-disabled 实现变成经济责任或产生不安全管理路径的风险：
 
 - 未支付预测意图被错误视为已资金确认权益
 - 生命周期、取消或结算 bug 导致资金卡死
@@ -46,9 +48,9 @@ V0 支付执行仍然禁用。当前审查状态不会为世界杯倍数预测�
 
 ---
 
-## 当前状态加固
+## 历史当前状态加固
 
-当前审查状态包含以下加固：
+审查当时的当前状态包含以下加固：
 
 - 公开预测创建只记录意图。新 rows 使用 `prediction_status=intent_recorded` 和 `funding_status=payment_disabled`。
 - Payment-disabled intents 不更新 Prediction Pool accounting，也不占用 Bonus Backstop Pool coverage。
@@ -83,8 +85,21 @@ V0 支付执行仍然禁用。当前审查状态不会为世界杯倍数预测�
 
 ---
 
+## 生产发布 Smoke 补充
+
+上述历史审计之后，世界杯倍数预测已通过前端、后端 API 和 vault 流程的生产 smoke。
+
+- 生产路由：`/world-cup-multiplier-predictions`
+- Vault 地址：`0x6859109EEBd3E6A885150d7AF1dE1d3Cd97399f3`
+- Tiny smoke event id：`2`
+- Smoke 覆盖类别：submit prediction、contribute、settle、claim paid、finalize、portfolio/API/UI smoke
+
+本补充只记录生产 smoke 覆盖情况。它不会把历史内部审计变成第三方审计，也不披露或依赖任何 secret 或 private-key material。
+
+---
+
 ## V0 限制
 
-本报告应理解为 V0 当前状态内部复核，而不是生产发布证明。
+本报告应理解为 2026-06-07 当时状态的 V0 历史内部复核，并附带上面的生产 smoke 补充。
 
-最重要的限制是有意保留的：支付执行禁用。预测创建只记录意图，不移动 token，也不创建可 claim 的链上 position。未来任何启用 payments、contract writes、claims、refunds 或 mainnet broadcasts 的版本，都需要在发布前重新审查相关支付与结算路径。
+最重要的原始限制是有意保留的：审计当时支付执行处于禁用状态。后续生产 smoke 已覆盖补充中列出的前端钱包、API 和 vault 流程，包括 tiny smoke event 的 claim paid 与 finalize 验证。

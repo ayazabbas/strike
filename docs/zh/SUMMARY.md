@@ -74,7 +74,7 @@
 * [Gas 与成本](technical/gas-and-costs.md)
 * [MEV 缓解](technical/mev.md)
 * [内部审计 v1.2](technical/internal-audit-v1.2.md)
-* [世界杯倍数预测 V0 审计](technical/world-cup-multiplier-predictions-v0-audit.md)
+* [世界杯倍数预测 V0 历史审计与 Smoke 补充](technical/world-cup-multiplier-predictions-v0-audit.md)
 
 ## 即将推出
 

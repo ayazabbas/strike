@@ -64,9 +64,11 @@
 
 已完成覆盖所有核心合约的内部安全审计（v1.2）。重点审查范围包括费用拆分逻辑、分块结算、resting order 机制和用户级订单上限。所有 findings 均已处理。完整报告见 `docs/technical/internal-audit-v1.2.md`。
 
-### 世界杯倍数预测 V0 审计
+### 世界杯倍数预测 V0 历史审计
 
-已完成针对世界杯倍数预测 V0 的内部 Codex 辅助当前状态审计，范围包括持久化、API、管理端表面、前端原型/管理钱包门控，以及迁移 043/044。这不是外部第三方审计。经过加固后，最终复核从 V0 的资金被盗与资金卡死视角给出 PASS 结论，且支付执行仍然禁用。完整报告见 `docs/zh/technical/world-cup-multiplier-predictions-v0-audit.md`。
+已完成针对 2026-06-07 当时状态的世界杯倍数预测 V0 内部 Codex 辅助审计，范围包括持久化、API、管理端表面、前端原型/管理钱包门控，以及迁移 043/044。这不是外部第三方审计。经过加固后，最终复核从 V0 的资金被盗与资金卡死视角给出 PASS 结论。
+
+在上述历史审计之后，生产路由 `/world-cup-multiplier-predictions` 已通过前端钱包、API 和 vault 流程 smoke，使用 vault `0x6859109EEBd3E6A885150d7AF1dE1d3Cd97399f3` 与 tiny smoke event id `2`。验证覆盖 submit prediction、contribute、settle、claim paid、finalize，以及 portfolio/API/UI smoke。完整报告与补充见 `docs/zh/technical/world-cup-multiplier-predictions-v0-audit.md`。
 
 ### 静态分析
 
