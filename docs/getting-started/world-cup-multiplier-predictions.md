@@ -1,14 +1,14 @@
-# World Cup Multiplier Predictions
+# Multiplier Predictions
 
-Strike Multiplier Predictions is a World Cup campaign product for fixed-multiplier, exact-result predictions.
+Strike Multiplier Predictions is a fixed-multiplier, exact-result prediction product. The 2026 World Cup is the first event series and use case.
 
 The live app is available at [strike.fun/world-cup-multiplier-predictions](https://strike.fun/world-cup-multiplier-predictions).
 
-For protocol, economics, coverage, settlement, API, and vault details, see [World Cup Multiplier Predictions Protocol](../protocol/world-cup-multiplier-predictions.md).
+For protocol, economics, coverage, settlement, API, and vault details, see [Multiplier Predictions Protocol](../protocol/world-cup-multiplier-predictions.md).
 
 ## What it is
 
-Each event lists one or more clearly defined World Cup outcomes, such as exact match result fields. Every selectable outcome has a fixed multiplier.
+Each event lists one or more clearly defined outcomes, such as exact match result fields for the first World Cup event series. Every selectable outcome has a fixed multiplier.
 
 A prediction wins only if **every selected outcome is correct**. If any selected outcome is wrong, the multiplier prediction does not win.
 
@@ -38,7 +38,7 @@ The Earn tab lets users contribute USDT to the Bonus Backstop Pool.
 
 Contributors may earn when the Prediction Pool has leftover funds after settlement. The Bonus Backstop Pool can also be used to cover accepted prediction payouts when the Prediction Pool is not enough, so contributions carry downside risk.
 
-Review the app’s pool, coverage, and risk information before contributing. For the full economics, see [World Cup Multiplier Predictions Protocol](../protocol/world-cup-multiplier-predictions.md).
+Review the app’s pool, coverage, and risk information before contributing. For the full economics, see [Multiplier Predictions Protocol](../protocol/world-cup-multiplier-predictions.md).
 
 ## Claim or refund
 

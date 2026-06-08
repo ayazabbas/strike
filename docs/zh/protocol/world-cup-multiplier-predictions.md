@@ -1,12 +1,12 @@
-# 世界杯倍数预测协议
+# 倍数预测协议
 
-Strike 倍数预测是世界杯活动使用的固定倍率、精确结果预测产品。本页说明协议行为、经济模型、覆盖、结算、API 与金库职责。
+Strike 倍数预测是可用于 2026 世界杯等事件系列的固定倍率、精确结果预测产品。本页说明协议行为、经济模型、覆盖、结算、API 与金库职责。
 
-用户教程见[世界杯倍数预测](../getting-started/world-cup-multiplier-predictions.md)。线上入口：[strike.fun/world-cup-multiplier-predictions](https://strike.fun/world-cup-multiplier-predictions)。
+用户教程见[倍数预测](../getting-started/world-cup-multiplier-predictions.md)。线上入口：[strike.fun/world-cup-multiplier-predictions](https://strike.fun/world-cup-multiplier-predictions)。
 
 ## 事件模型
 
-每个倍数预测事件都有管理员配置的结果。结果代表可客观结算的世界杯字段，例如比赛比分、胜方或其他清晰定义的事件结果。每个可选结果都有指定倍率。
+每个倍数预测事件都有管理员配置的结果。结果代表受支持事件系列中可客观结算的字段，例如比赛比分、胜方或其他清晰定义的事件结果。每个可选结果都有指定倍率。
 
 用户可以在一次预测中选择一个或多个结果。组合倍率等于所选结果倍率的乘积。只有当每个所选结果都正确结算时，预测才会获胜。
 

@@ -1,12 +1,12 @@
-# World Cup Multiplier Predictions Protocol
+# Multiplier Predictions Protocol
 
-Strike Multiplier Predictions is the fixed-multiplier exact-result product used by the World Cup campaign. This page covers protocol behavior, economics, coverage, settlement, API, and vault responsibilities.
+Strike Multiplier Predictions is the fixed-multiplier exact-result product used for event series such as the 2026 World Cup. This page covers protocol behavior, economics, coverage, settlement, API, and vault responsibilities.
 
-For a user-facing walkthrough, see [World Cup Multiplier Predictions](../getting-started/world-cup-multiplier-predictions.md). The live app is available at [strike.fun/world-cup-multiplier-predictions](https://strike.fun/world-cup-multiplier-predictions).
+For a user-facing walkthrough, see [Multiplier Predictions](../getting-started/world-cup-multiplier-predictions.md). The live app is available at [strike.fun/world-cup-multiplier-predictions](https://strike.fun/world-cup-multiplier-predictions).
 
 ## Event model
 
-Each multiplier event has admin-configured outcomes. Outcomes represent exact, objectively resolvable World Cup fields such as match score, winner, or another clearly defined event result. Each selectable outcome has an assigned multiplier.
+Each multiplier event has admin-configured outcomes. Outcomes represent exact, objectively resolvable fields for a supported event series, such as match score, winner, or another clearly defined event result. Each selectable outcome has an assigned multiplier.
 
 Users can select one or more outcomes in one prediction. The combined multiplier is the product of the selected outcome multipliers. A prediction wins only when every selected outcome resolves correctly.
 
