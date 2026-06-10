@@ -6,7 +6,7 @@
 
 - Parimutuel pool model（无订单簿）
 - `Market.sol` + `MarketFactory.sol`，包含 51 个 tests
-- 使用 Privy embedded wallets 的 Telegram bot
+- Telegram bot prototype
 - Pyth 预言机结算
 - Keeper service（自动创建 + 自动结算）
 

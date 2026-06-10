@@ -70,9 +70,9 @@ event OrderPlaced(
 Emitted when a user places an order. `side` is `Bid` (0), `Ask` (1), `SellYes` (2), or `SellNo` (3). `batchId` is the batch the order was placed into.
 
 ```solidity
-event OrderCancelled(uint256 indexed orderId, address indexed owner);
+event OrderCancelled(uint256 indexed orderId, uint256 indexed marketId, address indexed owner);
 ```
-Emitted when an order is cancelled by its owner. Collateral is unlocked.
+Emitted when an order is cancelled by its owner. Collateral or positions are unlocked.
 
 ```solidity
 event GtcAutoCancelled(uint256 indexed orderId, address indexed owner);
@@ -109,12 +109,13 @@ Emitted when a batch is cleared. `clearingTick` is the price tick at which bids 
 ```solidity
 event OrderSettled(
     uint256 indexed orderId,
+    uint256 indexed marketId,
     address indexed owner,
     uint256 filledLots,
     uint256 collateralReleased
 );
 ```
-Emitted when an order is settled during atomic `clearBatch()`. `filledLots` may be 0 if the order did not participate in the clearing. `collateralReleased` is the unfilled/excess collateral returned.
+Emitted when an order is settled during `clearBatch()` settlement. `filledLots` may be 0 if the order did not participate in the clearing. `collateralReleased` is the unfilled/excess collateral returned.
 
 ## OutcomeToken
 
@@ -172,11 +173,6 @@ event FeeBpsUpdated(uint256 feeBps);
 Emitted when the uniform fee is updated.
 
 ```solidity
-event ClearingBountyUpdated(uint256 clearingBountyBps);
-```
-Emitted when the clearing bounty is updated.
-
-```solidity
 event ProtocolFeeCollectorUpdated(address indexed collector);
 ```
 Emitted when the protocol fee collector address is updated.
@@ -214,21 +210,6 @@ Emitted when the factory is paused or unpaused. When paused, no new markets can 
 event DefaultParamsUpdated(uint256 batchInterval, uint128 minLots);
 ```
 Emitted when default market creation parameters are updated.
-
-```solidity
-event CreationBondUpdated(uint256 newBond);
-```
-Emitted when the market creation bond amount is updated.
-
-```solidity
-event FeeCollectorUpdated(address indexed collector);
-```
-Emitted when the factory's fee collector address is updated.
-
-```solidity
-event ResolverBountyPaid(uint256 indexed factoryMarketId, address indexed resolver, uint256 amount);
-```
-Emitted when the creation bond is paid out to the resolver who successfully resolved a market.
 
 ## PythResolver
 

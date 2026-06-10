@@ -74,7 +74,7 @@ function findClearingTick(
 ) internal view returns (uint256 clearingTick)
 ```
 
-Binary search for the optimal clearing tick in a Frequency Batch Auction. The algorithm:
+Binary search for the optimal clearing tick in a Frequent Batch Auction. The algorithm:
 
 1. **Cumulative bids at tick p:** total bid volume at ticks >= p (bids willing to pay at least p). Computed as `totalBidVolume - prefixSum(bidTree, p-1)`.
 2. **Cumulative asks at tick p:** total ask volume at ticks <= p (asks willing to sell at most p). Computed as `prefixSum(askTree, p)`.

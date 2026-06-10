@@ -2,7 +2,7 @@
 
 FLAP 代币池属于 STRIKE 中面向公开创建者的 pool 形式，用于由 AI 结算的代币市场。它们使用 native-token pool 合约：创建者可以发起以所选 BEP20 代币抵押的多结果 parimutuel pools，交易者买入结果，并在结算后领取收益或退款。
 
-FLAP 代币池已在 [app.strike.pm/flap](https://app.strike.pm/flap) 上线。
+FLAP 代币池已在 [strike.fun/flap](https://strike.fun/flap) 上线。
 
 ## 创建者指南
 
@@ -30,6 +30,7 @@ FLAP 代币池已在 [app.strike.pm/flap](https://app.strike.pm/flap) 上线。
 - **FLAP AI 结算** — resolver 使用 STRIKE 选定的固定 FLAP AI model。
 - **30 minute 挑战 window** — AI 提出结果后，用户可以在最终确认前发起挑战。
 - **Creator bond** — 官方创建流程会提交 `0.05 BNB` 创建者 bond。
+- **Challenger bond** — 发起 challenge 需要提交配置的 `0.01 BNB` challenger bond。
 
 STRIKE 承担 AI 费用。创建者在公开 FLAP Token Pool 流程中**不能**选择 model，也不需要支付特定 model 的预言机费用。
 
@@ -96,9 +97,10 @@ FLAP AI 预言机适合支持范围内的代币数据问题，但它不是通用
 | Item | Behavior |
 |---|---|
 | Creator bond | `0.05 BNB` 于 create |
-| AI 费用 | 由 STRIKE 承担 |
-| Model choice | 由 STRIKE 固定 |
-| Pool 费用 | 公开流程默认 2% |
+| Challenger bond | `0.01 BNB` 用于发起 challenge |
+| AI 费用 | 托管流程中由 STRIKE 覆盖 |
+| Model 选择 | 固定为 STRIKE 选定的 FLAP AI model |
+| Pool 费用 | 当前公开流程费用为 2%；由平台配置 |
 | 挑战 window | 30 minutes |
 | 抵押资产 | Creator-selected BEP20 代币 |
 

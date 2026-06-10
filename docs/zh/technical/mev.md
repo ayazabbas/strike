@@ -6,7 +6,7 @@
 
 ## FBA 如何缓解
 
-Frequency Batch Auctions 会消除同一批次内的时间优先级：
+Frequent Batch Auctions 会消除同一批次内的时间优先级：
 
 - **同一批次内无法 front-run** - 同一 batch 中的所有订单都会被同等处理
 - **统一清算价格** - 不会因为订单成交顺序产生连续价格冲击

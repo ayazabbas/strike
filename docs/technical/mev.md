@@ -6,7 +6,7 @@ On continuous orderbooks, MEV bots exploit time priority: front-running, sandwic
 
 ## How FBA Helps
 
-Frequency Batch Auctions eliminate intra-batch time priority:
+Frequent Batch Auctions eliminate intra-batch time priority:
 
 - **No front-running within a batch** — all orders in the same batch are treated equally
 - **Uniform clearing price** — no sequential price impact from ordered fills

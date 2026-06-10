@@ -13,7 +13,7 @@ The sections below cover orderbook trading first, then pool markets.
 
 ## Understanding Orderbook Prices
 
-Every market on Strike has two outcomes: **UP** and **DOWN**. Tokens for each outcome trade between **$0.01** and **$0.99**.
+Every orderbook market on Strike has two outcomes: **UP** and **DOWN**. Positions trade between **$0.01** and **$0.99** per lot.
 
 The price reflects the market's implied probability:
 
@@ -32,7 +32,7 @@ An UP token at $0.30 means the market thinks there's roughly a 30% chance the as
 - **UP** -- you're betting the asset's price will be **above** the strike price at expiry.
 - **DOWN** -- you're betting the asset's price will be **below** the strike price at expiry.
 
-One side always wins. When a market resolves, the winning token pays out **$1.00** and the losing token pays **$0.00**.
+One side wins at resolution. Winning orderbook positions pay their full settlement value; losing positions pay nothing.
 
 ## Placing Orders
 
@@ -48,7 +48,7 @@ Your order sits on the orderbook until it's matched in the next batch.
 
 Strike uses **Frequent Batch Auctions** for fair price discovery. Here's how it works:
 
-1. Orders are collected over a short window (a few seconds).
+1. Orders are collected into short keeper-cleared batches. The exact cadence can vary by market and network conditions.
 2. At the end of the window, all orders in the batch are matched simultaneously.
 3. A single **clearing price** is calculated -- every fill in that batch trades at the same price.
 
@@ -105,7 +105,7 @@ When a market resolves:
 2. Find the resolved market
 3. Click **Claim** to receive your USDT payout
 
-If you held the winning token, you receive **$1.00 per token**. Your profit is $1.00 minus what you paid.
+If your side wins, your profit is the winning payout minus your entry cost and fees.
 
 ## Fees
 

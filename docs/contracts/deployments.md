@@ -82,7 +82,7 @@ V2 deployed at block `104930598` on 2026-05-01.
 
 | Network | Indexer API | App |
 |---------|------------|-----|
-| Mainnet | `https://app.strike.pm/api` | [app.strike.pm](https://app.strike.pm) |
+| Mainnet | `https://strike.fun/api` | [strike.fun](https://strike.fun) |
 | Testnet | `https://testnet.strike.pm/api` | [testnet.strike.pm](https://testnet.strike.pm) |
 
 ## Price Feeds

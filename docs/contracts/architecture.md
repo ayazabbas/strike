@@ -72,7 +72,7 @@ NativeTokenPoolAIResolver ──→ Flap AI Oracle
 | **PythResolver** | Pyth price feed resolution | Singleton (called per-market) |
 | **AIResolver** | AI oracle resolution (Flap) | Singleton (called per-market) |
 | **SegmentTree** | Price-level aggregate volumes | Library (used by OrderBook) |
-| **FeeModel** | Fee calculation, bounties | Library or singleton |
+| **FeeModel** | Fee calculation | Singleton |
 | **ParimutuelFactory** | Creates and resolves pool markets | Singleton |
 | **ParimutuelPoolManager** | Buys, pool accounting, probability/payout curve | Singleton |
 | **ParimutuelVault** | Standard pool collateral custody | Singleton |
@@ -89,15 +89,15 @@ NativeTokenPoolAIResolver ──→ Flap AI Oracle
 
 **Separate market engines.** Strike treats FBA orderbook markets, standard parimutuel pools, and native-token Flap Token Pools as separate on-chain primitives. Orderbook markets optimize for active binary trading; pool markets optimize for 2–8 outcome predictions with simple buy-and-claim UX; Flap Token Pools add creator-launched BEP20 collateral and FLAP AI resolution.
 
-**Per-market isolation.** Each market's orderbook state is isolated via per-market mappings within the singleton OrderBook contract. Segment trees are allocated per-side per-market, preventing cross-market contention and bounding worst-case gas costs to a single market's depth.
+**Per-market isolation.** Each market's orderbook state is isolated via per-market mappings within the singleton OrderBook contract. OrderBook uses bid-side and ask-side segment trees per market, preventing cross-market contention and bounding worst-case gas costs to a single market's depth.
 
 **Bounded iteration.** No contract function iterates over an unbounded set. Segment trees provide O(log N) operations. Batch order count is capped at MAX_ORDERS_PER_BATCH (1600) with automatic overflow to the next batch.
 
 **Split pool timing.** Parimutuel V2 markets track `tradingCloseTime` separately from `resolutionTime`, so buying can close before the event or oracle timestamp used for resolution.
 
-**Atomic settlement.** `clearBatch(marketId)` clears the batch and settles all orders in a single transaction. The contract reads `batchOrderIds[marketId][batchId]` internally — no order IDs are passed by the caller. Settlement uses the clearing price (not each order's limit tick), and excess collateral is refunded inline.
+**Chunked settlement.** `clearBatch(marketId)` computes the clearing price and settles up to `SETTLE_CHUNK_SIZE` orders per call. Small batches complete in one transaction; larger batches settle through repeated calls. The contract reads `batchOrderIds[marketId][batchId]` internally — no order IDs are passed by the caller. Settlement uses the clearing price, not each order's limit tick.
 
-**Permissionless operations.** Clearing and resolution are callable by anyone. Economic incentives ensure they happen without relying on trusted operators.
+**Permissionless operations.** Clearing and Pyth resolution are callable by anyone; hosted keepers normally perform them. Current core CLOB contracts do not pay resolver or clearing bounties.
 
 ## Access Control Graph
 

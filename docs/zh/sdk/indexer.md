@@ -14,7 +14,7 @@ STRIKE 索引器提供 REST endpoint，用于查询聚合后的市场状态。�
 
 生成的 OpenAPI spec 是公开索引器 API 的事实来源：
 
-- [https://app.strike.pm/api-docs/](https://app.strike.pm/api-docs/)
+- [https://strike.fun/api-docs/](https://strike.fun/api-docs/)
 
 如果本页与 OpenAPI spec 不一致，请以生成的 spec 为准。
 
@@ -47,7 +47,7 @@ let active = client.indexer().get_active_markets().await?;
 
 ### Pagination（直接 HTTP）
 
-如果直接查询索引器而不使用 SDK，`/v1/markets` endpoint 支持 pagination：
+如果直接查询索引器而不使用 SDK，list endpoints 通常使用 `{ data, meta }` pagination；snapshot/detail endpoints 使用各自的 response shape。`/v1/markets` endpoint 支持 pagination：
 
 | Parameter | Type | 默认 | 说明 |
 |-----------|------|---------|-------------|
@@ -214,10 +214,10 @@ pub struct IndexerOrder {
 
 ## Trades
 
-`/v1/markets/:id/trades` endpoint 返回某个市场的清算 batch，默认会过滤掉空 batch。该 endpoint 可通过直接 HTTP 使用，SDK 目前尚未封装。
+`/v1/trades/:market_id` endpoint 返回某个市场的清算 batch，默认会过滤掉空 batch。该 endpoint 可通过直接 HTTP 使用，SDK 目前尚未封装。
 
 ```
-GET /v1/markets/1/trades?limit=50&offset=0
+GET /v1/trades/1?limit=50&offset=0
 ```
 
 ## Stats

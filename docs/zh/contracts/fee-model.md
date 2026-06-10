@@ -1,91 +1,60 @@
 # FeeModel.sol
 
-用于 STRIKE CLOB 协议的纯费用计算合约。该合约不执行任何转账；所有资金变动都由调用方处理（金库、BatchAuction 等）。FeeModel 只负责计算金额。
+Strike CLOB 协议的费用计算合约。它不移动资金；Vault、BatchAuction 等调用方负责资金移动。
 
-Inherits: `AccessControl` (OpenZeppelin).
+继承：`AccessControl`。
 
-## 费用 Schedule
+## 费用参数
 
-| Parameter | Type | Description | 默认 |
-|-----------|------|-------------|---------|
-| `feeBps` | `uint256` | 统一费用，单位为 basis points | 20 (0.20%) |
-| `clearingBountyBps` | `uint256` | 清算 keeper 的 bonus（管理员可配置，当前 disabled） | 0 |
-| `protocolFeeCollector` | `address` | 接收协议费用份额的地址 | 部署者 |
+| 参数 | 类型 | 说明 | 默认值 |
+|------|------|------|--------|
+| `feeBps` | `uint256` | 总费用，单位 bps | 20（0.20%） |
+| `protocolFeeCollector` | `address` | 接收协议费用的地址 | deployer |
 
-**Constant:** `MAX_BPS = 10_000` (100%).
+**常量：** `MAX_BPS = 10_000`（100%）。
 
-不区分 maker/taker；交易双方各支付一半费用（50/50 split）。整数 rounding 产生的额外 wei 归协议所有（sell side 支付 `ceil`）。
+费用不区分 maker/taker。买方与卖出 token/position 的订单成交时，总费用会在买方和卖方之间拆分；卖方侧拿到向上取整的一半。普通 Bid/Ask 成交时，买方下单时锁定的 fee 用于支付协议费用。
 
-## Calculation 函数
+## 计算函数
 
-### calculateFee
+### `calculateFee(amount)`
 
-```solidity
-function calculateFee(uint256 amount) 公开view returns (uint256 fee)
-```
+返回给定成交抵押金额对应的总费用。
 
-返回给定成交抵押资产金额对应的总费用。
+公式：`fee = amount * feeBps / 10_000`
 
-Formula: `fee = amount * feeBps / 10_000`
+### `calculateHalfFee(amount)`
 
-### calculateHalfFee
+返回 `ceil(calculateFee(amount) / 2)`。BatchAuction 在 token/position 卖方收到 payout 时，将其作为卖方侧费用。
 
-```solidity
-function calculateHalfFee(uint256 amount) 公开view returns (uint256 fee)
-```
+### `calculateOtherHalfFee(amount)`
 
-返回 buy-side 的半数费用: `floor(calculateFee(amount) / 2)`。
+返回 `calculateFee(amount) - calculateHalfFee(amount)`。BatchAuction 在买方与卖出 token/position 的订单成交时，将其作为买方侧费用。
 
-### calculateOtherHalfFee
+## 管理函数
 
-```solidity
-function calculateOtherHalfFee(uint256 amount) 公开view returns (uint256 fee)
-```
+所有管理函数都需要 `DEFAULT_ADMIN_ROLE`。
 
-返回 sell-side 的半数费用: `calculateFee(amount) - calculateHalfFee(amount)`（即 `ceil(fee / 2)`）。sell-side 费用会在结算时从卖方的 USDT payout 中扣除。
+### `setFeeBps(_feeBps)`
 
-## Admin 函数
+更新统一费率。若 `_feeBps > MAX_BPS` 则 revert。
 
-所有管理员函数都需要 `DEFAULT_ADMIN_ROLE`。
+### `setProtocolFeeCollector(_collector)`
 
-### setFeeBps
+更新协议费用接收地址。若 `_collector` 为零地址则 revert。
 
-```solidity
-function setFeeBps(uint256 _feeBps) external
-```
+## Events
 
-更新统一费用。如果 `_feeBps > MAX_BPS`，则 revert。
-
-### setClearingBounty
-
-```solidity
-function setClearingBounty(uint256 _clearingBountyBps) external
-```
-
-设置清算 bounty 百分比（当前 disabled，预留供未来使用）。
-
-### setProtocolFeeCollector
-
-```solidity
-function setProtocolFeeCollector(address _collector) external
-```
-
-更新协议费用收集器地址。如果 `_collector` 为 zero 地址，则 revert。
-
-## 事件
-
-| Event | 参数 | Description |
-|-------|-----------|-------------|
-| `FeeBpsUpdated` | `uint256 feeBps` | 费用变化时触发 |
-| `ClearingBountyUpdated` | `uint256 clearingBountyBps` | 清算 bounty 变化时触发 |
-| `ProtocolFeeCollectorUpdated` | `address indexed collector` | 费用收集器变化时触发 |
+| Event | 参数 | 说明 |
+|-------|------|------|
+| `FeeBpsUpdated` | `uint256 feeBps` | fee 变化时发出 |
+| `ProtocolFeeCollectorUpdated` | `address indexed collector` | fee collector 变化时发出 |
 
 ## 示例
 
-默认参数 (feeBps=20):
+当 `feeBps = 20`：
 
-- 已成交抵押资产: 100 USDT
-- 总费用: 100 * 20 / 10000 = 0.20 USDT
-- Buy-side 费用: floor(0.20 / 2) = 0.10 USDT
-- Sell-side 费用: ceil(0.20 / 2) = 0.10 USDT
-- 支付给协议费用收集器: 0.20 USDT（两边费用之和）
+- 成交抵押金额：100 USDT
+- 总费用：`100 * 20 / 10000 = 0.20 USDT`
+- 拆分费用：整数取整前约 `0.10 USDT` / `0.10 USDT`
+- 接收方：protocol fee collector

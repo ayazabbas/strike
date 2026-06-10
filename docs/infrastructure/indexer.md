@@ -23,7 +23,7 @@ The canonical versioned API surface lives under `/v1/`.
 
 The generated OpenAPI spec is published at:
 
-- [https://app.strike.pm/api-docs/](https://app.strike.pm/api-docs/)
+- [https://strike.fun/api-docs/](https://strike.fun/api-docs/)
 
 Use this as the source of truth for routes, params, enums, and response schemas.
 
@@ -32,12 +32,11 @@ Use this as the source of truth for routes, params, enums, and response schemas.
 ```
 GET /v1/markets                    — List all markets (filterable by status)
 GET /v1/markets/:id                — Market details
-GET /v1/markets/:id/orderbook      — Current orderbook (bids + asks by tick)
-GET /v1/markets/:id/trades         — Trade history
-GET /v1/markets/:id/ohlcv          — Candlestick data (from clearing prices)
+GET /v1/orderbook/:market_id       — Current orderbook (bids + asks by tick)
+GET /v1/trades/:market_id          — Trade history / cleared batches
 GET /v1/positions/:address         — Open orders + filled positions for a wallet
 GET /v1/stats                      — Aggregate protocol stats
-GET /v1/markets/:id/ai-resolution  — AI market resolution details
+GET /v1/markets/:id/ai-resolution  — AI market resolution details where available
 ```
 
 ### Market Status Values
@@ -55,8 +54,10 @@ The current market status enum exposed by the indexer is:
 Connect to receive real-time updates:
 
 ```
-ws://indexer:3002/ws
+wss://strike.fun/api/ws
 ```
+
+For local development, the service also exposes `/ws` on the indexer host.
 
 ### Message Format
 
@@ -71,10 +72,6 @@ All messages use the format `{ type, event, data: {...} }`. Always access fields
 
 On `BatchCleared`, the WebSocket broadcasts a full orderbook snapshot so clients can reconcile state.
 
-Subscribe to specific markets:
-```json
-{"action": "subscribe", "markets": ["0x..."]}
-```
 
 ## Infrastructure
 

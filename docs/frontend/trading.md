@@ -1,6 +1,6 @@
 # Trading Interface
 
-The trading page (`/market/:id`) is where the action happens.
+The trading page (`/markets/:id`) is where the action happens.
 
 ## Layout
 
@@ -35,7 +35,7 @@ The trading page (`/market/:id`) is where the action happens.
 - **Price input:** tick slider (1-99) or numeric input, prices shown as $0.01-$0.99, shows implied probability
 - **Amount:** USDT input with available balance shown
 - **Order type:** toggle — GoodTilCancel (GTC), GoodTilBatch (GTB)
-- **Submit:** single transaction via Privy server wallet, status toast tracks confirmation
+- **Submit:** wallet transaction, with status toast tracking confirmation
 
 ### Market Orders & Anti-MEV Price Protection
 

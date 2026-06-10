@@ -3,66 +3,68 @@
 ## Smart Contract Security
 
 ### Reentrancy Protection
-All external state-changing functions use OpenZeppelin's `ReentrancyGuard`. The Checks-Effects-Interactions pattern is followed throughout.
+
+External state-changing functions use OpenZeppelin `ReentrancyGuard` where needed, and follow checks-effects-interactions.
 
 ### Access Control
 
 | Function | Access |
 |----------|--------|
-| `placeOrder()` / `cancelOrder()` | Anyone (with sufficient balance) |
-| `clearBatch()` | Anyone (permissionless) |
-| `resolveMarket()` | Anyone (with valid Pyth data) |
-| `finalizeResolution()` | Anyone (after finality window) |
-| `redeem()` | Token holders |
-| `createMarket()` | MARKET_CREATOR_ROLE |
-| `pause()` / `unpause()` | Owner |
-| `setFeeCollector()` | Owner |
+| `placeOrder()` / `cancelOrder()` | Anyone with sufficient balance/approval |
+| `clearBatch()` | Anyone |
+| `resolveMarket()` | Anyone with valid Pyth data and update fee |
+| `finalizeResolution()` | Anyone after finality |
+| `redeem()` | Eligible token/position holders |
+| `createMarket()` | `MARKET_CREATOR_ROLE` |
+| `pauseFactory()` / lifecycle admin actions | `ADMIN_ROLE` |
+| `setProtocolFeeCollector()` | `DEFAULT_ADMIN_ROLE` on FeeModel |
 
 ### Bounded Iteration
-No function iterates over unbounded sets. Segment trees provide O(log N) operations. Batch order count is capped at MAX_ORDERS_PER_BATCH (1600) with automatic overflow to the next batch. Settlement is chunked (SETTLE_CHUNK_SIZE = 400) so gas cost per `clearBatch` call remains bounded.
+
+Segment trees provide O(log N) price-level operations. Order counts and resting-order scans are capped. Batch settlement is chunked (`SETTLE_CHUNK_SIZE = 400`) so gas per `clearBatch` call remains bounded.
 
 ### Emergency Controls
-- **Pausable:** owner can pause market creation and trading protocol-wide or per-market
-- **24h auto-cancel:** markets without resolution auto-cancel, enabling full refunds
-- **Emergency withdrawal:** users can withdraw via timelock if admin is unresponsive
+
+- Markets can be halted/resumed or deactivated by authorized operators.
+- Unresolved markets can be cancelled through the configured fallback path, enabling refunds.
+- Vault emergency mode has a timelock before emergency withdrawals.
 
 ### Anti-Spam / DoS Prevention
-- Minimum lot sizes prevent dust orders
-- Full collateral locking creates economic cost for spam (capital locked until fill or cancel)
-- **Per-user active order cap:** MAX_USER_ORDERS = 20 per market prevents a single address from flooding the order book
-- **Resting order list:** orders far from the clearing price (>20 ticks) are parked outside the segment tree, preventing phantom volume from distorting price discovery while still locking collateral
+
+- Minimum lot sizes prevent dust orders.
+- Full collateral locking creates an economic cost for spam.
+- `MAX_USER_ORDERS = 20` per market prevents a single address from flooding the book.
+- Resting orders far from the clearing price are parked outside the active segment tree while still locking collateral.
 
 ## Oracle Security
 
 ### Pyth Integration
-- All price data is **cryptographically verified on-chain** via Wormhole attestations
-- `parsePriceFeedUpdates` verifies settlement price on-chain (earliest update in window)
-- **Confidence interval check** rejects settlement if price uncertainty exceeds threshold (default 1%)
-- Fallback windows handle rare Pyth publishing delays
+
+- Pyth update data is verified on-chain.
+- `parsePriceFeedUpdates` reads the settlement-window price without relying on a pre-updated on-chain price.
+- Confidence checks reject updates with excessive uncertainty.
+- Fallback windows handle rare Pyth publishing delays.
 
 ### Resolution Safety
-- **Finality gate:** resolution waits for a 90-second finality period before finalizing
-- **Procedural challenge:** anyone can submit a better qualifying Pyth update during finality window
-- **Replay protection:** each market can only be resolved once
+
+- First valid submission starts a 90-second finality window.
+- During finality, an earlier valid update can challenge only if it changes the outcome.
+- Finalization is permissionless after the finality window.
+- Each market can only be finalized once.
 
 ## Trading Safety
-- **Full collateralization:** orderbook trades are backed by locked USDT collateral; pool markets are backed by their configured collateral
-- **No leverage:** no margin, no liquidation risk
-- **Deterministic halt:** trading stops when `timeRemaining < batchInterval`, preventing last-second exploitation
-- Funds cannot be locked — cancellation/withdrawal always available
+
+- Orderbook trades are fully collateralized with locked USDT or locked positions.
+- Pool markets are backed by their configured collateral.
+- No margin or liquidation mechanics.
+- Users can cancel open orders while the market is active.
 
 ## Auditing
 
 ### Internal Audit v1.2
-An internal security audit (v1.2) was conducted covering all core contracts. Key areas reviewed include fee split logic, chunked settlement, resting order mechanics, and per-user order caps. All findings have been addressed. See `docs/technical/internal-audit-v1.2.md` for the full report.
+
+An internal security audit (v1.2) covered the core contracts, including fee split logic, chunked settlement, resting orders, and per-user order caps. See [Internal Audit v1.2](internal-audit-v1.2.md).
 
 ### World Cup Multiplier Cross-Event Ticket Internal Review
-An internal Codex-assisted review was completed for the World Cup Multiplier cross-event Prediction Ticket refactor on 2026-06-08. This was not an external third-party audit. A fresh follow-up review found the previous backend/accounting, synthetic-vault lifecycle, frontend idempotency, smoke-unit, intent-only, and ticket-privacy blockers resolved for the reviewed branch.
 
-Key current constraints are that real per-leg event settlement remains backend/admin-authoritative, backend and frontend should deploy atomically, and the current vault has a 1,000 lifetime prediction cap. See `docs/technical/world-cup-multiplier-predictions-v0-audit.md` for the full PASS review.
-
-### Static Analysis
-- Slither static analysis
-- Mythril symbolic execution
-- Aderyn / 4naly3er additional coverage
-- All high/medium findings addressed before mainnet
+An internal Codex-assisted review covered the World Cup Multiplier cross-event Prediction Ticket refactor. This was not an external third-party audit. See [World Cup Multiplier Cross-Event Ticket Internal Review](world-cup-multiplier-predictions-v0-audit.md).

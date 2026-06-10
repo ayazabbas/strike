@@ -2,77 +2,69 @@
 
 ## 智能合约安全
 
-### 重入保护
+### Reentrancy 防护
 
-所有会改变状态的外部函数都使用 OpenZeppelin 的 `ReentrancyGuard`。整个代码库遵循 Checks-Effects-Interactions 模式。
+需要防护的外部状态变更函数使用 OpenZeppelin `ReentrancyGuard`，并遵循 checks-effects-interactions。
 
 ### 访问控制
 
 | Function | Access |
 |----------|--------|
-| `placeOrder()` / `cancelOrder()` | 任何人（需要足够余额） |
-| `clearBatch()` | 任何人（permissionless） |
-| `resolveMarket()` | 任何人（需要有效 Pyth data） |
-| `finalizeResolution()` | 任何人（finality window 之后） |
-| `redeem()` | Token holders |
-| `createMarket()` | MARKET_CREATOR_ROLE |
-| `pause()` / `unpause()` | Owner |
-| `setFeeCollector()` | Owner |
+| `placeOrder()` / `cancelOrder()` | 余额/授权充足的任意用户 |
+| `clearBatch()` | 任意用户 |
+| `resolveMarket()` | 提供有效 Pyth data 并支付 update fee 的任意用户 |
+| `finalizeResolution()` | finality 后的任意用户 |
+| `redeem()` | 符合条件的 token/position holder |
+| `createMarket()` | `MARKET_CREATOR_ROLE` |
+| `pauseFactory()` / lifecycle admin actions | `ADMIN_ROLE` |
+| `setProtocolFeeCollector()` | FeeModel 的 `DEFAULT_ADMIN_ROLE` |
 
 ### 有界迭代
 
-没有任何函数会遍历无界集合。Segment trees 提供 O(log N) 操作。Batch 订单数量上限为 MAX_ORDERS_PER_BATCH (1600)，超出部分会自动滚入下一个 batch。结算通过 SETTLE_CHUNK_SIZE = 400 分块执行，因此每次 `clearBatch` 调用的 Gas 成本保持有界。
+Segment tree 提供 O(log N) 的价格层级操作。订单数量和 resting-order scan 都有上限。Batch settlement 会分块执行（`SETTLE_CHUNK_SIZE = 400`），使每次 `clearBatch` 调用的 gas 保持有界。
 
 ### 紧急控制
 
-- **Pausable：** owner 可以在协议范围内或单个市场级别暂停市场创建和交易
-- **24h auto-cancel：** 未完成结算的市场会自动取消，从而允许完整退款
-- **Emergency withdrawal：** 如果 admin 无响应，用户可以通过 timelock 提款
+- 授权 operator 可以 halt/resume 或 deactivate 市场。
+- 无法结算的市场可以通过配置的 fallback path 取消，以便退款。
+- Vault emergency mode 有 timelock，之后才允许 emergency withdrawal。
 
 ### Anti-Spam / DoS 防护
 
-- 最小 lots 数量防止 dust orders
-- 全额抵押锁定让 spam 具有经济成本（资金会锁定到成交或取消）
-- **用户级活跃订单上限：** 每个市场 MAX_USER_ORDERS = 20，防止单个地址淹没订单簿
-- **Resting order list：** 距离清算价格较远（>20 ticks）的订单会停放在线段树之外，避免 phantom volume 扭曲价格发现，同时仍锁定抵押资产
+- 最小 lot size 防止 dust 订单。
+- 全额抵押锁定为 spam 创造资金成本。
+- 每个市场 `MAX_USER_ORDERS = 20`，防止单一地址刷屏订单簿。
+- 远离清算价的 resting orders 会停放在 active segment tree 外，但仍锁定抵押资产。
 
 ## Oracle 安全
 
 ### Pyth 集成
 
-- 所有价格数据都会通过 Wormhole attestations 在链上进行**密码学验证**
-- `parsePriceFeedUpdates` 在链上验证结算价格（窗口内最早的 update）
-- **Confidence interval check** 会在价格不确定性超过阈值（默认 1%）时拒绝结算
-- Fallback windows 用于处理少见的 Pyth 发布延迟
+- Pyth update data 在链上验证。
+- `parsePriceFeedUpdates` 读取结算窗口内的价格，不依赖预先更新的链上价格。
+- Confidence check 会拒绝不确定性过高的 update。
+- Fallback windows 用于处理少见的 Pyth 发布延迟。
 
 ### 结算安全
 
-- **Finality gate：** 结算需要等待 90 秒 finality period 后才能最终确认
-- **Procedural challenge：** 任何人都可以于 finality window 内提交更优的合格 Pyth update
-- **Replay protection：** 每个市场只能结算一次
+- 首次有效提交会启动 90 秒 finality window。
+- finality 期间，只有更早且会改变结果的有效 update 才能 challenge。
+- finality window 结束后，finalization 是 permissionless 的。
+- 每个市场只能 finalize 一次。
 
 ## 交易安全
 
-- **全额抵押：** orderbook trades 由锁定的 USDT collateral 支撑；pool markets 由其配置的 collateral 支撑
-- **无杠杆：** 没有 margin，也没有清算风险
-- **确定性停盘：** 当 `timeRemaining < batchInterval` 时停止交易，防止最后一秒被利用
-- 资金不会被永久锁定，用户始终可以取消订单或提款
+- 订单簿交易由锁定 USDT 或锁定仓位全额抵押。
+- Pool markets 由其配置的抵押资产支持。
+- 没有 margin 或 liquidation 机制。
+- 市场 active 时，用户可以取消 open orders。
 
 ## 审计
 
-### 内部审计 v1.2
+### Internal Audit v1.2
 
-已完成覆盖所有核心合约的内部安全审计（v1.2）。重点审查范围包括费用拆分逻辑、分块结算、resting order 机制和用户级订单上限。所有 findings 均已处理。完整报告见 `docs/technical/internal-audit-v1.2.md`。
+内部安全审计 v1.2 覆盖了核心合约，包括费用拆分逻辑、chunked settlement、resting orders 和用户级订单上限。见 [Internal Audit v1.2](internal-audit-v1.2.md)。
 
-### 世界杯倍数预测跨事件票据内部复核
+### World Cup Multiplier Cross-Event Ticket Internal Review
 
-已于 2026-06-08 完成针对世界杯倍数预测跨事件 Prediction Ticket 重构的内部 Codex 辅助复核。这不是外部第三方审计。新的 follow-up review 确认此前的后端/accounting、synthetic-vault lifecycle、前端幂等性、smoke 单位、intent-only 与 ticket 隐私 blocker 在本次复核分支中已修复。
-
-当前关键约束包括：真实 per-leg event settlement 仍由后端/admin 决定；后端与前端应原子部署；当前 vault 有 1,000 个 lifetime predictions 上限。完整 PASS 复核见 `docs/zh/technical/world-cup-multiplier-predictions-v0-audit.md`。
-
-### 静态分析
-
-- Slither static analysis
-- Mythril symbolic execution
-- Aderyn / 4naly3er additional coverage
-- 所有 high/medium findings 均在主网上线前处理
+内部 Codex-assisted review 覆盖了 World Cup Multiplier 跨事件 Prediction Ticket refactor。这不是外部第三方审计。见 [World Cup Multiplier Cross-Event Ticket Internal Review](world-cup-multiplier-predictions-v0-audit.md)。

@@ -22,8 +22,6 @@
 * [预言机结算](protocol/oracle-resolution.md)
 * [AI 市场](protocol/ai-markets.md)
 * [同注分彩池市场](protocol/parimutuel-markets.md)
-* [Flap 代币池](getting-started/flap-token-pools.md)
-* [世界杯市场](getting-started/world-cup.md)
 * [倍数预测协议](protocol/world-cup-multiplier-predictions.md)
 * [费用与激励](protocol/fees-and-incentives.md)
 

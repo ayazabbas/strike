@@ -23,21 +23,20 @@
 
 生成的 OpenAPI spec 发布在：
 
-- [https://app.strike.pm/api-docs/](https://app.strike.pm/api-docs/)
+- [https://strike.fun/api-docs/](https://strike.fun/api-docs/)
 
 请将它作为 routes、params、enums 与 response schemas 的事实来源。
 
 ### 主要端点
 
 ```
-GET /v1/markets                    — List all markets (filterable by status)
+GET /v1/markets                    — List all markets（可按 status 筛选）
 GET /v1/markets/:id                — Market details
-GET /v1/markets/:id/orderbook      — Current orderbook (bids + asks by tick)
-GET /v1/markets/:id/trades         — Trade history
-GET /v1/markets/:id/ohlcv          — Candlestick data (from clearing prices)
+GET /v1/orderbook/:market_id       — Current orderbook（bids + asks by tick）
+GET /v1/trades/:market_id          — Trade history / cleared batches
 GET /v1/positions/:address         — Open orders + filled positions for a wallet
 GET /v1/stats                      — Aggregate protocol stats
-GET /v1/markets/:id/ai-resolution  — AI market resolution details
+GET /v1/markets/:id/ai-resolution  — AI market resolution details（如适用）
 ```
 
 ### 市场状态值
@@ -52,11 +51,13 @@ GET /v1/markets/:id/ai-resolution  — AI market resolution details
 
 ## WebSocket
 
-连接后可接收实时更新：
+Connect to receive real-time updates:
 
 ```
-ws://indexer:3002/ws
+wss://strike.fun/api/ws
 ```
+
+本地开发时，indexer host 也会暴露 `/ws`。
 
 ### Message Format
 
@@ -71,11 +72,7 @@ ws://indexer:3002/ws
 
 在 `BatchCleared` 时，WebSocket 会广播完整的订单簿 snapshot，方便 client 对账状态。
 
-订阅指定市场：
 
-```json
-{"action": "subscribe", "markets": ["0x..."]}
-```
 
 ## 基础设施
 
