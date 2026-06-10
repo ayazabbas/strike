@@ -2,7 +2,7 @@
 
 Flap Token Pools are Strike's public, creator-facing pool format for AI-resolved token markets. They use the native-token pool contracts: creators can launch multi-outcome parimutuel pools backed by a chosen BEP20 token, while traders buy into outcomes and claim or refund after resolution.
 
-Flap Token Pools are live at [app.strike.pm/flap](https://app.strike.pm/flap).
+Flap Token Pools are live at [strike.fun/flap](https://strike.fun/flap).
 
 ## Creator Guide
 
@@ -30,6 +30,7 @@ A Flap Token Pool has:
 - **FLAP AI resolution** — the resolver uses the fixed Strike-selected FLAP AI model.
 - **30 minute challenge window** — after AI proposes an outcome, users can challenge before finalization.
 - **Creator bond** — official creation posts a `0.05 BNB` creator bond.
+- **Challenger bond** — opening a challenge posts the configured `0.01 BNB` challenger bond.
 
 Strike covers the AI fee. Creators do **not** choose a model or pay a model-specific oracle fee in the public Flap Token Pool flow.
 
@@ -96,9 +97,10 @@ The FLAP AI Oracle is useful for supported token-data questions, but it is not a
 | Item | Behavior |
 |---|---|
 | Creator bond | `0.05 BNB` on create |
-| AI fee | Covered by Strike |
-| Model choice | Fixed by Strike |
-| Pool fee | 2% default in the public flow |
+| Challenger bond | `0.01 BNB` to open a challenge |
+| AI fee | Covered by Strike in the hosted flow |
+| Model choice | Fixed Strike-selected FLAP AI model |
+| Pool fee | Current public flow fee: 2%; platform-configured |
 | Challenge window | 30 minutes |
 | Collateral | Creator-selected BEP20 token |
 

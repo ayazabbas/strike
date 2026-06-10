@@ -14,7 +14,7 @@ contracts/out/<ContractName>.sol/<ContractName>.json
 jq '.abi' contracts/out/MarketFactory.sol/MarketFactory.json > abi/MarketFactory.json
 ```
 
-预先提取的前端 ABI 位于 `frontend/src/lib/contracts/abis/`。
+预先提取的前端 ABI 位于 `strike-frontend/src/lib/abi/`。
 
 ## 合约地址
 
@@ -155,7 +155,7 @@ AI-resolved markets 现在通过多个市场系列提供。公开创建者流程
 
 - [Flap Token Pools](getting-started/flap-token-pools.md)
 - [AI Markets](protocol/ai-markets.md)
-- [https://app.strike.pm/api-docs/](https://app.strike.pm/api-docs/)
+- [https://strike.fun/api-docs/](https://strike.fun/api-docs/)
 
 ## 抵押资产公式
 
@@ -172,9 +172,9 @@ Tick 表示隐含概率（1-99%）。以 tick 60 提交 bid 表示“愿意为�
 
 ```solidity
 // Get full market metadata (factoryMarketId)
-(bytes32 priceId, int64 strikePrice, uint256 expiryTime, uint256 creationBond,
+(bytes32 priceId, int64 strikePrice, uint256 expiryTime,
  address creator, MarketState state, bool outcomeYes, int64 settlementPrice,
- uint256 orderBookMarketId) = factory.marketMeta(factoryMarketId);
+ uint256 orderBookMarketId, bool useInternalPositions, bool isAIMarket) = factory.marketMeta(factoryMarketId);
 
 // Get batch result (orderBookMarketId)
 BatchResult memory result = batchAuction.getBatchResult(orderBookMarketId, batchId);
@@ -228,8 +228,8 @@ Strike indexer 在 `/v1/` prefix 下提供 REST API（旧的无 prefix routes �
 | Endpoint | Description |
 |----------|-------------|
 | `GET /v1/markets` | 列出 markets（支持 `?status=active&limit=50&offset=0&since=`） |
-| `GET /v1/markets/:id/orderbook` | 聚合 bid/ask levels |
-| `GET /v1/markets/:id/trades` | 已清算 batches（默认过滤 empty batches） |
+| `GET /v1/orderbook/:market_id` | 聚合 bid/ask levels |
+| `GET /v1/trades/:market_id` | 已清算 batches（默认过滤 empty batches） |
 | `GET /v1/positions/:address` | 某个 wallet 的 open orders 与 filled positions |
 | `GET /v1/stats` | 聚合协议统计（volume、active markets） |
 

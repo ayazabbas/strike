@@ -1,48 +1,31 @@
 # PythResolver.sol
 
-Handles Pyth oracle integration for deterministic market resolution.
+Resolves orderbook markets with Pyth price updates.
 
-## `resolveMarket(marketId, updateData)`
+## Resolution Flow
 
-1. Verifies market is in `Closed` state
-2. Calls `parsePriceFeedUpdates(updateData, priceId, T, T+Δ)` on the Pyth contract
-3. **Confidence check:** reverts if `conf > confThresholdBps × |price| / 10000`
-4. Sets `pendingResolution` with the parsed price and publish time
-5. Records resolver address for bounty payment
+1. Anyone submits Pyth update data after market expiry by calling `resolveMarket(...)`.
+2. The resolver pays Pyth's update fee from `msg.value`; excess ETH/BNB is refunded.
+3. Pyth verifies the update data and returns a price for the market's configured feed and valid settlement window.
+4. If this is the first valid submission, the market moves to `Resolving` and a 90-second finality window starts.
+5. During the finality window, anyone can submit an earlier valid update that changes the outcome.
+6. After finality, anyone can call `finalizeResolution(...)`; outcome rule is `price >= strike` → YES wins, `price < strike` → NO wins.
 
-## `finalizeResolution(marketId)`
-
-1. Verifies at least 90 seconds have passed since `resolveMarket` (FINALITY_PERIOD)
-2. Checks if any challenger submitted a better (earlier) update during the window
-3. Determines outcome: price > strike → YES wins; price ≤ strike → NO wins
-4. Transitions market to `Resolved`
-5. Pays resolver bounty
-
-## Challenges
-
-Challenges are handled within `resolveMarket()` itself. During the finality window, anyone can call `resolveMarket()` again with alternative Pyth update data that has an earlier `publishTime` within `[T, T+Δ]`. A challenge is only accepted if the new update would change the market outcome (i.e., flip the resolution from YES to NO or vice versa). If accepted, the new update replaces the pending resolution and the challenger becomes the new resolver (gets bounty). There is no separate `challengeResolution()` function.
-
-## Configuration
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `Δ (delta)` | 60s | Settlement window after expiry |
-| `maxDelta` | 300s (5×Δ) | Maximum fallback window |
-| `confThresholdBps` | 100 (1%) | Max confidence/price ratio |
-| `finalityPeriod` | 90s | Time to wait for finality |
-
-## Admin Fallback: `setResolved()`
-
-The admin can call `setResolved(factoryMarketId, outcomeYes, settlementPrice)` on MarketFactory to directly resolve a market, bypassing the 2-step resolve/finalize process. This is a safety fallback for cases where Pyth data is unavailable or the normal resolution flow is stuck.
-
-## Admin Transfer
-
-Two-step admin transfer: `setPendingAdmin(address)` → `acceptAdmin()`. Prevents accidental admin loss.
-
-## Events
+## Main Functions
 
 ```solidity
-event ResolutionSubmitted(uint256 indexed factoryMarketId, int64 price, uint256 publishTime, address indexed resolver);
-event ResolutionChallenged(uint256 indexed factoryMarketId, int64 newPrice, uint256 newPublishTime, address indexed challenger);
-event ResolutionFinalized(uint256 indexed factoryMarketId, int64 price, bool outcomeYes, address indexed finalizer);
+function resolveMarket(uint256 factoryMarketId, bytes[] calldata priceUpdateData)
+    external
+    payable
+
+function finalizeResolution(uint256 factoryMarketId) external
 ```
+
+`resolveMarket` requires at least `pyth.getUpdateFee(priceUpdateData)` in `msg.value`. The current core CLOB contracts do not pay a resolver bounty.
+
+## Notes
+
+- Price IDs are stored as `bytes32` in `MarketFactory.marketMeta`.
+- Resolution is permissionless, but hosted keepers normally perform it.
+- Confidence checks reject updates with too much price uncertainty.
+- If a market cannot be resolved with valid Pyth data, the factory can move it through its configured fallback/cancellation flow.

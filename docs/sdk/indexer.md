@@ -14,7 +14,7 @@ For wallet position endpoints, the SDK also normalizes known schema drift across
 
 The generated OpenAPI spec is the source of truth for the public indexer API:
 
-- [https://app.strike.pm/api-docs/](https://app.strike.pm/api-docs/)
+- [https://strike.fun/api-docs/](https://strike.fun/api-docs/)
 
 If this page and the OpenAPI spec ever disagree, trust the generated spec.
 
@@ -47,7 +47,7 @@ let active = client.indexer().get_active_markets().await?;
 
 ### Pagination (direct HTTP)
 
-If you query the indexer directly (without the SDK), the `/v1/markets` endpoint supports pagination:
+If you query the indexer directly (without the SDK), list endpoints generally use `{ data, meta }` pagination while snapshot/detail endpoints use route-specific shapes. The `/v1/markets` endpoint supports pagination:
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
@@ -214,10 +214,10 @@ pub struct IndexerOrder {
 
 ## Trades
 
-The `/v1/markets/:id/trades` endpoint returns cleared batches for a market, filtering out empty batches by default. This endpoint is available via direct HTTP — the SDK does not wrap it yet.
+The `/v1/trades/:market_id` endpoint returns cleared batches for a market, filtering out empty batches by default. This endpoint is available via direct HTTP — the SDK does not wrap it yet.
 
 ```
-GET /v1/markets/1/trades?limit=50&offset=0
+GET /v1/trades/1?limit=50&offset=0
 ```
 
 ## Stats

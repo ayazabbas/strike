@@ -1,48 +1,31 @@
 # PythResolver.sol
 
-处理 Pyth 预言机集成，用于确定性市场结算。
+使用 Pyth 价格更新结算订单簿市场。
 
-## `resolveMarket(marketId, updateData)`
+## 结算流程
 
-1. 验证市场处于 `Closed` 状态。
-2. 通过 Pyth 合约调用 `parsePriceFeedUpdates(updateData, priceId, T, T+Δ)`。
-3. **Confidence check:** 如果 `conf > confThresholdBps × |price| / 10000`，则 revert。
-4. 使用解析出的 price 与 publish time 设置 `pendingResolution`。
-5. 记录 resolver 地址，用于 bounty payment。
+1. 市场到期后，任何人都可以调用 `resolveMarket(...)` 提交 Pyth update data。
+2. Resolver 从 `msg.value` 支付 Pyth update fee；多余 ETH/BNB 会退回。
+3. Pyth 验证 update data，并返回市场配置 feed 在有效结算窗口内的价格。
+4. 如果这是首次有效提交，市场进入 `Resolving`，并启动 90 秒 finality window。
+5. 在 finality window 内，任何人都可以提交更早且会改变结果的有效 update。
+6. finality 后，任何人都可以调用 `finalizeResolution(...)`；结果规则为 `price >= strike` → YES 胜出，`price < strike` → NO 胜出。
 
-## `finalizeResolution(marketId)`
-
-1. 验证距离 `resolveMarket` 调用已至少经过 90 seconds（FINALITY_PERIOD）。
-2. 检查最终确认窗口内是否有 challenger 提交了更优（更早）的 update。
-3. 判断结果: price > STRIKE 时 YES 胜出；price ≤ STRIKE 时 NO 胜出。
-4. 将市场转换为 `Resolved`。
-5. 支付 resolver bounty。
-
-## Challenges
-
-挑战在 `resolveMarket()` 内部处理。在最终确认窗口内，任何人都可以再次调用 `resolveMarket()`，并提供备用 Pyth update data。该 update data 必须包含位于 `[T, T+Δ]` 窗口内且更早的 `publishTime`。只有当新 update 会改变市场结果（即把结算从 YES 翻转为 NO，或从 NO 翻转为 YES）时，挑战才会被接受。挑战被接受后，新的 update 会替换 pending 结算，challenger 成为新的 resolver 并获得 bounty。合约没有单独的 `challengeResolution()` 函数。
-
-## 配置
-
-| Parameter | 默认 | Description |
-|-----------|---------|-------------|
-| `Δ (delta)` | 60 秒 | expiry 后的结算窗口 |
-| `maxDelta` | 300s (5×Δ) | 最大兜底窗口 |
-| `confThresholdBps` | 100 (1%) | 最大 confidence/price 比率 |
-| `finalityPeriod` | 90s | 等待最终确认的时间 |
-
-## 管理员兜底: `setResolved()`
-
-管理员可以通过 MarketFactory 调用 `setResolved(factoryMarketId, outcomeYes, settlementPrice)`，直接结算市场，绕过两步式提交与最终确认流程。这是安全兜底，用于 Pyth data 不可用或正常结算流程卡住的情况。
-
-## Admin Transfer
-
-两步管理员转移: `setPendingAdmin(address)` → `acceptAdmin()`。该流程可防止意外丢失管理员权限。
-
-## 事件
+## 主要函数
 
 ```solidity
-event ResolutionSubmitted(uint256 indexed factoryMarketId, int64 price, uint256 publishTime, address indexed resolver);
-event ResolutionChallenged(uint256 indexed factoryMarketId, int64 newPrice, uint256 newPublishTime, address indexed challenger);
-event ResolutionFinalized(uint256 indexed factoryMarketId, int64 price, bool outcomeYes, address indexed finalizer);
+function resolveMarket(uint256 factoryMarketId, bytes[] calldata priceUpdateData)
+    external
+    payable
+
+function finalizeResolution(uint256 factoryMarketId) external
 ```
+
+`resolveMarket` 要求 `msg.value` 至少覆盖 `pyth.getUpdateFee(priceUpdateData)`。当前核心 CLOB 合约不支付 resolver bounty。
+
+## 说明
+
+- Price ID 以 `bytes32` 存在 `MarketFactory.marketMeta` 中。
+- 结算是 permissionless 的，但通常由托管 keeper 执行。
+- Confidence check 会拒绝价格不确定性过高的 update。
+- 如果市场无法使用有效 Pyth data 结算，factory 可以进入配置的 fallback / cancellation 流程。

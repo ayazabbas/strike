@@ -1,6 +1,6 @@
 # Batch Auctions
 
-Strike uses **Frequency Batch Auctions (FBA)** instead of continuous order matching. This is the core mechanism that determines how trades execute.
+Strike uses **Frequent Batch Auctions (FBA)** instead of continuous order matching. This is the core mechanism that determines how trades execute.
 
 ## How a Batch Clears
 

@@ -4,7 +4,7 @@ Key architectural choices and why they were made.
 
 ## FBA over Continuous Orderbook
 
-**Decision:** Frequency Batch Auctions, not continuous matching.
+**Decision:** Frequent Batch Auctions, not continuous matching.
 
 **Why:** On EVM, continuous orderbooks create MEV extraction opportunities — bots race for time priority, sandwich trades, and front-run large orders. FBA eliminates intra-batch time priority and gives everyone the same clearing price. The trade-off is 60s latency per batch (configurable), which is acceptable for prediction markets where positions are held for minutes, not milliseconds.
 

@@ -8,21 +8,21 @@ Strike's web frontend is a trading terminal built with Next.js 16, Tailwind CSS,
 |-----------|-----------|
 | Framework | Next.js 16 (App Router) |
 | Styling | Tailwind CSS + shadcn/ui |
-| Wallet | Privy (server-managed wallets, no seed phrases) |
+| Wallet | RainbowKit + WalletConnect / injected wallets |
 | Chain interaction | wagmi v3 + viem v2.45 |
 | Real-time data | Indexer WebSocket |
 | Contract ABIs | Auto-generated from Foundry artifacts |
 
-> **Note:** Users get a server-managed wallet on signup. Transaction signing happens server-side via the Privy API — no browser extensions or seed phrases required.
+> **Note:** Users connect an external or injected wallet through RainbowKit. Transactions are signed by the user wallet; the frontend interacts with contracts through wagmi/viem.
 
 ## Pages
 
 | Page | Route | Description |
 |------|-------|-------------|
 | Markets | `/` | Active markets with volume, spread, countdown |
-| Trading | `/market/:id` | Full orderbook, order entry, trade history |
+| Trading | `/markets/:id` | Full orderbook, order entry, trade history |
 | Portfolio | `/portfolio` | Positions, P&L, bulk claim/redeem |
-| Market Detail | `/market/:id/info` | Resolution details, price chart, lifecycle |
+| Market Detail | `/markets/:id` | Resolution details, price chart, lifecycle |
 
 ## Key UX Patterns
 

@@ -14,7 +14,7 @@ Extract the `abi` field for use in frontends or scripts:
 jq '.abi' contracts/out/MarketFactory.sol/MarketFactory.json > abi/MarketFactory.json
 ```
 
-Pre-extracted frontend ABIs are available in `frontend/src/lib/contracts/abis/`.
+Pre-extracted frontend ABIs are available in `strike-frontend/src/lib/abi/`.
 
 ## Contract Addresses
 
@@ -153,7 +153,7 @@ See:
 
 - [Flap Token Pools](getting-started/flap-token-pools.md)
 - [AI Markets](protocol/ai-markets.md)
-- [https://app.strike.pm/api-docs/](https://app.strike.pm/api-docs/)
+- [https://strike.fun/api-docs/](https://strike.fun/api-docs/)
 
 ## Collateral Formulas
 
@@ -170,9 +170,9 @@ Tick represents implied probability (1--99%). A bid at tick 60 means "willing to
 
 ```solidity
 // Get full market metadata (factoryMarketId)
-(bytes32 priceId, int64 strikePrice, uint256 expiryTime, uint256 creationBond,
+(bytes32 priceId, int64 strikePrice, uint256 expiryTime,
  address creator, MarketState state, bool outcomeYes, int64 settlementPrice,
- uint256 orderBookMarketId) = factory.marketMeta(factoryMarketId);
+ uint256 orderBookMarketId, bool useInternalPositions, bool isAIMarket) = factory.marketMeta(factoryMarketId);
 
 // Get batch result (orderBookMarketId)
 BatchResult memory result = batchAuction.getBatchResult(orderBookMarketId, batchId);
@@ -226,8 +226,8 @@ The Strike indexer provides a REST API under the `/v1/` prefix (legacy unprefixe
 | Endpoint | Description |
 |----------|-------------|
 | `GET /v1/markets` | List markets (supports `?status=active&limit=50&offset=0&since=`) |
-| `GET /v1/markets/:id/orderbook` | Aggregated bid/ask levels |
-| `GET /v1/markets/:id/trades` | Cleared batches (empty batches filtered by default) |
+| `GET /v1/orderbook/:market_id` | Aggregated bid/ask levels |
+| `GET /v1/trades/:market_id` | Cleared batches (empty batches filtered by default) |
 | `GET /v1/positions/:address` | Open orders and filled positions for a wallet |
 | `GET /v1/stats` | Aggregate protocol statistics (volume, active markets) |
 

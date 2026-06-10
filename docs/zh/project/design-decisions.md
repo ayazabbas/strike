@@ -4,7 +4,7 @@
 
 ## 选择 FBA 而非连续订单簿
 
-**决策：** 使用 Frequency Batch Auctions，而不是连续撮合。
+**决策：** 使用 Frequent Batch Auctions，而不是连续撮合。
 
 **原因：** 于 EVM 上，连续订单簿会产生 MEV 抽取机会：bots 会争抢时间优先级、进行 sandwich trades，并 front-run 大额订单。FBA 消除了批次内的时间优先级，并让所有人获得相同的清算价格。代价是每个 batch 有 60 秒延迟（可配置），但对于持仓时间通常以分钟计、而不是以毫秒计的预测市场来说，这是可以接受的。
 

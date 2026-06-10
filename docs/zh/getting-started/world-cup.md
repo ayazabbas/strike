@@ -2,7 +2,7 @@
 
 Strike 的世界杯专区是围绕 2026 FIFA 世界杯设计的活动型预测体验。当前从 **2026 世界杯冠军** 市场开始，之后也可以支持更多世界杯单场比赛或赛事阶段市场。
 
-线上入口：[app.strike.pm/world-cup](https://app.strike.pm/world-cup)。
+线上入口：[strike.fun/world-cup](https://strike.fun/world-cup)。
 
 世界杯首个事件系列使用的固定倍率、精确结果产品见[倍数预测](world-cup-multiplier-predictions.md)。
 
@@ -74,6 +74,6 @@ Strike 可以在结果卡片上直接展示被高亮的交易者或创作者。
 ## 重要提示
 
 - 市场价格和资金池比例会随着用户交易而变化。
-- 奖励 Credit 可能存在活动限制。
+- 奖励 Credit 受应用中显示的限制约束。
 - KOL 图标只是社交/上下文信号，不代表 Strike 背书。
 - 确认交易前，请始终检查选择的球队、金额和资金来源拆分。

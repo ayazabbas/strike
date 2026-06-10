@@ -1,6 +1,6 @@
 # 交易界面
 
-交易页面（`/market/:id`）是用户执行主要操作的地方。
+交易页面（`/markets/:id`）是用户执行主要操作的地方。
 
 ## Layout
 
@@ -35,7 +35,7 @@
 - **Price input:** tick slider（1-99）或 numeric input；价格显示为 $0.01-$0.99，并展示隐含概率
 - **Amount:** USDT input，并显示可用余额
 - **订单类型:** 切换 GoodTilCancel (GTC) / GoodTilBatch (GTB)
-- **Submit:** 通过 Privy server wallet 发送单笔交易，状态 toast 会跟踪确认过程
+- **Submit:** 发送钱包交易，状态 toast 会跟踪确认过程
 
 ### 市价单与抗 MEV 价格保护
 

@@ -2,7 +2,7 @@
 
 Strike’s World Cup section is a campaign-style prediction experience for the 2026 FIFA World Cup. It starts with the **2026 World Cup Winner** market and is designed to support additional World Cup match or tournament markets over time.
 
-The live app is available at [app.strike.pm/world-cup](https://app.strike.pm/world-cup).
+The live app is available at [strike.fun/world-cup](https://strike.fun/world-cup).
 
 For the fixed-multiplier exact-result product used by the first World Cup event series, see [Multiplier Predictions](world-cup-multiplier-predictions.md).
 
@@ -74,6 +74,6 @@ After resolution:
 ## Important notes
 
 - Market prices and pool percentages can change as users trade.
-- Bonus credit may have campaign-specific restrictions.
+- Bonus credit is subject to the restrictions shown in the app.
 - KOL icons are social/context signals, not endorsements by Strike.
 - Always review the selected team, amount, and funding split before confirming a transaction.

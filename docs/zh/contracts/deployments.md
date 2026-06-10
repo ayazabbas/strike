@@ -82,7 +82,7 @@ V2 部署于 2026-05-01，区块 `104930598`。
 
 | 网络 | 索引器 API | 应用 |
 |---------|------------|-----|
-| Mainnet | `https://app.strike.pm/api` | [app.strike.pm](https://app.strike.pm) |
+| Mainnet | `https://strike.fun/api` | [strike.fun](https://strike.fun) |
 | Testnet | `https://testnet.strike.pm/api` | [测试网.strike.pm](https://testnet.strike.pm) |
 
 ## 价格源

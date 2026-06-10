@@ -6,7 +6,7 @@ Proof-of-concept built for the *Good Vibes Only: OpenClaw Edition* hackathon.
 
 - Parimutuel pool model (no orderbook)
 - `Market.sol` + `MarketFactory.sol` with 51 tests
-- Telegram bot with Privy embedded wallets
+- Telegram bot prototype
 - Pyth oracle resolution
 - Keeper service (auto-create + auto-resolve)
 

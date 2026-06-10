@@ -14,15 +14,14 @@ Strike uses a **uniform fee model** with a **50/50 buyer–seller split**:
 - The extra wei from integer rounding goes to the protocol (sell side pays `ceil`)
 - Fees are deducted during atomic batch settlement (inline with clearing)
 - All fees go to the `protocolFeeCollector` address
-- `clearingBountyBps` exists (admin-configurable) but is currently set to 0
 
 ## Protocol Revenue
 
 All trading fees flow to the protocol fee collector address. This funds development and operations.
 
-## Resolver Bounty
+## Resolution and Keeper Costs
 
-Markets can be resolved permissionlessly by anyone with valid Pyth data. The resolver bounty mechanism is configurable via FeeModel but currently set to 0.
+Markets can be resolved permissionlessly by anyone with valid Pyth data. Hosted keepers normally perform resolution. Current core CLOB contracts do not pay a resolver bounty.
 
 ## Anti-Spam / DoS Prevention
 
@@ -42,7 +41,7 @@ The per-user order cap is tracked via an `activeOrderCount` mapping and enforced
 | Approve Vault (once) | ~46k | ~$0.001 |
 | Place order | ~250k | ~$0.008 |
 | Cancel order | ~100k | ~$0.003 |
-| Clear batch (atomic) | ~2.0M | ~$0.063 |
+| Clear batch / settlement chunk | varies by batch size | network-dependent |
 | Resolve market | ~300k | ~$0.009 |
 
-*Based on BNB ≈ $628. Settlement is included in clearBatch — no separate claim transaction needed.*
+*Estimates are illustrative. Settlement is handled through `clearBatch`; large batches can require multiple settlement chunks.*

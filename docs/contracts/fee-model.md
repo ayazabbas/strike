@@ -1,91 +1,60 @@
 # FeeModel.sol
 
-Pure fee-calculation contract for the Strike CLOB protocol. This contract performs no transfers -- all movement of funds is handled by callers (Vault, BatchAuction, etc.). FeeModel only computes amounts.
+Fee-calculation contract for the Strike CLOB protocol. It performs no transfers; callers such as Vault and BatchAuction move funds.
 
-Inherits: `AccessControl` (OpenZeppelin).
+Inherits: `AccessControl`.
 
 ## Fee Schedule
 
 | Parameter | Type | Description | Default |
 |-----------|------|-------------|---------|
-| `feeBps` | `uint256` | Uniform fee in basis points | 20 (0.20%) |
-| `clearingBountyBps` | `uint256` | Bonus for clearing keeper (admin-configurable, currently disabled) | 0 |
-| `protocolFeeCollector` | `address` | Address that receives the protocol's fee share | deployer |
+| `feeBps` | `uint256` | Uniform total fee in basis points | 20 (0.20%) |
+| `protocolFeeCollector` | `address` | Address that receives protocol fees | deployer |
 
 **Constant:** `MAX_BPS = 10_000` (100%).
 
-No maker/taker distinction — both sides of a trade pay half the fee (50/50 split). The extra wei from integer rounding goes to the protocol (sell side pays `ceil`).
+There is no maker/taker distinction. For buy-vs-sell-token matches, the total fee is split across buyer and seller; the seller side receives the rounding-up half. For normal Bid/Ask matches, the buyer-side locked fee funds the protocol fee.
 
 ## Calculation Functions
 
-### calculateFee
-
-```solidity
-function calculateFee(uint256 amount) public view returns (uint256 fee)
-```
+### `calculateFee(amount)`
 
 Returns the total fee for a given filled collateral amount.
 
 Formula: `fee = amount * feeBps / 10_000`
 
-### calculateHalfFee
+### `calculateHalfFee(amount)`
 
-```solidity
-function calculateHalfFee(uint256 amount) public view returns (uint256 fee)
-```
+Returns `ceil(calculateFee(amount) / 2)`. BatchAuction uses this as the sell-side fee when a token/position seller receives a payout.
 
-Returns the buy-side half of the fee: `floor(calculateFee(amount) / 2)`.
+### `calculateOtherHalfFee(amount)`
 
-### calculateOtherHalfFee
-
-```solidity
-function calculateOtherHalfFee(uint256 amount) public view returns (uint256 fee)
-```
-
-Returns the sell-side half of the fee: `calculateFee(amount) - calculateHalfFee(amount)` (i.e. `ceil(fee / 2)`). The sell-side fee is deducted from the seller's USDT payout at settlement.
+Returns `calculateFee(amount) - calculateHalfFee(amount)`. BatchAuction uses this for the buyer side in buy-vs-sell-token matches.
 
 ## Admin Functions
 
 All admin functions require `DEFAULT_ADMIN_ROLE`.
 
-### setFeeBps
+### `setFeeBps(_feeBps)`
 
-```solidity
-function setFeeBps(uint256 _feeBps) external
-```
+Updates the uniform fee. Reverts if `_feeBps > MAX_BPS`.
 
-Update the uniform fee. Reverts if `_feeBps > MAX_BPS`.
+### `setProtocolFeeCollector(_collector)`
 
-### setClearingBounty
-
-```solidity
-function setClearingBounty(uint256 _clearingBountyBps) external
-```
-
-Set the clearing bounty percentage (currently disabled, reserved for future use).
-
-### setProtocolFeeCollector
-
-```solidity
-function setProtocolFeeCollector(address _collector) external
-```
-
-Update the protocol fee collector address. Reverts if `_collector` is the zero address.
+Updates the protocol fee collector address. Reverts if `_collector` is the zero address.
 
 ## Events
 
 | Event | Parameters | Description |
-|-------|-----------|-------------|
+|-------|------------|-------------|
 | `FeeBpsUpdated` | `uint256 feeBps` | Emitted when fee changes |
-| `ClearingBountyUpdated` | `uint256 clearingBountyBps` | Emitted when clearing bounty changes |
 | `ProtocolFeeCollectorUpdated` | `address indexed collector` | Emitted when fee collector changes |
 
 ## Example
 
-With default parameters (feeBps=20):
+With `feeBps = 20`:
 
 - Filled collateral: 100 USDT
-- Total fee: 100 * 20 / 10000 = 0.20 USDT
-- Buy-side fee: floor(0.20 / 2) = 0.10 USDT
-- Sell-side fee: ceil(0.20 / 2) = 0.10 USDT
-- To protocol fee collector: 0.20 USDT (sum of both halves)
+- Total fee: `100 * 20 / 10000 = 0.20 USDT`
+- Split fee: `0.10 USDT` / `0.10 USDT` before integer rounding
+- Recipient: protocol fee collector

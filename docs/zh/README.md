@@ -1,6 +1,6 @@
 # Strike 简介
 
-**Strike** 是部署于 BNB Chain 的完全链上预测市场协议，现已通过 [app.strike.pm](https://app.strike.pm) 上线。Strike 当前支持多类市场：用于主动二元交易的 **FBA 订单簿市场**、用于简单多结果预测的**标准同注分彩池市场**、由创建者发起并使用 BEP20 抵押资产的 **[Flap Token Pools](getting-started/flap-token-pools.md)**，以及面向活动的 USDT 预测池 **[世界杯市场](getting-started/world-cup.md)**。
+**Strike** 是部署于 BNB Chain 的完全链上预测市场协议，现已通过 [strike.fun](https://strike.fun) 上线。Strike 当前支持多类市场：用于主动二元交易的 **FBA 订单簿市场**、用于简单多结果预测的**标准同注分彩池市场**、由创建者发起并使用 BEP20 抵押资产的 **[Flap Token Pools](getting-started/flap-token-pools.md)**，以及面向活动的 USDT 预测池 **[世界杯市场](getting-started/world-cup.md)**。
 
 订单簿市场使用 **Frequent Batch Auction (FBA) CLOB**。订单会在周期性批次中收集，并按统一价格清算。这为交易者提供真实的价格发现、限价单和公平执行，同时避免连续订单簿常见的 MEV 问题。
 
@@ -46,7 +46,7 @@ Off-chain (non-authoritative):
 
 ## 链接
 
-- **应用：** [app.strike.pm](https://app.strike.pm)
+- **应用：** [strike.fun](https://strike.fun)
 - **文档：** [docs.strike.fun](https://docs.strike.fun)
 - **链：** BNB Chain (BSC)
 - **预言机：** [Pyth 网络](https://pyth.network/)

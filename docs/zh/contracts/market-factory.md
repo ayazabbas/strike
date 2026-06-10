@@ -1,24 +1,41 @@
 # MarketFactory.sol
 
-用于创建和管理预测市场的 singleton factory。
+用于创建和管理 CLOB 预测市场的单例 factory。
 
-## `createMarket(priceId, duration, batchInterval, minLots)`
+## 市场创建
 
-- 通过 `registerMarket()` 在订单簿中注册新市场。
-- 需要 MARKET_CREATOR_ROLE。
-- 存储市场 metadata，并跟踪市场生命周期。
-- 触发 `MarketCreated` 事件。
+### `createMarket(priceId, strikePrice, expiryTime, batchInterval, minLots)`
 
-### 参数
+创建 Pyth 结算的二元市场，并在 `OrderBook` 中注册。
 
-| Param | Description | 默认 |
-|-------|-------------|---------|
-| `priceId` | Pyth price feed ID (bytes32) | 必需 |
-| `duration` | 市场持续时间，单位为 seconds | 必需 |
-| `batchInterval` | Batch 清算间隔（0 = 默认 60 秒） | 60 秒 |
-| `minLots` | 最小订单规模（0 = 默认 1） | 1 |
+### `createMarketWithPositions(priceId, strikePrice, expiryTime, batchInterval, minLots)`
 
-## State Machine
+创建使用内部仓位记账的 Pyth 结算市场，而不是通过 ERC-1155 结果代币转移。当前 5 分钟市场使用这一路径。
+
+### `createAIMarket(prompt, modelId, expiryTime, minLots)`
+
+创建 AI 结算订单簿市场，并存入 AI resolver fee。这是管理员/协议集成接口；公开 creator flow 应使用 Flap Token Pools。
+
+所有创建函数都需要 `MARKET_CREATOR_ROLE`，并会发出 `MarketCreated`。
+
+## `MarketMeta`
+
+```solidity
+struct MarketMeta {
+    bytes32 priceId;
+    int64 strikePrice;
+    uint256 expiryTime;
+    address creator;
+    MarketState state;
+    bool outcomeYes;
+    int64 settlementPrice;
+    uint256 orderBookMarketId;
+    bool useInternalPositions;
+    bool isAIMarket;
+}
+```
+
+## 状态机
 
 ```
 Open → Closed → Resolving → Resolved
@@ -26,38 +43,38 @@ Open → Closed → Resolving → Resolved
 Open → Closed ─────────────→ Cancelled
 ```
 
-### Transitions
+## 状态转换
 
-| 从 | 到 | Trigger | Condition |
+| From | To | Trigger | Condition |
 |------|----|---------|-----------|
 | Open | Closed | `closeMarket()` | `block.timestamp >= expiryTime` |
-| Closed | Resolving | `setResolving()` | ADMIN_ROLE (PythResolver) |
-| Resolving | Resolved | `setResolved()` | ADMIN_ROLE (PythResolver) |
-| Open/Closed | Cancelled | `cancelMarket()` | expiry 之后 24h，仍未结算 |
+| Closed | Resolving | `setResolving()` | `ADMIN_ROLE` |
+| Resolving | Resolved | `setResolved()` | `ADMIN_ROLE` |
+| Open/Closed | Cancelled | `setCancelled()` / fallback flow | `ADMIN_ROLE` 或配置的 cancellation path |
 
-## 市场 Registry
+## Registry
 
-- `getActiveMarketCount()` — 处于 Open 状态的市场数量。
-- `getClosedMarketCount()` — closed 市场数量。
-- `getResolvedMarketCount()` — resolved 市场数量。
+- `getActiveMarketCount()` — Open 状态市场数量。
+- `getClosedMarketCount()` — Closed 状态市场数量。
+- `getResolvedMarketCount()` — Resolved 状态市场数量。
 
-## Admin 函数
+## 管理函数
 
 | Function | Access | Description |
 |----------|--------|-------------|
-| `pauseFactory()` | ADMIN_ROLE | 紧急暂停市场创建 |
-| `setDefaultParams()` | ADMIN_ROLE | 更新默认批次间隔及 min lots |
-| `setCreationBond()` | ADMIN_ROLE | 更新所需 creation bond |
-| `setFeeCollector()` | ADMIN_ROLE | 更新协议费用收集器地址 |
+| `pauseFactory()` | `ADMIN_ROLE` | 紧急暂停市场创建 |
+| `setDefaultParams(batchInterval, minLots, feeBps)` | `ADMIN_ROLE` | 更新默认市场参数 |
+| `setAIResolver(resolver)` | `ADMIN_ROLE` | 更新 AI resolver 地址 |
+| `setNextFactoryMarketId(nextId)` | `DEFAULT_ADMIN_ROLE` | redeployment/recovery helper |
 
 ## 访问控制
 
-- **ADMIN_ROLE:** 授予 PythResolver（用于 `setResolving`、`setResolved`、`payResolverBounty`）。
-- **DEFAULT_ADMIN_ROLE:** 协议管理员（暂停、参数更新）。
-- `closeMarket()` 和 `cancelMarket()` 无需许可。
-- 市场创建需要 MARKET_CREATOR_ROLE。
+- **DEFAULT_ADMIN_ROLE:** role 管理和 recovery helpers。
+- **ADMIN_ROLE:** resolving、cancellation、pause、默认参数和 AI resolver 等生命周期/管理操作。
+- **MARKET_CREATOR_ROLE:** 市场创建。
+- `closeMarket()` 在 expiry 后可由任何人调用。
 
-## 事件
+## Events
 
 ```solidity
 event MarketCreated(uint256 indexed factoryMarketId, uint256 indexed orderBookMarketId, bytes32 priceId, int64 strikePrice, uint256 expiryTime, address indexed creator);
@@ -65,7 +82,4 @@ event MarketClosed(uint256 indexed factoryMarketId);
 event MarketStateChanged(uint256 indexed factoryMarketId, MarketState newState);
 event FactoryPaused(bool paused);
 event DefaultParamsUpdated(uint256 batchInterval, uint128 minLots);
-event CreationBondUpdated(uint256 newBond);
-event FeeCollectorUpdated(address indexed collector);
-event ResolverBountyPaid(uint256 indexed factoryMarketId, address indexed resolver, uint256 amount);
 ```

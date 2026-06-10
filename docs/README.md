@@ -1,6 +1,6 @@
 # What is Strike?
 
-**Strike** is a fully on-chain prediction market protocol on BNB Chain — live now at [app.strike.pm](https://app.strike.pm). Strike supports live market surfaces including **FBA orderbook markets** for active binary trading, **standard parimutuel pool markets** for simple multi-outcome predictions, **[Flap Token Pools](getting-started/flap-token-pools.md)** for creator-launched AI-resolved token pools backed by BEP20 collateral, and **[World Cup Markets](getting-started/world-cup.md)** for campaign-style USDT prediction pools.
+**Strike** is a fully on-chain prediction market protocol on BNB Chain — live now at [strike.fun](https://strike.fun). Strike supports live market surfaces including **FBA orderbook markets** for active binary trading, **standard parimutuel pool markets** for simple multi-outcome predictions, **[Flap Token Pools](getting-started/flap-token-pools.md)** for creator-launched AI-resolved token pools backed by BEP20 collateral, and **[World Cup Markets](getting-started/world-cup.md)** for campaign-style USDT prediction pools.
 
 Orderbook markets use a **Frequent Batch Auction (FBA) CLOB** where orders are collected and cleared at uniform prices in periodic batches. This gives traders real price discovery, limit orders, and fair execution without the MEV problems of continuous orderbooks.
 
@@ -46,7 +46,7 @@ Off-chain (non-authoritative):
 
 ## Links
 
-- **App:** [app.strike.pm](https://app.strike.pm)
+- **App:** [strike.fun](https://strike.fun)
 - **Docs:** [docs.strike.fun](https://docs.strike.fun)
 - **Chain:** BNB Chain (BSC)
 - **Oracle:** [Pyth Network](https://pyth.network/)
