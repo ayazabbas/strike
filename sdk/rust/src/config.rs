@@ -89,8 +89,7 @@ impl StrikeConfig {
             },
             chain_id: 97,
             rpc_url: "https://data-seed-prebsc-1-s1.binance.org:8545".to_string(),
-            wss_url: "wss://bsc-testnet.core.chainstack.com/e602061228197d446d43e62320004d74"
-                .to_string(),
+            wss_url: "wss://bsc-testnet-rpc.publicnode.com".to_string(),
             indexer_url: "https://testnet.strike.pm/api".to_string(),
             tx: TxConfig::default(),
         }
